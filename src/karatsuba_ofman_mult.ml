@@ -1,3 +1,15 @@
+(** Implementation of the karatsuba multiplication algorithm
+
+    See https://en.wikipedia.org/wiki/Karatsuba_algorithm for more details
+
+    The algorithm expresses the two numbers to be multiplied as:
+
+    a = (B^m) * a0 + a1
+    b = (B^m) * b0 + b1
+
+    In every recursive step, B=2, and m = (width a) / 2
+*)
+
 open Base
 open Hardcaml
 open Signal
@@ -19,8 +31,10 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
   let reg x = reg spec ~enable x in
   let pipeline ~n x = pipeline ~enable spec x ~n in
   let w = width a in
-  let top_half x = Signal.sel_top x (w / 2) in
+  let top_half x = Signal.drop_bottom x (w / 2) in
   let btm_half x = Signal.sel_bottom x (w / 2) in
+  let a' = reg a in
+  let b' = reg b in
   let { m0; m1; m2 } =
     let a0 =
       mux2 (btm_half a >: top_half a)
@@ -34,8 +48,6 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
         (btm_half b -: top_half b)
       |> reg
     in
-    let a' = reg a in
-    let b' = reg b in
     match level with
     | 1 ->
       let m0 = reg (top_half a' *: top_half b') in
@@ -43,21 +55,12 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
       let m1 = reg (a0 *: a1) in
       { m0; m1; m2 }
     | _ ->
-      let m0 =
-        create_recursive ~enable ~clock ~level:(level - 1)
-          (top_half a)
-          (top_half b)
+      let recurse a b = 
+        create_recursive ~enable ~clock ~level:(level - 1) a b
       in
-      let m2 =
-        create_recursive ~enable ~clock ~level:(level - 1)
-          (btm_half a)
-          (btm_half b)
-      in
-      let m1 =
-        create_recursive ~enable ~clock ~level:(level - 1)
-          a0
-          a1
-      in
+      let m0 = recurse (top_half a') (top_half b') in
+      let m2 = recurse (btm_half a') (btm_half b') in
+      let m1 = recurse a0 a1 in
       { m0; m1; m2 }
   in
   let sign =
@@ -65,12 +68,15 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
       ~n:((3 * level) - 1)
       ((btm_half a <: top_half a) ^: (top_half b <: btm_half b))
   in
-  ((m0 << w)
-   +: ((m0
-        +: m2
-        +: (mux2 sign (negate m1) m1))
+  ((uresize m0 (w * 2) << w)
+   +: (uresize
+         Uop.(
+           m0
+           +: m2
+           +: (mux2 sign (negate m1) m1))
+         (w * 2)
        << (w / 2))
-   +: m2)
+   +: uresize m2 (w * 2))
   |> reg
 ;;
 
@@ -97,7 +103,7 @@ module With_interface(M : sig
 
   module O = struct
     type 'a t =
-      { c : 'a [@bits num_bits]
+      { c : 'a [@bits num_bits * 2]
       ; valid : 'a [@rtlname "out_valid"]
       }
     [@@deriving sexp_of, hardcaml]
