@@ -1,1 +1,4 @@
-(library (name foobar) (libraries base hardcaml zarith) (preprocess (pps ppx_jane ppx_deriving_hardcaml)))
+(library
+  (name snarks_r_fun)
+  (libraries base hardcaml)
+  (preprocess (pps ppx_jane ppx_deriving_hardcaml)))

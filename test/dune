@@ -1,0 +1,4 @@
+(library
+  (name snarks_r_fun_test)
+  (libraries base snarks_r_fun)
+  (preprocess (pps ppx_jane)))

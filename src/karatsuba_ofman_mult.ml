@@ -75,3 +75,32 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
 let create ?(enable = vdd) ~depth ~clock a b : Signal.t =
   create_recursive ~level:depth ~enable ~clock a b
 ;;
+
+module With_interface(M : sig
+    val num_bits : int
+    val depth : int
+  end) = struct
+  open M
+
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; enable : 'a
+      ; a : 'a [@bits num_bits]
+      ; b : 'a [@bits num_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { c : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  let create (_ : Scope.t) { I. clock; enable; a; b }  =
+    { O.c = create ~clock ~enable ~depth a b }
+  ;;
+end
+
