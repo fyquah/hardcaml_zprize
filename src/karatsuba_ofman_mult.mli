@@ -19,6 +19,7 @@ module With_interface(M : sig
     type 'a t =
       { clock : 'a
       ; enable : 'a
+      ; valid : 'a
       ; a : 'a
       ; b : 'a
       }
@@ -28,6 +29,7 @@ module With_interface(M : sig
   module O : sig
     type 'a t =
       { c : 'a
+      ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

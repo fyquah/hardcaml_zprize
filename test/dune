@@ -1,4 +1,5 @@
 (library
   (name snarks_r_fun_test)
-  (libraries base snarks_r_fun)
+  (libraries base core hardcaml snarks_r_fun)
+  (inline_tests)
   (preprocess (pps ppx_jane)))

@@ -1,20 +1,134 @@
-open! Base
+open! Core
 open! Hardcaml
 open! Snarks_r_fun
 
-module Single_depth_mult = Karatsuba_ofman_mult.With_interface(struct
+(* TODO(fyquah): Add some waveform tests once I figure out how to install
+ * hardcaml_waveterm on my M1 mac :)
+ *)
+
+module Make(M : sig
+    val num_bits : int
+    val depth : int
+  end) = struct
+  include M
+  include Karatsuba_ofman_mult.With_interface(M)
+
+  let latency = Karatsuba_ofman_mult.latency ~depth
+
+  let create_sim () =
+    let scope = Scope.create ~flatten_design:true () in
+    let module Sim = Cyclesim.With_interface(I)(O) in
+    Sim.create (create scope)
+  ;;
+end
+
+module Single_depth_mult = Make(struct
     let num_bits = 32
     let depth = 1
   end)
 
-let create_sim () =
-  let scope = Scope.create ~flatten_design:true () in
-  let module Sim = Cyclesim.With_interface(Single_depth_mult.I)(Single_depth_mult.O) in
-  Sim.create (Single_depth_mult.create scope)
+let (<--.) dst src = dst := Bits.of_int ~width:(Bits.width !dst) src
+
+let%expect_test "Demonstrate pipelining and control signals" =
+  let sim = Single_depth_mult.create_sim () in
+  let latency = Karatsuba_ofman_mult.latency ~depth:1 in
+  let inputs = Cyclesim.inputs sim in
+  let outputs = Cyclesim.outputs sim in
+  inputs.enable <--. 1;
+  inputs.a <--. 7;
+  inputs.b <--. 6;
+  for _ = 1 to latency do
+    Cyclesim.cycle sim;
+    inputs.a <--. 0;
+    inputs.b <--. 0;
+  done;
+  let print_output_as_int () =
+    Stdio.printf "%d\n" (Bits.to_int !(outputs.c))
+  in
+  print_output_as_int ();
+  [%expect {| 42 |}];
+  (* Demonstrate that if the enable signal is not high, the output result gets
+     held.
+   *)
+  inputs.enable <--. 0;
+  Cyclesim.cycle sim;
+  print_output_as_int ();
+  [%expect {| 42 |}];
+  (* Now, assert [enable] - the output should get cleared with the new
+     output.
+   * *)
+  inputs.enable <--. 1;
+  Cyclesim.cycle sim;
+  print_output_as_int ();
+  [%expect {| 0 |}];
 ;;
 
-let%expect_test "" =
-  let _sim = create_sim () in
-  Stdio.printf "hello there\n";
-  ()
+module Triple_depth_mult = Make(struct
+    let num_bits = 200
+    let depth = 1
+  end)
+
+type test_case =
+  { a : Z.t
+  ; b : Z.t
+  }
+
+let%expect_test "Large multiplier" =
+  let sim = Triple_depth_mult.create_sim () in
+  let inputs = Cyclesim.inputs sim in
+  let outputs = Cyclesim.outputs sim in
+  let test_cases =
+    [ { a = Z.of_string "123123012301923812098310"
+      ; b = Z.of_string "43905850405824043"
+      }
+    ; { a = Z.of_string "-1"
+      ; b = Z.of_string "-1"
+      }
+    ; { a = Z.of_string "-1"
+      ; b = Z.of_string "1"
+      }
+    ; { a = Z.of_string "-42424242424242424242424242424424"
+      ; b = Z.of_string "3333333333333333"
+      }
+    ]
+  in
+  let latency = Triple_depth_mult.latency in
+  let obtained_results = Queue.create () in
+  let cycle () =
+    Cyclesim.cycle sim;
+    if Bits.is_vdd !(outputs.valid) then (
+      Queue.enqueue obtained_results (Bits.to_z ~signedness:Signed !(outputs.c))
+    )
+  in
+  inputs.enable <--. 1;
+  inputs.valid <--. 1;
+  List.iter test_cases ~f:(fun { a; b } ->
+      let width = Triple_depth_mult.num_bits in
+      inputs.a := Bits.of_z ~width a;
+      inputs.b := Bits.of_z ~width b;
+      cycle ());
+  inputs.valid <--. 0;
+  for _ = 1 to latency do
+    cycle ();
+  done;
+  assert (Queue.length obtained_results = (List.length test_cases));
+  List.iter test_cases ~f:(fun { a; b} ->
+      let expected = Z.mul a b in
+      let obtained = Queue.dequeue_exn obtained_results in
+      if (Z.numbits expected > Triple_depth_mult.num_bits) then (
+        failwithf "Cannot represent result in the available num_bits, \
+                   required %d, but multiplier only supports %d"
+          (Z.numbits expected)
+          Triple_depth_mult.num_bits
+          ()
+      );
+      if not (Z.equal expected obtained) then (
+        failwithf !"Result mismatched! a=%{Z} b=%{Z} expected=%{Z} obtained=%{Z}"
+          a
+          b
+          expected
+          obtained
+          ()
+      );
+    );
 ;;
