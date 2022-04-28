@@ -65,16 +65,16 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
   in
   let sign =
     pipeline
-      ~n:((3 * level) - 1)
+      ~n:(3*level - 1)
       ((btm_half a <: top_half a) ^: (top_half b <: btm_half b))
   in
   ((uresize m0 (w * 2) << w)
-   +: (uresize
-         Uop.(
-           m0
-           +: m2
-           +: (mux2 sign (negate m1) m1))
-         (w * 2)
+   +: ((uresize
+          Uop.(
+            m0
+            +: m2
+            +: (mux2 sign (negate m1) m1))
+          (w * 2))
        << (w / 2))
    +: uresize m2 (w * 2))
   |> reg

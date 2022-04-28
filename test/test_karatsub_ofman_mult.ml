@@ -65,7 +65,7 @@ let%expect_test "Demonstrate pipelining and control signals" =
 
 module Triple_depth_mult = Make(struct
     let num_bits = 200
-    let depth = 3
+    let depth = 1
   end)
 
 type test_case =
@@ -78,10 +78,7 @@ let%expect_test "Large multiplier" =
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   let test_cases =
-    [ { a = Z.of_string "-1"
-      ; b = Z.of_string "-1"
-      }
-    ; { a = Z.of_string "-1"
+    [ { a = Z.of_string "1"
       ; b = Z.of_string "1"
       }
     ; { a = Z.of_string "-42424242424242424242424242424424"
@@ -137,7 +134,7 @@ let%expect_test "Large multiplier" =
      Please change this test to not include a backtrace. *)
 
   (Failure
-    "Result mismatched! a=-1 b=-1 expected=1 obtained=60708411000593732245582638661532304239961688072875817708543564698364471198454793080")
+    "Result mismatched! a=1 b=1 expected=1 obtained=2037035976334486086268445688409378161051468393665936250636140449354381299763336706183397377")
   Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
   Called from Stdlib__List.iter in file "list.ml", line 110, characters 12-15
   Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
