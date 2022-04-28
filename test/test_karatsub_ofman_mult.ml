@@ -46,14 +46,14 @@ let%expect_test "Demonstrate pipelining and control signals" =
     Stdio.printf "%d\n" (Bits.to_int !(outputs.c))
   in
   print_output_as_int ();
-  [%expect {| 281474976710698 |}];
+  [%expect {| 42 |}];
   (* Demonstrate that if the enable signal is not high, the output result gets
      held.
    *)
   inputs.enable <--. 0;
   Cyclesim.cycle sim;
   print_output_as_int ();
-  [%expect {| 281474976710698 |}];
+  [%expect {| 42 |}];
   (* Now, assert [enable] - the output should get cleared with the new
      output.
    * *)
@@ -65,7 +65,7 @@ let%expect_test "Demonstrate pipelining and control signals" =
 
 module Triple_depth_mult = Make(struct
     let num_bits = 200
-    let depth = 1
+    let depth = 3
   end)
 
 type test_case =
@@ -81,7 +81,7 @@ let%expect_test "Large multiplier" =
     [ { a = Z.of_string "1"
       ; b = Z.of_string "1"
       }
-    ; { a = Z.of_string "-42424242424242424242424242424424"
+    ; { a = Z.of_string "42424242424242424242424242424424"
       ; b = Z.of_string "3333333333333333"
       }
     ; { a = Z.of_string "123123012301923812098310"
@@ -112,30 +112,26 @@ let%expect_test "Large multiplier" =
   List.iter test_cases ~f:(fun { a; b} ->
       let expected = Z.mul a b in
       let obtained = Queue.dequeue_exn obtained_results in
-      if (Z.numbits expected > Triple_depth_mult.num_bits) then (
+      let num_bits_for_expected = Z.numbits expected in
+      let result_num_bits = Triple_depth_mult.num_bits in
+      if (num_bits_for_expected > result_num_bits) then (
         failwithf "Cannot represent result in the available num_bits, \
                    required %d, but multiplier only supports %d"
           (Z.numbits expected)
-          Triple_depth_mult.num_bits
+          result_num_bits
           ()
       );
       if not (Z.equal expected obtained) then (
-        failwithf !"Result mismatched! a=%{Z} b=%{Z} expected=%{Z} obtained=%{Z}"
-          a
-          b
-          expected
-          obtained
-          ()
+        let sexp_of_z z = Sexp.Atom (Z.to_string z) in
+        raise_s [%message
+           "Result mismatch"
+             (a : z)
+             (b : z)
+             (expected : z)
+             (obtained : z)
+             (num_bits_for_expected : int)
+             (result_num_bits : int)
+        ]
       );
     );
-[@@expect.uncaught_exn {|
-  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
-     This is strongly discouraged as backtraces are fragile.
-     Please change this test to not include a backtrace. *)
-
-  (Failure
-    "Result mismatched! a=1 b=1 expected=1 obtained=2037035976334486086268445688409378161051468393665936250636140449354381299763336706183397377")
-  Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
-  Called from Stdlib__List.iter in file "list.ml", line 110, characters 12-15
-  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
 ;;

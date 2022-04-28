@@ -16,7 +16,7 @@ open Signal
 
 let (<<) a b = sll a b 
 
-let latency ~depth = 3 * depth
+let latency ~depth = 2 * depth + 1
 
 type m_terms =
   { m0 : Signal.t
@@ -35,6 +35,11 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
   let btm_half x = Signal.sel_bottom x (w / 2) in
   let a' = reg a in
   let b' = reg b in
+  let sign =
+    pipeline
+      ~n:(2 * level)
+      ((btm_half a <: top_half a) ^: (top_half b <: btm_half b))
+  in
   let { m0; m1; m2 } =
     let a0 =
       mux2 (btm_half a >: top_half a)
@@ -55,28 +60,23 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
       let m1 = reg (a0 *: a1) in
       { m0; m1; m2 }
     | _ ->
-      let recurse a b = 
-        create_recursive ~enable ~clock ~level:(level - 1) a b
+      let recurse x y  = 
+        create_recursive ~enable ~clock ~level:(level - 1) x y
       in
       let m0 = recurse (top_half a') (top_half b') in
       let m2 = recurse (btm_half a') (btm_half b') in
       let m1 = recurse a0 a1 in
       { m0; m1; m2 }
   in
-  let sign =
-    pipeline
-      ~n:(3*level - 1)
-      ((btm_half a <: top_half a) ^: (top_half b <: btm_half b))
-  in
-  ((uresize m0 (w * 2) << w)
-   +: ((uresize
-          Uop.(
-            m0
-            +: m2
-            +: (mux2 sign (negate m1) m1))
-          (w * 2))
+  let m0 = uresize m0 (w * 2) in
+  let m1 = uresize m1 (w * 2) in
+  let m2 = uresize m2 (w * 2) in
+  ((m0 << w)
+   +: ((m0
+        +: m2
+        +: (mux2 sign (negate m1) m1))
        << (w / 2))
-   +: uresize m2 (w * 2))
+   +: m2)
   |> reg
 ;;
 
