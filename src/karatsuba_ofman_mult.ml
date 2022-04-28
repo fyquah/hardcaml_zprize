@@ -1,13 +1,47 @@
-(** Implementation of the karatsuba multiplication algorithm
+(** Implementation of the karatsuba multiplication algorithm. Highly based on
+    https://github.com/ZcashFoundation/zcash-fpga/blob/c4c0ad918898084c73528ca231d025e36740d40c/ip_cores/util/src/rtl/adder_pipe.sv
 
-    See https://en.wikipedia.org/wiki/Karatsuba_algorithm for more details
+    See https://en.wikipedia.org/wiki/Karatsuba_algorithm for more details for
+    the algorithm.
 
     The algorithm expresses the two numbers to be multiplied as:
 
-    a = (B^m) * a0 + a1
-    b = (B^m) * b0 + b1
+    x = 2^(w/2) * x0 + x1
+    y = 2^(w/2) * y0 + y1
 
-    In every recursive step, B=2, and m = (width a) / 2
+    In every recursive step, B=2, and w = width of the inputs. It is required
+    that width a = width b, and is an even number.
+
+    Naively expanding the terms above yields the following:
+
+    x * y = z0 * 2^(w)
+            + z1 * 2^(w/2)
+            + z2 
+
+    where
+
+    z0 = x0*y0
+    z1 = x0*y1 + x1*y0
+    z2 = x1*y1
+
+    We can express z1 as follows: (Note that this is a slightly different
+    formulation from those available in wikipedia)
+
+    z1 = (x0 - x1)(y1 - y0) + x0*y0 + x1*y1
+       = (x0 - x1)(y1 - y0) + z0 + z2
+
+    These intermediate multiplication results will be refered to m{0,1,2}:
+
+    m0 = z0
+    m1 = (x0 - x1)(y1 - y0)
+    m2 = z2
+
+    The result of [x * y] can be computed by summing out the [m0, m1 and m2]
+    terms as follows:
+
+    m0 * 2^w
+    + (m0 + m2 + m1) * 2^(w/2)
+    + m2
 *)
 
 open Base
