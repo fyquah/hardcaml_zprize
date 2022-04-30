@@ -79,9 +79,7 @@ let create ~clock ~enable ~stages ~p (a : Signal.t) (b : Signal.t) : Signal.t =
   assert (Signal.width a = Signal.width b);
   assert (Signal.width p = Signal.width a);
   let w = Signal.width a in
-  let adder_stage_width =
-    (w + (stages - 1)) / stages
-  in
+  let adder_stage_width = (w + (stages - 1)) / stages in
   let spec = Reg_spec.create ~clock () in
   let adder_inputs =
     (* TODO(fyquah): ~exact:true isn't quite right -- revisit this later. *)

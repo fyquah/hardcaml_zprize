@@ -1,4 +1,4 @@
-(** Computes ([a + b mod P]) over multiple pipeline stages.  *)
+(** Computes ([a - b mod P]) over multiple pipeline stages.  *)
 
 open Hardcaml
 
