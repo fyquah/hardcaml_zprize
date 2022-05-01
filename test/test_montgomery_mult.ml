@@ -18,8 +18,6 @@ type test_cases =
   ; y : Z.t
   }
 
-let sexp_of_z z = Sexp.Atom (Z.to_string z)
-
 (*
 let compute_expected ~p x y =
   let logr = Z.log2up p in
@@ -92,9 +90,7 @@ let compute_expected ~logr ~p x y =
 ;;
 
 let%expect_test _ =
-  let p =
-    Z.of_string "21888242871839275222246405745257275088696311157297823662689037894645226208583"
-  in
+  let p = Utils.a_big_prime in
   let config =
     { Montgomery_mult.Config.
       multiplier_depth = 3
@@ -176,11 +172,11 @@ let%expect_test _ =
           let software_model = compute_software_model ~p ~logr:Montgomery_mult256.bits x y in
           Or_error.error_s [%message
             "Test case failed!"
-              (x : z)
-              (y : z)
-              (obtained : z)
-              (expected : z)
-              (software_model : z)
+              (x : Utils.z)
+              (y : Utils.z)
+              (obtained : Utils.z)
+              (expected : Utils.z)
+              (software_model : Utils.z)
           ])
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]

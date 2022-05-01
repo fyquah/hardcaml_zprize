@@ -59,14 +59,29 @@ type m_terms =
   }
 
 let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
-  assert (width a = width b);
+  let wa = width a in
+  let wb = width b in
+  if wa <> wb then (
+    raise_s [%message
+      "Width of [a] and [b] argument of karatsuba ofman multiplier mismatch"
+        (wa : int)
+        (wb : int)
+    ]
+  );
   assert (level >= 1);
   let spec = Reg_spec.create ~clock () in
   let reg x = reg spec ~enable x in
   let pipeline ~n x = pipeline ~enable spec x ~n in
   let w = width a in
-  let top_half x = Signal.drop_bottom x (w / 2) in
-  let btm_half x = Signal.sel_bottom x (w / 2) in
+  let hw = (w + 1) / 2 in
+  let top_half x =
+    if w % 2 = 0 then
+      drop_bottom x hw
+    else
+      (* w is odd *)
+      gnd @: drop_bottom x hw
+  in
+  let btm_half x = Signal.sel_bottom x hw in
   let a' = reg a in
   let b' = reg b in
   let sign =
@@ -109,7 +124,7 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
    +: ((m0
         +: m2
         +: (mux2 sign (negate m1) m1))
-       << (w / 2))
+       << hw)
    +: m2)
   |> reg
 ;;

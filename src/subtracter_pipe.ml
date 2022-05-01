@@ -86,7 +86,7 @@ let create ~clock ~enable ~stages ~p (x : Signal.t) (y : Signal.t) : Signal.t =
   let spec = Reg_spec.create ~clock () in
   let stage_inputs =
     { Subtractor_input. x; y; p }
-    |> Subtractor_input.map ~f:(Signal.split_lsb ~exact:true ~part_width:stage_width)
+    |> Subtractor_input.map ~f:(Signal.split_lsb ~exact:false ~part_width:stage_width)
     |> Subtractor_input.to_interface_list
     |> List.mapi ~f:(fun n subtractor_input ->
         Subtractor_input.map ~f:(pipeline spec ~enable ~n) subtractor_input)
