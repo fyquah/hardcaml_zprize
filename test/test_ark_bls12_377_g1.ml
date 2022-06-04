@@ -59,9 +59,9 @@ let%expect_test "Display subgroup generator" =
     point is on curve! |}]
 ;;
 
-(* TODO(fyquah): I don't know what is the appropriate behaviour for infinity. ie, shou;d
-   {x=1, y=2, infinity=true} and {x=123, y=345, infinity=true} be equivalent
-   values?
+(* TODO(fyquah): I don't know what is the appropriate behaviour for infinity.
+ * ie, should {x=1, y=2, infinity=true} and {x=123, y=345, infinity=true} be
+ * equivalent values?
 *)
 let%expect_test "Verify equality" =
   [ ( Ark_bls12_377_g1.subgroup_generator (),
