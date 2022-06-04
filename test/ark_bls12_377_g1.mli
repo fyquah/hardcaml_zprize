@@ -19,3 +19,5 @@ val infinity : affine -> bool
 val coeff_a : unit -> Z.t
 
 val coeff_b : unit -> Z.t
+
+val modulus : unit -> Z.t

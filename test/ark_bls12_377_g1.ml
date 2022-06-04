@@ -52,6 +52,10 @@ module External = struct
     foreign "ark_bls12_377_g1_coeff_b" (ptr int64_t @-> returning void)
   ;;
 
+  let modulus =
+    foreign "ark_bls12_377_g1_modulus" (ptr int64_t @-> returning void)
+  ;;
+
   let get_x =
     foreign "ark_bls12_377_g1_get_x"
       (ptr affine @-> ptr int64_t @-> returning void)
@@ -180,3 +184,4 @@ let create_coeff f =
 
 let coeff_a = create_coeff External.coeff_a
 let coeff_b = create_coeff External.coeff_b
+let modulus = create_coeff External.modulus

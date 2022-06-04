@@ -5,8 +5,8 @@ use ark_ff::PrimeField;
 use ark_ff::biginteger::BigInteger384;
 use ark_bls12_377::g1::Parameters;
 
-type G1AffinePoint = GroupAffine<ark_bls12_377::g1::Parameters>;
-type BaseField = <ark_bls12_377::g1::Parameters as ModelParameters>::BaseField;
+type G1AffinePoint = GroupAffine<Parameters>;
+type BaseField = <Parameters as ModelParameters>::BaseField;
 
 pub fn main() {
     let generator = G1AffinePoint::prime_subgroup_generator();
@@ -24,4 +24,6 @@ pub fn main() {
         );
     
     println!("point = {} {}\n\n", point, point.is_on_curve());
+
+    println!("cofactor = {:?}\n\n", Parameters::COFACTOR);
 }

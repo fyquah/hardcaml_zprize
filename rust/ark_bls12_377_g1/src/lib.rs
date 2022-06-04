@@ -2,6 +2,7 @@ use ark_ec::AffineCurve;
 use ark_ec::models::{ModelParameters, SWModelParameters};
 use ark_ec::models::short_weierstrass_jacobian::GroupAffine;
 use ark_ff::PrimeField;
+use ark_ff::FpParameters;
 use ark_ff::biginteger::BigInteger384;
 
 type G1AffinePoint = GroupAffine<ark_bls12_377::g1::Parameters>;
@@ -27,14 +28,18 @@ fn copy_pointer_to_fp384(px: *const u64) -> BaseField {
     BaseField::from_repr(BigInteger384::new(ptr_c_uchar_to_array(px))).unwrap()
 }
 
-fn copy_fp384_to_pointer(x: &BaseField, dst: *mut u64) {
-    let x = match x.into_repr() { BigInteger384(x) => x };
+fn copy_biginteger_to_pointer(x: &BigInteger384, dst: *mut u64) {
+    let x = match x { BigInteger384(x) => x };
     unsafe { 
         for i in 0..6 {
             let p = dst.add(i as usize);
             *p = x[i];
         }
     }
+}
+
+fn copy_fp384_to_pointer(x: &BaseField, dst: *mut u64) {
+    copy_biginteger_to_pointer(&x.into_repr(), dst)
 }
 
 #[no_mangle]
@@ -79,6 +84,7 @@ pub extern "C" fn ark_bls12_377_add(ptr_a: *mut G1AffinePoint, ptr_b: *mut G1Aff
 
 #[no_mangle]
 pub extern "C" fn ark_bls12_377_g1_free(ptr: *mut G1AffinePoint) -> () {
+    /* Box::from_raw will result in the rust free-ing memory used by [ptr]. */
     unsafe {
         let _unused = Box::from_raw(ptr);
         ()
@@ -112,4 +118,9 @@ pub extern "C" fn ark_bls12_377_g1_coeff_a(dst: *mut u64) {
 #[no_mangle]
 pub extern "C" fn ark_bls12_377_g1_coeff_b(dst: *mut u64) {
     copy_fp384_to_pointer(&ark_bls12_377::g1::Parameters::COEFF_B, dst);
+}
+
+#[no_mangle]
+pub extern "C" fn ark_bls12_377_g1_modulus(dst: *mut u64) {
+    copy_biginteger_to_pointer(&ark_bls12_377::fq::FqParameters::MODULUS, dst);
 }

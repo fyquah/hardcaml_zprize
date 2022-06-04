@@ -19,11 +19,19 @@ let%expect_test "Test accessors" =
   [%expect {| ((x 2) (y 3) (infinity true)) |}];
 ;;
 
-let%expect_test "Print a" =
+let%expect_test "Print model coefficient and constants." =
   let a = Ark_bls12_377_g1.coeff_a () in
   let b = Ark_bls12_377_g1.coeff_b () in
-  Stdio.print_s [%message (a : z) (b : z)];
-  [%expect {| ((a 0x0) (b 0x1)) |}]
+  let modulus = Ark_bls12_377_g1.modulus () in
+  Stdio.print_s [%message (a : z) (b : z) (modulus : z)];
+  (* These values are cross-checked against the link below for correctness.
+   * 
+   * https://medium.com/asecuritysite-when-bob-met-alice/the-wonderful-bls12-curves-just-ready-for-a-privacy-respecting-world-fe731386e722
+   **)
+  [%expect {|
+    ((a 0x0) (b 0x1)
+     (modulus
+      0x1AE3A4617C510EAC63B05C06CA1493B1A22D9F300F5138F1EF3622FBA094800170B5D44300000008508C00000000001)) |}]
 ;;
 
 let%expect_test "Check points that should be on the curve" =
@@ -32,9 +40,9 @@ let%expect_test "Check points that should be on the curve" =
     (* Infinity is on the curve *)
 
     create ~x:(Z.of_int 2) ~y:(Z.of_int 3) ~infinity:false;
-    (* 3^2 = 9
-           2*3 + 1 = 8 + 1 = 0
-    *)
+    (* LHS: 3^2 = 9
+     * RHS: 2*3 + 1 = 8 + 1 = 0
+     **)
   ]
   |> List.iter ~f:(fun a -> assert (Ark_bls12_377_g1.is_on_curve a))
 ;;
