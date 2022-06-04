@@ -1,22 +1,25 @@
-module U = Unix
-module S = Sys
 open Core
 open Ctypes
 open Foreign
-module Unix = U
-
-let potential_dl_filenames =
-  let%bind.List extension = [ "so"; "dylib" ] in
-  let%bind.List dir = [ "."; "../"; "../../"; "../../../" ] in
-  [ dir ^/ "rust/ark_bls12_377_g1/target/debug/libark_bls12_377_g1." ^ extension ]
-;;
-
-let () =
-  let filename = List.find_exn potential_dl_filenames ~f:S.file_exists in
-  ignore (Dl.dlopen ~filename ~flags:[ RTLD_LAZY ] : Dl.library)
-;;
 
 module External = struct
+  let potential_dl_filenames =
+    (* The more principled thing to do is to figure out the build-target and
+     * use .so or .dylib.. but this works well enough.
+     **)
+    let%bind.List extension = [ "so"; "dylib" ] in
+    let%bind.List dir = [ "."; "../"; "../../"; "../../../" ] in
+    [ dir ^/ "rust/ark_bls12_377_g1/target/debug/libark_bls12_377_g1." ^ extension ]
+  ;;
+
+  let () =
+    (* Unfortunately, We can't install Core_unix on M1 Macs, so we are stuck
+     * with Caml.Sys, rather than Sys_unix, for the time-being.
+     *)
+    let filename = List.find_exn potential_dl_filenames ~f:Caml.Sys.file_exists in
+    ignore (Dl.dlopen ~filename ~flags:[ RTLD_LAZY ] : Dl.library)
+  ;;
+
   type affine = unit ptr
   let affine : affine typ = ptr void
 
@@ -129,8 +132,8 @@ let add (a : affine) (b : affine) =
   ptr
 ;;
 
-let mul (a : affine) by =
-  assert (Int.is_positive by);
+let mul (a : affine) ~by =
+  assert (Int.is_non_negative by);
   let ptr = External.mul a (Int64.of_int by) in
   Caml.Gc.finalise External.free ptr;
   ptr

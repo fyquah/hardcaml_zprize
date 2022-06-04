@@ -75,7 +75,7 @@ let%expect_test "Verify point-addition and point-multiplication give similar \
                  results." =
   let generator = Ark_bls12_377_g1.subgroup_generator () in
   for by = 1 to 10 do
-    let from_mul = Ark_bls12_377_g1.mul generator by in
+    let from_mul = Ark_bls12_377_g1.mul generator ~by in
     let from_addition =
       Fn.apply_n_times ~n:(by - 1)
         (Ark_bls12_377_g1.add generator)
@@ -83,4 +83,12 @@ let%expect_test "Verify point-addition and point-multiplication give similar \
     in
     assert ([%equal: Ark_bls12_377_g1.affine] from_mul from_addition)
   done;
+;;
+
+(* Multiplying a point by zero should yield an infinity point. *)
+let%expect_test "Multiplying a point by zero" =
+  let generator = Ark_bls12_377_g1.subgroup_generator () in
+  print_s ([%sexp_of: Ark_bls12_377_g1.affine]
+             (Ark_bls12_377_g1.mul ~by:0 generator));
+  [%expect {| ((x 0) (y 1) (infinity true)) |}]
 ;;
