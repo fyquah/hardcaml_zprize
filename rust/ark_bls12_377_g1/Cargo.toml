@@ -1,5 +1,5 @@
 [package]
-name = "rust"
+name = "ark_bls12_377_g1"
 version = "0.1.0"
 authors = ["fyquah <fyquah@protonmail.com>"]
 edition = "2018"
@@ -7,7 +7,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ark-bls12-377 = "0.3.0"
-ark-ec = "0.3.0"
-ark-ff = "0.3.0"
-snarkvm-utilities = "0.2.3"
+ark-bls12-377 = "*"
+ark-ec = "*"
+libc = "*"
+ark-ff = "*"
+
+[lib]
+crate-type = ["cdylib"]
