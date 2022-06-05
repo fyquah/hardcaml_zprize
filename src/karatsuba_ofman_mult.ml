@@ -75,14 +75,11 @@ let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal
   let spec = Reg_spec.create ~clock () in
   let reg x = reg spec ~enable x in
   let pipeline ~n x = pipeline ~enable spec x ~n in
-  let w = width a in
-  let hw = (w + 1) / 2 in
+  let hw = (width a + 1) / 2 in
+  let w = hw * 2 in
   let top_half x =
-    if w % 2 = 0 then
-      drop_bottom x hw
-    else
-      (* w is odd *)
-      gnd @: drop_bottom x hw
+    (* [uresize] here is necessary to handle cases where [wa] is odd. *)
+    uresize (drop_bottom x hw) hw
   in
   let btm_half x = Signal.sel_bottom x hw in
   let a' = reg a in
@@ -133,7 +130,7 @@ let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal
         +: (mux2 sign (negate m1) m1))
        << hw)
    +: m2)
-  |> Fn.flip uresize (2 * (width a))
+  |> Fn.flip uresize (2 * wa)
   |> reg
   |> Fn.flip (--) "out"
 ;;
