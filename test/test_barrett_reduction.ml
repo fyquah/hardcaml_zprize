@@ -58,10 +58,10 @@ let%expect_test _ =
   in
   let sim = create_sim ~p ~config in
   let internal_ports = Cyclesim.internal_ports sim in
-  Stdio.print_s ([%sexp_of: string list] (List.map ~f:fst internal_ports));
-  [%expect {|
-    (stage1$valid stage2$valid stage3$valid stage4$valid stage1$q stage2$qp
-     stage1$a stage2$a stage3$a_minus_qp stage4$a_mod_p gnd) |}];
+  if debug then (
+    Stdio.print_s ([%sexp_of: string list] (List.map ~f:fst internal_ports))
+  );
+  [%expect {| |}];
   let dump_stage_if_valid prefix =
     if debug then
       let valid_port_name = (prefix ^ "$valid") in

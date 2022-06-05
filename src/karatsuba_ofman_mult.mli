@@ -6,6 +6,7 @@ val latency : depth: int -> int
 val create
   : ?enable: Signal.t
   -> depth: int
+  -> scope: Scope.t
   -> clock:Signal.t
   -> Signal.t
   -> Signal.t

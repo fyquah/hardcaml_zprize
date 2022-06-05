@@ -58,7 +58,7 @@ module Stage1 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~clock ~enable ~m ~k ~(config : Config.t) { Stage0. a; valid } =
+  let create ~scope ~clock ~enable ~m ~k ~(config : Config.t) { Stage0. a; valid } =
     let logm = Z.log2up m in
     let wa = Signal.width a in
     let depth = config.multiplier_depth in
@@ -70,6 +70,7 @@ module Stage1 = struct
     *)
     { q = 
         Karatsuba_ofman_mult.create
+          ~scope
           ~depth
           ~clock
           ~enable
@@ -91,13 +92,14 @@ module Stage2 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~clock ~enable ~p ~(config : Config.t) { Stage1. q; a; valid } =
+  let create ~clock ~scope ~enable ~p ~(config : Config.t) { Stage1. q; a; valid } =
     let depth = config.multiplier_depth in
     let latency = Karatsuba_ofman_mult.latency ~depth in
     let spec = Reg_spec.create ~clock () in
     assert (width q >= Z.log2up p);
     { qp =
         Karatsuba_ofman_mult.create
+          ~scope
           ~depth
           ~clock
           ~enable
@@ -199,10 +201,10 @@ module With_interface(M : sig val bits : int end) = struct
     let { Stage4. a_mod_p; valid } =
       let (--) = Scope.naming scope in
       { Stage0. a; valid }
-      |> Stage1.create ~clock ~enable ~m ~k ~config
+      |> Stage1.create ~scope ~clock ~enable ~m ~k ~config
       |> Stage1.map2 Stage1.port_names ~f:(fun n s ->
           s -- ("stage1$" ^ n))
-      |> Stage2.create ~clock ~enable ~p ~config
+      |> Stage2.create ~scope ~clock ~enable ~p ~config
       |> Stage2.map2 Stage2.port_names ~f:(fun n s ->
           s -- ("stage2$" ^ n))
       |> Stage3.create ~clock ~enable ~p ~config

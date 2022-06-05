@@ -110,12 +110,12 @@ let%expect_test _ =
   let sim = create_sim ~p ~config in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
-  Stdio.print_s (
-    [%sexp_of: string list]
-      (List.sort ~compare:String.compare (List.map ~f:fst (Cyclesim.internal_ports sim))));
-  [%expect {|
-    (gnd stage1$valid stage1$xy stage2$m stage2$valid stage2$xy stage3$mp
-     stage3$valid stage3$xy stage4$t stage4$valid stage5$result stage5$valid) |}];
+  if debug then (
+    Stdio.print_s (
+      [%sexp_of: string list]
+        (List.sort ~compare:String.compare (List.map ~f:fst (Cyclesim.internal_ports sim))))
+  );
+  [%expect {| |}];
   let internal_ports = Cyclesim.internal_ports sim in
   let find_internal_port s = List.Assoc.find_exn internal_ports ~equal:[%equal: string] s in
   let find_and_print_port s =

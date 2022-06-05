@@ -58,7 +58,10 @@ type m_terms =
   ; m2 : Signal.t
   }
 
-let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
+let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
+  let (--) = Scope.naming scope in
+  let a = a -- "in_a" in
+  let b = b -- "in_b" in
   let wa = width a in
   let wb = width b in
   if wa <> wb then (
@@ -87,7 +90,8 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
   let sign =
     pipeline
       ~n:(2 * level)
-      ((btm_half a <: top_half a) ^: (top_half b <: btm_half b))
+      (((btm_half a -- "btm_a") <: (top_half a -- "top_a"))
+       ^: ((top_half b -- "top_b") <: (btm_half b -- "btm_b")))
   in
   let { m0; m1; m2 } =
     let a0 =
@@ -95,26 +99,29 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
         (btm_half a -: top_half a)
         (top_half a -: btm_half a)
       |> reg
+      |> Fn.flip (Scope.naming scope) "a0"
     in
     let a1 =
       mux2 (top_half b >: btm_half b)
         (top_half b -: btm_half b)
         (btm_half b -: top_half b)
       |> reg
+      |> Fn.flip (Scope.naming scope) "a1"
     in
     match level with
     | 1 ->
-      let m0 = reg (top_half a' *: top_half b') in
-      let m2 = reg (btm_half a' *: btm_half b') in
-      let m1 = reg (a0 *: a1) in
+      let m0 = Scope.naming scope (reg (top_half a' *: top_half b')) "m0" in
+      let m2 = Scope.naming scope (reg (btm_half a' *: btm_half b')) "m2" in
+      let m1 = Scope.naming scope (reg (a0 *: a1)) "m1" in
       { m0; m1; m2 }
     | _ ->
-      let recurse x y  = 
-        create_recursive ~enable ~clock ~level:(level - 1) x y
+      let recurse subscope x y =
+        let scope = Scope.sub_scope scope subscope in
+        create_recursive ~scope ~enable ~clock ~level:(level - 1) x y
       in
-      let m0 = recurse (top_half a') (top_half b') in
-      let m2 = recurse (btm_half a') (btm_half b') in
-      let m1 = recurse a0 a1 in
+      let m0 = recurse "m0" (top_half a') (top_half b') in
+      let m2 = recurse "m2" (btm_half a') (btm_half b') in
+      let m1 = recurse "m1" a0 a1 in
       { m0; m1; m2 }
   in
   let m0 = uresize m0 (w * 2) in
@@ -126,11 +133,13 @@ let rec create_recursive ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
         +: (mux2 sign (negate m1) m1))
        << hw)
    +: m2)
+  |> Fn.flip uresize (2 * (width a))
   |> reg
+  |> Fn.flip (--) "out"
 ;;
 
-let create ?(enable = vdd) ~depth ~clock a b : Signal.t =
-  create_recursive ~level:depth ~enable ~clock a b
+let create ?(enable = vdd) ~depth ~scope ~clock a b : Signal.t =
+  create_recursive ~level:depth ~scope ~enable ~clock a b
 ;;
 
 module With_interface(M : sig
@@ -158,8 +167,8 @@ module With_interface(M : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create (_ : Scope.t) { I. clock; enable; a; b; valid }  =
-    { O.c = create ~clock ~enable ~depth a b
+  let create (scope : Scope.t) { I. clock; enable; a; b; valid }  =
+    { O.c = create ~clock ~enable ~depth ~scope a b
     ; valid =
         pipeline ~n:(latency ~depth) (Reg_spec.create ~clock ()) ~enable valid
     }

@@ -87,6 +87,9 @@ let%expect_test "Large multiplier" =
     ; { a = Z.of_string "123123012301923812098310"
       ; b = Z.of_string "43905850405824043"
       }
+    ; { a = Z.of_string "123123012301923812098310"
+      ; b = Z.of_string "43905850405824043"
+      }
     ]
   in
   let latency = Triple_depth_mult.latency in

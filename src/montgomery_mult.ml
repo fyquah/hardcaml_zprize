@@ -26,10 +26,11 @@ module Stage1 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~depth ~clock ~enable { Stage0. x; y; valid } =
+  let create ~scope ~depth ~clock ~enable { Stage0. x; y; valid } =
     let latency = Karatsuba_ofman_mult.latency ~depth in
     { xy =
       Karatsuba_ofman_mult.create
+        ~scope
         ~clock
         ~enable
         ~depth
@@ -51,10 +52,11 @@ module Stage2 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~depth ~(logr : int) ~p' ~clock ~enable { Stage1. xy; valid } =
+  let create ~scope ~depth ~(logr : int) ~p' ~clock ~enable { Stage1. xy; valid } =
     let spec = Reg_spec.create ~clock () in
     let m =
       Karatsuba_ofman_mult.create
+        ~scope
         ~clock
         ~enable
         ~depth
@@ -78,11 +80,12 @@ module Stage3 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~depth ~p ~clock ~enable { Stage2. m; xy; valid } =
+  let create ~scope ~depth ~p ~clock ~enable { Stage2. m; xy; valid } =
     let spec = Reg_spec.create ~clock () in
     let mp =
       let width = width m in
       Karatsuba_ofman_mult.create
+        ~scope
         ~clock
         ~enable
         ~depth
@@ -196,13 +199,13 @@ let create
   let (--) = Scope.naming scope in
   assert Z.(equal ((p * p') mod r) (r - one));
   { x; y; valid }
-  |> Stage1.create ~depth:config.multiplier_depth ~clock ~enable
+  |> Stage1.create ~scope ~depth:config.multiplier_depth ~clock ~enable
   |> Stage1.map2 Stage1.port_names ~f:(fun port_name x ->
       x -- ("stage1$" ^ port_name))
-  |> Stage2.create ~depth:config.multiplier_depth ~logr ~p' ~clock ~enable
+  |> Stage2.create ~scope ~depth:config.multiplier_depth ~logr ~p' ~clock ~enable
   |> Stage2.map2 Stage2.port_names ~f:(fun port_name x ->
       x -- ("stage2$" ^ port_name))
-  |> Stage3.create ~depth:config.multiplier_depth ~p ~clock ~enable
+  |> Stage3.create ~scope ~depth:config.multiplier_depth ~p ~clock ~enable
   |> Stage3.map2 Stage3.port_names ~f:(fun port_name x ->
       x -- ("stage3$" ^ port_name))
   |> Stage4.create ~depth:config.adder_depth ~logr ~clock ~enable
