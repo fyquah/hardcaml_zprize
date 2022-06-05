@@ -168,10 +168,10 @@ let infinity t = External.get_infinity t
 let equal_affine a b = External.equal a b
 
 let sexp_of_affine affine =
-  let x = Z.format "X" (x affine) in
-  let y = Z.format "X" (y affine) in
+  let x = x affine in
+  let y = y affine in
   let infinity = infinity affine in
-  [%message (x : string) (y : string) (infinity : bool)]
+  [%message (x : Utils.z) (y : Utils.z) (infinity : bool)]
 ;;
 
 let create_coeff f =

@@ -2,6 +2,7 @@
     library. This is used primarily to debug the rust->OCaml bindings.
 *)
 
+open Core
 open Snarks_r_fun_test
 
 type affine = Ark_bls12_377_g1.affine [@@deriving sexp_of, equal]
@@ -10,8 +11,8 @@ let coeff_a = Ark_bls12_377_g1.coeff_a ()
 let coeff_b = Ark_bls12_377_g1.coeff_b ()
 
 let () =
-  Stdio.printf "a = 0x%s\n" (Z.format "X" coeff_a);
-  Stdio.printf "b = 0x%s\n" (Z.format "X" coeff_b);
+  Stdio.printf !"a = 0x%{Sexp}\n" (Utils.sexp_of_z coeff_a);
+  Stdio.printf !"b = 0x%{Sexp}\n" (Utils.sexp_of_z coeff_b);
   let subgroup_generator = Ark_bls12_377_g1.subgroup_generator () in
   Stdio.print_s [%message (subgroup_generator : affine)];
   let manually_constructed =

@@ -1,8 +1,6 @@
 open Core
 
-let sexp_of_z a =
-  Sexp.Atom ("0x" ^ Z.format "X" a)
-;;
+let sexp_of_z = Utils.sexp_of_z
 
 let print_is_on_curve a =
   if Ark_bls12_377_g1.is_on_curve a then
@@ -16,7 +14,7 @@ let%expect_test "Test accessors" =
     Ark_bls12_377_g1.create ~x:(Z.of_int 2) ~y:(Z.of_int 3) ~infinity:true
   in
   Stdio.print_s ([%sexp_of: Ark_bls12_377_g1.affine] a);
-  [%expect {| ((x 2) (y 3) (infinity true)) |}];
+  [%expect {| ((x 0x2) (y 0x3) (infinity true)) |}];
 ;;
 
 let%expect_test "Print model coefficient and constants." =
@@ -31,7 +29,7 @@ let%expect_test "Print model coefficient and constants." =
   [%expect {|
     ((a 0x0) (b 0x1)
      (modulus
-      0x1AE3A4617C510EAC63B05C06CA1493B1A22D9F300F5138F1EF3622FBA094800170B5D44300000008508C00000000001)) |}]
+      0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001)) |}]
 ;;
 
 let%expect_test "Check points that should be on the curve" =
@@ -49,13 +47,15 @@ let%expect_test "Check points that should be on the curve" =
 
 let%expect_test "Display subgroup generator" =
   let a = Ark_bls12_377_g1.subgroup_generator () in
-  let x = "0x" ^ Z.format "X" (Ark_bls12_377_g1.x a) in
-  let y = "0x" ^ Z.format "X" (Ark_bls12_377_g1.y a) in
-  Stdio.print_s ([%message x y]);
+  let x = Ark_bls12_377_g1.x a in
+  let y = Ark_bls12_377_g1.y a in
+  Stdio.print_s ([%message (x : Utils.z) (y : Utils.z)]);
   print_is_on_curve a;
   [%expect {|
-    (0x8848DEFE740A67C8FC6225BF87FF5485951E2CAA9D41BB188282C8BD37CB5CD5481512FFCD394EEAB9B16EB21BE9EF
-     0x1914A69C5102EFF1F674F5D30AFEEC4BD7FB348CA3E52D96D182AD44FB82305C2FE3D3634A9591AFD82DE55559C8EA6)
+    ((x
+      0x8848defe740a67c8fc6225bf87ff5485951e2caa9d41bb188282c8bd37cb5cd5481512ffcd394eeab9b16eb21be9ef)
+     (y
+      0x1914a69c5102eff1f674f5d30afeec4bd7fb348ca3e52d96d182ad44fb82305c2fe3d3634a9591afd82de55559c8ea6))
     point is on curve! |}]
 ;;
 
@@ -90,5 +90,5 @@ let%expect_test "Multiplying a point by zero" =
   let generator = Ark_bls12_377_g1.subgroup_generator () in
   print_s ([%sexp_of: Ark_bls12_377_g1.affine]
              (Ark_bls12_377_g1.mul ~by:0 generator));
-  [%expect {| ((x 0) (y 1) (infinity true)) |}]
+  [%expect {| ((x 0x0) (y 0x1) (infinity true)) |}]
 ;;

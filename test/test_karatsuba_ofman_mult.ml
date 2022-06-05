@@ -108,9 +108,9 @@ let%expect_test "Large multiplier" =
     if debug then (
       List.iter internal_ports ~f:(fun (port_name, value) ->
           if String.is_prefix port_name ~prefix:"m2$" then
-            Stdio.printf "%s: 0x%s\n"
+            Stdio.printf !"%s: 0x%{Sexp}\n"
               port_name
-              (Z.format "x" (Bits.to_z ~signedness:Unsigned !value)));
+              ([%sexp_of: Utils.z] (Bits.to_z ~signedness:Unsigned !value)));
       Stdio.print_endline ""
     );
   in

@@ -50,8 +50,7 @@ let%expect_test _ =
   let p = Utils.a_big_prime in
   Stdio.print_s [%message (p : Utils.z)];
   [%expect {|
-    (p
-     21888242871839275222246405745257275088696311157297823662689037894645226208583) |}];
+    (p 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47) |}];
   let test_cases =
     [ Z.((p - one) * (p - one))
     ]
