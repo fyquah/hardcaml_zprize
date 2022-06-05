@@ -6,6 +6,8 @@ open! Snarks_r_fun
  * hardcaml_waveterm on my M1 mac :)
  *)
 
+let debug = false
+
 module Make(M : sig
     val num_bits : int
     val depth : int
@@ -18,7 +20,7 @@ module Make(M : sig
   let create_sim () =
     let scope = Scope.create ~flatten_design:true () in
     let module Sim = Cyclesim.With_interface(I)(O) in
-    Sim.create (create scope)
+    Sim.create ~config:Cyclesim.Config.trace_all (create scope)
   ;;
 end
 
@@ -64,7 +66,7 @@ let%expect_test "Demonstrate pipelining and control signals" =
 ;;
 
 module Triple_depth_mult = Make(struct
-    let num_bits = 200
+    let num_bits = 377
     let depth = 3
   end)
 
@@ -77,9 +79,10 @@ let%expect_test "Large multiplier" =
   let sim = Triple_depth_mult.create_sim () in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
+  let internal_ports = Cyclesim.internal_ports sim in
   let test_cases =
-    [ { a = Z.of_string "1"
-      ; b = Z.of_string "1"
+    [ { a = Z.of_string "0x781ed5e8c458e1ba9b26ca68"
+      ; b = Z.of_string "3333333333333333"
       }
     ; { a = Z.of_string "42424242424242424242424242424424"
       ; b = Z.of_string "3333333333333333"
@@ -87,8 +90,11 @@ let%expect_test "Large multiplier" =
     ; { a = Z.of_string "123123012301923812098310"
       ; b = Z.of_string "43905850405824043"
       }
-    ; { a = Z.of_string "123123012301923812098310"
-      ; b = Z.of_string "43905850405824043"
+    ; { a = Z.of_string "1"
+      ; b = Z.of_string "1"
+      }
+    ; { a = Ark_bls12_377_g1.x (Ark_bls12_377_g1.subgroup_generator ())
+      ; b = Ark_bls12_377_g1.y (Ark_bls12_377_g1.subgroup_generator ())
       }
     ]
   in
@@ -98,15 +104,25 @@ let%expect_test "Large multiplier" =
     Cyclesim.cycle sim;
     if Bits.is_vdd !(outputs.valid) then (
       Queue.enqueue obtained_results (Bits.to_z ~signedness:Signed !(outputs.c))
-    )
+    );
+    if debug then (
+      List.iter internal_ports ~f:(fun (port_name, value) ->
+          if String.is_prefix port_name ~prefix:"m2$" then
+            Stdio.printf "%s: 0x%s\n"
+              port_name
+              (Z.format "x" (Bits.to_z ~signedness:Unsigned !value)));
+      Stdio.print_endline ""
+    );
   in
   inputs.enable <--. 1;
   inputs.valid <--. 1;
+  let width = Triple_depth_mult.num_bits in
   List.iter test_cases ~f:(fun { a; b } ->
-      let width = Triple_depth_mult.num_bits in
       inputs.a := Bits.of_z ~width a;
       inputs.b := Bits.of_z ~width b;
       cycle ());
+  inputs.a := Bits.zero width;
+  inputs.b := Bits.zero width;
   inputs.valid <--. 0;
   for _ = 1 to latency do
     cycle ();
@@ -116,12 +132,14 @@ let%expect_test "Large multiplier" =
       let expected = Z.mul a b in
       let obtained = Queue.dequeue_exn obtained_results in
       let num_bits_for_expected = Z.numbits expected in
-      let result_num_bits = Triple_depth_mult.num_bits in
-      if (num_bits_for_expected > result_num_bits) then (
+      let result_num_bits = Triple_depth_mult.num_bits * 2 in
+      if num_bits_for_expected > result_num_bits then (
         failwithf "Cannot represent result in the available num_bits, \
-                   required %d, but multiplier only supports %d"
+                   required %d, but multiplier only supports %d (a=%s, b=%s)"
           (Z.numbits expected)
           result_num_bits
+          (Z.to_string a)
+          (Z.to_string b)
           ()
       );
       if not (Z.equal expected obtained) then (
@@ -137,4 +155,20 @@ let%expect_test "Large multiplier" =
         ]
       );
     );
+  [%expect.unreachable]
+[@@expect.uncaught_exn {|
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
+
+  ("Result mismatch" (a 37175479111003629878228994664) (b 3333333333333333)
+    (expected 123918263703345420535603611878790040590335112)
+    (obtained 66366444559971065399581815925597395161037960)
+    (num_bits_for_expected 147) (result_num_bits 754))
+  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
+  Called from Base__Error.raise_s in file "src/error.ml", line 10, characters 19-40
+  Called from Stdlib__List.iter in file "list.ml", line 110, characters 12-15
+  Called from Base__List0.iter in file "src/list0.ml" (inlined), line 25, characters 16-35
+  Called from Snarks_r_fun_test__Test_karatsuba_ofman_mult.(fun) in file "test/test_karatsuba_ofman_mult.ml", line 131, characters 2-950
+  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
 ;;
