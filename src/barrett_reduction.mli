@@ -37,3 +37,11 @@ module With_interface(M : sig val bits : int end) : sig
     -> Signal.t I.t
     -> Signal.t O.t
 end
+
+val hierarchical
+   : scope: Scope.t
+  -> config: Config.t
+  -> p: Z.t
+  -> clock: Signal.t
+  -> Signal.t With_valid.t
+  -> Signal.t With_valid.t

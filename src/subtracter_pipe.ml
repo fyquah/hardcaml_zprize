@@ -79,7 +79,13 @@ let create_stage (type a)
 
 let create ~clock ~enable ~stages ~p (x : Signal.t) (y : Signal.t) : Signal.t =
   let open Signal in
-  assert (Signal.width x = Signal.width x);
+  let wx = Signal.width x in
+  let wy = Signal.width y in
+  if wx <> wy then (
+    raise_s [%message
+       "Width mismatch of inputs in Subtractor_pipe" (wx : int) (wy : int)
+    ]
+  );
   assert (Signal.width p = Signal.width x);
   let w = Signal.width x in
   let stage_width = (w + (stages - 1)) / stages in

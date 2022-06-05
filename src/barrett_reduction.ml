@@ -216,4 +216,26 @@ module With_interface(M : sig val bits : int end) = struct
     in
     { O. valid; a_mod_p = uresize a_mod_p bits }
   ;;
+
+  let hierarchical ~config ~p scope i =
+    let module H = Hierarchy.In_scope(I)(O) in
+    let name = [%string "barrett_reduction_%{bits#Int}"] in
+    H.hierarchical ~scope ~name (create ~config ~p) i
+  ;;
 end
+
+let hierarchical ~scope ~config ~p ~clock { With_valid. valid = valid; value = a } =
+  let bits = width a in
+  let module M = With_interface(struct let bits = (bits + 1) / 2 end) in
+  let { M.O. a_mod_p ; valid } =
+    M.hierarchical ~config ~p
+      scope
+      { M.I.clock
+      ; enable = vdd
+      ; a
+      ; valid
+      }
+  in
+  { With_valid. valid; value = a_mod_p }
+
+;;
