@@ -82,9 +82,8 @@ let create ~clock ~enable ~stages ~p (a : Signal.t) (b : Signal.t) : Signal.t =
   let adder_stage_width = (w + (stages - 1)) / stages in
   let spec = Reg_spec.create ~clock () in
   let adder_inputs =
-    (* TODO(fyquah): ~exact:true isn't quite right -- revisit this later. *)
     { Adder_input. a; b; p }
-    |> Adder_input.map ~f:(Signal.split_lsb ~exact:true ~part_width:adder_stage_width)
+    |> Adder_input.map ~f:(Signal.split_lsb ~exact:false ~part_width:adder_stage_width)
     |> Adder_input.to_interface_list
     |> List.mapi ~f:(fun n adder_input ->
         (* Pipeline the n-th chunk by [n] cycles to align it appropriately

@@ -2,14 +2,16 @@ open! Core
 open! Hardcaml
 open! Snarks_r_fun
 
-module Adder64 = Adder_pipe.With_interface(struct
-    let bits = 64
+module Adder377 = Adder_pipe.With_interface(struct
+    let bits = 377
   end)
-module Sim = Cyclesim.With_interface(Adder64.I)(Adder64.O)
+module Sim = Cyclesim.With_interface(Adder377.I)(Adder377.O)
+
+let p = Ark_bls12_377_g1.modulus ()
 
 let create_sim ~stages =
   let scope = Scope.create ~flatten_design:true () in
-  Sim.create (Adder64.create ~stages scope)
+  Sim.create (Adder377.create ~stages scope)
 ;;
 
 let (<--.) dst src = dst := Bits.of_int ~width:(Bits.width !dst) src
@@ -22,23 +24,35 @@ type test_cases =
 
 let sexp_of_z z = Sexp.Atom (Z.to_string z)
 
+let random_bigint () =
+  Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one)
+;;
+
 let%expect_test "" =
   let test_cases =
-    [ { x = Z.of_string "1"
-      ; y = Z.of_string "2"
-      ; p = Z.of_string "42"
-      }
-    ; { x = Z.of_string "1"
-      ; y = Z.of_string "41"
-      ; p = Z.of_string "42"
-      }
-    ; { x = Z.of_string "1"
-      ; y = Z.of_string "40"
-      ; p = Z.of_string "42"
-      }
-    ]
+    let hand_crafted =
+      [ { x = Z.of_string "1"
+         ; y = Z.of_string "2"
+        ; p
+        }
+      ; { x = Z.of_string "1"
+        ; y = Z.of_string "41"
+        ; p
+        }
+      ; { x = Z.of_string "1"
+        ; y = Z.of_string "40"
+        ; p
+        }
+      ]
+    in
+    hand_crafted
+    @ List.init 50 ~f:(fun _ ->
+        { x = random_bigint ()
+        ; y = random_bigint ()
+        ; p
+        })
   in
-  let stages = 2 in
+  let stages = 3 in
   let sim = create_sim ~stages in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
@@ -51,9 +65,9 @@ let%expect_test "" =
   in
   inputs.enable <--. 1;
   List.iter test_cases ~f:(fun { x; y; p } ->
-      inputs.p := Bits.of_z ~width:Adder64.bits p;
-      inputs.x := Bits.of_z ~width:Adder64.bits x;
-      inputs.y := Bits.of_z ~width:Adder64.bits y;
+      inputs.p := Bits.of_z ~width:Adder377.bits p;
+      inputs.x := Bits.of_z ~width:Adder377.bits x;
+      inputs.y := Bits.of_z ~width:Adder377.bits y;
       inputs.valid <--. 1;
       cycle ();
     );
@@ -76,5 +90,5 @@ let%expect_test "" =
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]
   |> Stdio.print_s;
-  [%expect {| (Ok ()) |}]
+  [%expect{| (Ok ()) |}]
 ;;
