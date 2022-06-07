@@ -107,15 +107,19 @@ module Stage4 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~depth ~logr ~clock ~enable { Stage3. mp; xy; valid } =
+  let create ~scope ~depth ~logr ~clock ~enable { Stage3. mp; xy; valid } =
     assert (Signal.width mp = Signal.width xy);
     let t =
+      (* TODO(fyquah): Change Adder_pipe to use a proper adder pipe that
+       * doesn't perform modulo under-the-hood.
+       *)
       let width = width mp in
       Adder_pipe.create ~clock ~enable
         ~stages:depth
-        ~p:(Signal.zero width)
-        xy
-        mp
+        ~p:(Signal.zero (width + 1))
+        (gnd @: xy)
+        (gnd @: mp)
+      |> Fn.flip (Scope.naming scope) "stage4$xy_plus_mp"
       |> Fn.flip drop_bottom logr
     in
     let latency = Adder_pipe.latency ~stages:depth in
@@ -137,11 +141,15 @@ module Stage5 = struct
     let p = of_z ~width p in
     let latency = Subtracter_pipe.latency ~stages:depth in
     { result =
+        (* TODO(fyquah): Replace subtracter_pipe with something simpler and
+         * more specialized.
+        *)
         Subtracter_pipe.create ~clock ~enable
           ~stages:depth
           ~p
           t
           p
+        |> lsbs
     ; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
     }
   ;;
@@ -208,7 +216,7 @@ let create
   |> Stage3.create ~scope ~depth:config.multiplier_depth ~p ~clock ~enable
   |> Stage3.map2 Stage3.port_names ~f:(fun port_name x ->
       x -- ("stage3$" ^ port_name))
-  |> Stage4.create ~depth:config.adder_depth ~logr ~clock ~enable
+  |> Stage4.create ~scope ~depth:config.adder_depth ~logr ~clock ~enable
   |> Stage4.map2 Stage4.port_names ~f:(fun port_name x ->
       x -- ("stage4$" ^ port_name))
   |> Stage5.create ~depth:config.subtracter_depth ~p ~clock ~enable
