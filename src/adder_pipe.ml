@@ -112,6 +112,7 @@ let create ~clock ~enable ~stages ~p (a : Signal.t) (b : Signal.t) : Signal.t =
 ;;
 
 module With_interface(M : sig val bits : int end) = struct
+
   include M
 
   module I = struct
@@ -141,5 +142,34 @@ module With_interface(M : sig val bits : int end) = struct
     ; valid = Signal.pipeline spec ~n:(latency ~stages) ~enable valid
     }
   ;;
+
+  let hierarchical ~stages scope i =
+    let module H = Hierarchy.In_scope(I)(O) in
+    H.hierarchical
+      ~scope
+      ~name:(Printf.sprintf "modulo_adder_pipe_%dbits" bits)
+      (create ~stages)
+      i
+  ;;
 end
 
+let hierarchical ~scope ~clock ~enable ~stages ~p x y =
+  if Signal.width x <> Signal.width y then (
+    raise_s [%message
+       "adder_pipe requires x and y to be the same width"
+    ]
+  );
+  let module M = With_interface(struct let bits = Signal.width x end) in
+  let { M.O. z; valid = _ } =
+    M.hierarchical ~stages scope
+      { clock
+      ; enable
+      ; p
+      ; x
+      ; y
+      ; valid = Signal.vdd
+      }
+  in
+  z
+
+;;

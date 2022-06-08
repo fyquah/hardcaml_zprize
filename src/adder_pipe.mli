@@ -4,8 +4,9 @@ open Hardcaml
 
 val latency : stages: int -> int
 
-val create
-   : clock: Signal.t
+val hierarchical
+  : scope: Scope.t
+  -> clock: Signal.t
   -> enable: Signal.t
   -> stages: int
   -> p: Signal.t
@@ -14,7 +15,6 @@ val create
   -> Signal.t
 
 module With_interface(M : sig val bits : int end) : sig
-
   val bits : int
 
   module I : sig

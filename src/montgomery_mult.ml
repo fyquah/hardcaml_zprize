@@ -114,7 +114,7 @@ module Stage4 = struct
        * doesn't perform modulo under-the-hood.
        *)
       let width = width mp in
-      Adder_pipe.create ~clock ~enable
+      Adder_pipe.hierarchical ~scope ~clock ~enable
         ~stages:depth
         ~p:(Signal.zero (width + 1))
         (gnd @: xy)
