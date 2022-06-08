@@ -59,8 +59,8 @@ let create_stage (type a)
     let lhs = uresize state.with_mod.carry (w + 1) +: x +: p in
     let rhs = uresize state.with_mod.borrow (w + 1) +: y in
     let partial_result = lhs -: rhs in
-    let carry = msb partial_result in
     let borrow = lhs <: rhs in
+    let carry = ~:borrow &: (msb partial_result) in
     let result = concat_msb_e [ lsbs partial_result; state.with_mod.result ] in
     { Borrow_and_result. borrow; result; carry }
   in
@@ -69,10 +69,13 @@ let create_stage (type a)
      * anything.
      *)
     let x = uresize input.x (w + 1) in
-    let y = Uop.(input.y +: state.no_mod.borrow) in
-    let borrow = x <: y in
-    let result = concat_msb_e [ uresize (x -: y) w; state.no_mod.result ] in
-    { Borrow_and_result. borrow; result; carry = gnd }
+    let y = uresize input.y (w + 1) in
+    let partial_result = x -: y -: uresize state.no_mod.borrow (w + 1) in
+    { Borrow_and_result.
+      borrow = msb partial_result
+    ; result = concat_msb_e [ lsbs partial_result; state.no_mod.result ]
+    ; carry = gnd
+    }
   in
   { Subtractor_state. with_mod; no_mod }
 ;;
