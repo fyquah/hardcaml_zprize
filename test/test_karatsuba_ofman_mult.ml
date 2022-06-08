@@ -81,21 +81,31 @@ let%expect_test "Large multiplier" =
   let outputs = Cyclesim.outputs sim in
   let internal_ports = Cyclesim.internal_ports sim in
   let test_cases =
-    [ { a = Z.of_string "0x781ed5e8c458e1ba9b26ca68"
-      ; b = Z.of_string "3333333333333333"
-      }
-    ; { a = Z.of_string "42424242424242424242424242424424"
-      ; b = Z.of_string "3333333333333333"
-      }
-    ; { a = Z.of_string "123123012301923812098310"
-      ; b = Z.of_string "43905850405824043"
-      }
-    ; { a = Z.of_string "1"
-      ; b = Z.of_string "1"
-      }
-    ; { a = Ark_bls12_377_g1.x (Ark_bls12_377_g1.subgroup_generator ())
-      ; b = Ark_bls12_377_g1.y (Ark_bls12_377_g1.subgroup_generator ())
-      }
+    List.concat [
+      [ { a = Z.of_string "0x781ed5e8c458e1ba9b26ca68"
+        ; b = Z.of_string "3333333333333333"
+        }
+      ; { a = Z.of_string "42424242424242424242424242424424"
+        ; b = Z.of_string "3333333333333333"
+        }
+      ; { a = Z.of_string "123123012301923812098310"
+        ; b = Z.of_string "43905850405824043"
+        }
+      ; { a = Z.of_string "1"
+        ; b = Z.of_string "1"
+        }
+      ; { a = Ark_bls12_377_g1.x (Ark_bls12_377_g1.subgroup_generator ())
+        ; b = Ark_bls12_377_g1.y (Ark_bls12_377_g1.subgroup_generator ())
+        }
+      ; { a = Z.of_string "0x1a317c1aef7ad5cea420c1e82e24340ab50cb36f3faab9b86f7b947029e3deac5d1d6d8dee18bb9a81f2fe9ebeaccb7"
+        ; b = Z.of_string "0x112c98fab46b7e3aeafc86c5222f3edfd7cfbc8d400ce9e4c8a0cd15e4ca09e713a1c53094291e2f7ff329b8d2d289d"
+        }
+      ]
+    ; List.init 50 ~f:(fun _ ->
+          let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((one lsl 377) - one) in
+          { a = random_bigint ()
+          ; b = random_bigint ()
+          })
     ]
   in
   let latency = Triple_depth_mult.latency in
@@ -103,7 +113,7 @@ let%expect_test "Large multiplier" =
   let cycle () =
     Cyclesim.cycle sim;
     if Bits.is_vdd !(outputs.valid) then (
-      Queue.enqueue obtained_results (Bits.to_z ~signedness:Signed !(outputs.c))
+      Queue.enqueue obtained_results (Bits.to_z ~signedness:Unsigned !(outputs.c))
     );
     if debug then (
       List.iter internal_ports ~f:(fun (port_name, value) ->
