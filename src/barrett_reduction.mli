@@ -43,5 +43,6 @@ val hierarchical
   -> config: Config.t
   -> p: Z.t
   -> clock: Signal.t
+  -> enable: Signal.t
   -> Signal.t With_valid.t
   -> Signal.t With_valid.t

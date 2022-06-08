@@ -15,6 +15,8 @@ module Config : sig
 end
 
 module With_interface(M : sig val bits : int end) : sig
+  module Config = Config
+
   val bits : int
 
   module I : sig

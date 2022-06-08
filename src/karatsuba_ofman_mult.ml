@@ -170,5 +170,32 @@ module With_interface(M : sig
         pipeline ~n:(latency ~depth) (Reg_spec.create ~clock ()) ~enable valid
     }
   ;;
+
+  let hierarchical scope (input : _ I.t) : _ O.t =
+    let module H = Hierarchy.In_scope(I)(O) in
+    H.hierarchical
+      ~scope
+      ~name:(Printf.sprintf "karatsuba_ofman_mult_%d_depth_%d" num_bits depth)
+      create
+      input
+  ;;
 end
 
+let hierarchical ~enable ~depth ~scope ~clock a b =
+  let num_bits = Signal.width a in
+  let module M = With_interface(struct
+      let num_bits = num_bits
+      let depth = depth
+    end)
+  in
+  let o =
+    M.hierarchical scope
+      { clock
+      ; enable
+      ; valid = vdd
+      ; a
+      ; b
+      }
+  in
+  o.c
+;;

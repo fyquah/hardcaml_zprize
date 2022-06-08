@@ -12,6 +12,15 @@ val create
   -> Signal.t
   -> Signal.t
 
+val hierarchical
+  : enable: Signal.t
+  -> depth: int
+  -> scope: Scope.t
+  -> clock:Signal.t
+  -> Signal.t
+  -> Signal.t
+  -> Signal.t
+
 module With_interface(M : sig
     val num_bits : int
     val depth : int

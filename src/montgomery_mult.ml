@@ -1,14 +1,7 @@
 open! Base
 open! Hardcaml
 open! Signal
-
-(* Shadow Signal.reg and Signal.pipeline because we want ~enable to be a
- * non-optional argument.
- *)
-let reg spec ~enable x = Signal.reg spec ~enable x
-let pipeline spec ~enable ~n x = Signal.pipeline spec ~enable ~n x
-
-let _dont_warn_if_unused = (reg, pipeline)
+open! Reg_with_enable
 
 module Stage0 = struct
   type 'a t =
@@ -225,6 +218,7 @@ let create
 ;;
 
 module With_interface(M : sig val bits : int end) = struct
+  module Config = Config
   include M
 
   module I = struct

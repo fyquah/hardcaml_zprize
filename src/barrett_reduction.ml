@@ -21,14 +21,7 @@
 open Base
 open Hardcaml
 open Signal
-
-(* Shadow Signal.reg and Signal.pipeline because we want ~enable to be a
- * non-optional argument.
- *)
-let reg spec ~enable x = Signal.reg spec ~enable x
-let pipeline spec ~enable ~n x = Signal.pipeline spec ~enable ~n x
-
-let _dont_warn_if_unused = (reg, pipeline)
+open Reg_with_enable
 
 module Config = struct
   type t =
@@ -224,14 +217,14 @@ module With_interface(M : sig val bits : int end) = struct
   ;;
 end
 
-let hierarchical ~scope ~config ~p ~clock { With_valid. valid = valid; value = a } =
+let hierarchical ~scope ~config ~p ~clock ~enable { With_valid. valid = valid; value = a } =
   let bits = width a in
   let module M = With_interface(struct let bits = (bits + 1) / 2 end) in
   let { M.O. a_mod_p ; valid } =
     M.hierarchical ~config ~p
       scope
       { M.I.clock
-      ; enable = vdd
+      ; enable
       ; a
       ; valid
       }
