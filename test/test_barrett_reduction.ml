@@ -5,19 +5,19 @@ open! Bits
 
 let debug = false
 
-module Barrett_reduction256 = Barrett_reduction.With_interface(struct
-    let bits = 256
+module Barrett_reduction377 = Barrett_reduction.With_interface(struct
+    let bits = 377
   end)
 module Config = Barrett_reduction.Config
-module I = Barrett_reduction256.I
-module O = Barrett_reduction256.O
+module I = Barrett_reduction377.I
+module O = Barrett_reduction377.O
 module Sim = Cyclesim.With_interface(I)(O)
 
 let create_sim ~p ~config =
   let scope = Scope.create ~flatten_design:true () in
   Sim.create
     ~config:Cyclesim.Config.trace_all
-    (Barrett_reduction256.create ~config ~p scope)
+    (Barrett_reduction377.create ~config ~p scope)
 ;;
 
 let compute_software_model ~p ~a =
@@ -43,17 +43,28 @@ let compute_software_model ~p ~a =
 let%expect_test _ =
   let config =
     { Config.
-      multiplier_depth = 2
-    ; subtracter_stages = 2
+      multiplier_depth = 3
+    ; subtracter_stages = 3
     }
   in
-  let p = Utils.a_big_prime in
+  let p = Ark_bls12_377_g1.modulus () in
+  let random_bigint () =
+    Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((p - one) * (p - one))
+  in
   Stdio.print_s [%message (p : Utils.z)];
   [%expect {|
-    (p 0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47) |}];
+    (p
+     0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001) |}];
   let test_cases =
-    [ Z.((p - one) * (p - one))
-    ]
+    List.concat
+      [ [ Z.zero
+        ; Z.one
+        ; Z.of_int 2
+        ; Z.((p - one) * (p - one))
+        ; Z.of_string "0x1c1d96627014caa774cc857b5e15be00056047380b0e58c8d3a0a1cae6ca8b12a578e6418715d6078973059922e91c52e73fb7ebb5114a2e53da4dc61bf355481fb0deb8c1520f806159b6eb6a79b5e62ba2b87ad0baa6c1a6b262627243b"
+        ]
+      ; List.init 70 ~f:(fun _ -> random_bigint ())
+      ]
   in
   let sim = create_sim ~p ~config in
   let internal_ports = Cyclesim.internal_ports sim in
@@ -92,7 +103,7 @@ let%expect_test _ =
   in
   List.iter test_cases ~f:(fun test_case ->
       inputs.valid := vdd;
-      inputs.a := Bits.of_z ~width:512 test_case;
+      inputs.a := Bits.of_z ~width:754 test_case;
       cycle ();
     );
   inputs.valid := gnd;
