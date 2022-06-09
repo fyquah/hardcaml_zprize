@@ -3,7 +3,7 @@ open Signal
 
 let latency ~stages =
   Modulo_double_pipe.latency ~stages
-  + Adder_pipe.latency ~stages
+  + Modulo_adder_pipe.latency ~stages
 ;;
 
 let create ~stages ~p ~scope ~clock ~enable a =
@@ -12,8 +12,8 @@ let create ~stages ~p ~scope ~clock ~enable a =
   let a_times_2 =
     Modulo_double_pipe.hierarchical ~enable ~scope ~clock ~stages ~p a
   in
-  let a = pipeline spec ~enable ~n:(Adder_pipe.latency ~stages) a in
-  Adder_pipe.hierarchical
+  let a = pipeline spec ~enable ~n:(Modulo_adder_pipe.latency ~stages) a in
+  Modulo_adder_pipe.hierarchical
     ~scope ~clock ~enable ~stages
     ~p:(Signal.of_z ~width p)
     a

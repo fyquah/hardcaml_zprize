@@ -103,11 +103,11 @@ module Stage4 = struct
   let create ~scope ~depth ~logr ~clock ~enable { Stage3. mp; xy; valid } =
     assert (Signal.width mp = Signal.width xy);
     let t =
-      (* TODO(fyquah): Change Adder_pipe to use a proper adder pipe that
+      (* TODO(fyquah): Change Modulo_adder_pipe to use a proper adder pipe that
        * doesn't perform modulo under-the-hood.
        *)
       let width = width mp in
-      Adder_pipe.hierarchical ~scope ~clock ~enable
+      Modulo_adder_pipe.hierarchical ~scope ~clock ~enable
         ~stages:depth
         ~p:(Signal.zero (width + 1))
         (gnd @: xy)
@@ -115,7 +115,7 @@ module Stage4 = struct
       |> Fn.flip (Scope.naming scope) "stage4$xy_plus_mp"
       |> Fn.flip drop_bottom logr
     in
-    let latency = Adder_pipe.latency ~stages:depth in
+    let latency = Modulo_adder_pipe.latency ~stages:depth in
     { t
     ; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
     }
@@ -132,12 +132,12 @@ module Stage5 = struct
   let create ~depth ~p ~clock ~enable { Stage4. t; valid } =
     let width = width t in
     let p = of_z ~width p in
-    let latency = Subtracter_pipe.latency ~stages:depth in
+    let latency = Modulo_subtractor_pipe.latency ~stages:depth in
     { result =
         (* TODO(fyquah): Replace subtracter_pipe with something simpler and
          * more specialized.
         *)
-        Subtracter_pipe.create ~clock ~enable
+        Modulo_subtractor_pipe.create ~clock ~enable
           ~stages:depth
           ~p
           t

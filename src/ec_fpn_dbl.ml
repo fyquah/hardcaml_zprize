@@ -31,13 +31,13 @@ let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
   let spec = Reg_spec.create ~clock () in
   let width = width a in
   let stages = adder_stages in
-  Adder_pipe.hierarchical
+  Modulo_adder_pipe.hierarchical
     ~scope
     ~clock ~enable:vdd ~stages
     ~p:(of_z ~width config.p)
     a
     b
-  |> pipeline spec ~n:(latency config - Adder_pipe.latency ~stages)
+  |> pipeline spec ~n:(latency config - Modulo_adder_pipe.latency ~stages)
 ;;
 
 let triple_pipe ~scope ~latency ~(config : Config.t) ~clock ~enable a =
@@ -63,14 +63,14 @@ let fourfold_pipe ~scope ~latency ~(config : Config.t) ~clock ~enable a =
 let sub_pipe ~latency ~(config : Config.t) ~clock ~enable a b =
   let spec = Reg_spec.create ~clock () in
   let stages = subtractor_stages in
-  Subtracter_pipe.create
+  Modulo_subtractor_pipe.create
     ~clock
     ~enable
     ~stages:subtractor_stages
     ~p:(of_z ~width:(width a) config.p)
     a
     b
-  |> pipeline spec ~n:(latency config - Subtracter_pipe.latency ~stages) ~enable
+  |> pipeline spec ~n:(latency config - Modulo_subtractor_pipe.latency ~stages) ~enable
 ;;
 
 let fp_multiply ~latency ~(config : Config.t) ~scope ~clock ~enable subscope a b =
@@ -184,7 +184,7 @@ module Stage3 = struct
 
   let latency (config : Config.t) =
     config.fp_multiply.latency 
-    |> Int.max (Adder_pipe.latency ~stages:adder_stages)
+    |> Int.max (Modulo_adder_pipe.latency ~stages:adder_stages)
   ;;
 
   let create ~scope ~clock ~enable (config : Config.t) { Stage2. y_pow_4; m; s; z'; valid } =
@@ -219,8 +219,8 @@ module Stage4 = struct
 
   let latency (_ : Config.t) =
     Int.max 
-      (Subtracter_pipe.latency ~stages:subtractor_stages)
-      (Adder_pipe.latency ~stages:adder_stages)
+      (Modulo_subtractor_pipe.latency ~stages:subtractor_stages)
+      (Modulo_adder_pipe.latency ~stages:adder_stages)
   ;;
 
   let create
@@ -257,8 +257,8 @@ module Stage5 = struct
 
   let latency (_ : Config.t) =
     Int.max 
-      (Subtracter_pipe.latency ~stages:subtractor_stages)
-      (Adder_pipe.latency ~stages:adder_stages)
+      (Modulo_subtractor_pipe.latency ~stages:subtractor_stages)
+      (Modulo_adder_pipe.latency ~stages:adder_stages)
   ;;
 
   let create
@@ -318,7 +318,7 @@ module Stage7 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let latency (_ : Config.t) = Subtracter_pipe.latency ~stages:subtractor_stages
+  let latency (_ : Config.t) = Modulo_subtractor_pipe.latency ~stages:subtractor_stages
 
   let create
       ~scope ~clock ~enable
@@ -328,7 +328,7 @@ module Stage7 = struct
     let pipe = pipeline spec ~n:(latency config) ~enable in
     { data_out =
         { x = pipe x'
-        ; y = Subtracter_pipe.create
+        ; y = Modulo_subtractor_pipe.create
               ~clock
               ~enable
               ~stages:subtractor_stages

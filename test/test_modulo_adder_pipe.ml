@@ -1,17 +1,17 @@
-(* TODO(fquah): Share code below with test_adder_pipe. *)
-
 open! Core
 open! Hardcaml
 open! Snarks_r_fun
 
-module Subtracter377 = Subtracter_pipe.With_interface(struct
+module Adder377 = Modulo_adder_pipe.With_interface(struct
     let bits = 377
   end)
-module Sim = Cyclesim.With_interface(Subtracter377.I)(Subtracter377.O)
+module Sim = Cyclesim.With_interface(Adder377.I)(Adder377.O)
+
+let p = Ark_bls12_377_g1.modulus ()
 
 let create_sim ~stages =
   let scope = Scope.create ~flatten_design:true () in
-  Sim.create (Subtracter377.create ~stages scope)
+  Sim.create (Adder377.create ~stages scope)
 ;;
 
 let (<--.) dst src = dst := Bits.of_int ~width:(Bits.width !dst) src
@@ -24,33 +24,33 @@ type test_cases =
 
 let sexp_of_z z = Sexp.Atom (Z.to_string z)
 
+let random_bigint () =
+  Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one)
+;;
+
 let%expect_test "" =
   let test_cases =
-    let p = Ark_bls12_377_g1.modulus () in
-    List.concat [
+    let hand_crafted =
       [ { x = Z.of_string "1"
-        ; y = Z.of_string "1"
+         ; y = Z.of_string "2"
         ; p
         }
-      ; { x = Z.of_string "0"
-        ; y = Z.of_string "1"
+      ; { x = Z.of_string "1"
+        ; y = Z.of_string "41"
         ; p
         }
-      ; { x = Z.of_string "0xe0e256ba5aa3f3e40c3639e906da2f99eab99d553da9f7400d68ce6405912813bae37f66044adfb1290b1cb3e03cdb"
-        ; y = Z.of_string "0x17c530d26d8fcfafb97738e03852f7cb69097c78231eee81276be2cbfc23889b98c24708cc1b8fd3e32988126b3143f"
+      ; { x = Z.of_string "1"
+        ; y = Z.of_string "40"
         ; p
         }
       ]
-    ; List.init 50 ~f:(fun _ ->
-          let p = Ark_bls12_377_g1.modulus () in
-          let random_bigint () =
-            Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one)
-          in
-          { x = random_bigint ()
-          ; y = random_bigint ()
-          ; p
-          })
-    ]
+    in
+    hand_crafted
+    @ List.init 50 ~f:(fun _ ->
+        { x = random_bigint ()
+        ; y = random_bigint ()
+        ; p
+        })
   in
   let stages = 3 in
   let sim = create_sim ~stages in
@@ -65,19 +65,19 @@ let%expect_test "" =
   in
   inputs.enable <--. 1;
   List.iter test_cases ~f:(fun { x; y; p } ->
-      inputs.p := Bits.of_z ~width:Subtracter377.bits p;
-      inputs.x := Bits.of_z ~width:Subtracter377.bits x;
-      inputs.y := Bits.of_z ~width:Subtracter377.bits y;
+      inputs.p := Bits.of_z ~width:Adder377.bits p;
+      inputs.x := Bits.of_z ~width:Adder377.bits x;
+      inputs.y := Bits.of_z ~width:Adder377.bits y;
       inputs.valid <--. 1;
       cycle ();
     );
   inputs.valid <--. 0;
-  for _ = 1 to Subtracter_pipe.latency ~stages do
+  for _ = 1 to Modulo_adder_pipe.latency ~stages do
     cycle ();
   done;
   cycle ();
   List.map2_exn test_cases (Queue.to_list results) ~f:(fun { x; y; p } obtained ->
-      let expected = Z.((x - y + p) mod p) in
+      let expected = Z.((x + y) mod p) in
       if Z.equal obtained expected
       then Ok ()
       else Or_error.error_s [%message
@@ -90,5 +90,5 @@ let%expect_test "" =
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]
   |> Stdio.print_s;
-  [%expect {| (Ok ()) |}]
+  [%expect{| (Ok ()) |}]
 ;;

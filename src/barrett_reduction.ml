@@ -31,7 +31,7 @@ module Config = struct
 
   let latency (config : t) =
     (2 * Karatsuba_ofman_mult.latency ~depth:config.multiplier_depth)
-    + (2 * Subtracter_pipe.latency ~stages:config.subtracter_stages)
+    + (2 * Modulo_subtractor_pipe.latency ~stages:config.subtracter_stages)
   ;;
 end
 
@@ -120,13 +120,13 @@ module Stage3 = struct
   let create ~clock ~enable ~p ~(config : Config.t) { Stage2. qp; a; valid } =
     let spec = Reg_spec.create ~clock () in
     let stages = config.subtracter_stages in
-    let latency = Subtracter_pipe.latency ~stages in
+    let latency = Modulo_subtractor_pipe.latency ~stages in
     let a_minus_qp_width =
       (* [a - qp] possible range of values ios [0, 2p) *)
       1 + (Z.log2up p)
     in
     { a_minus_qp =
-        Subtracter_pipe.create
+        Modulo_subtractor_pipe.create
           ~clock
           ~enable
           ~stages
@@ -149,10 +149,10 @@ module Stage4 = struct
   let create ~clock ~enable ~p ~(config : Config.t) { Stage3. a_minus_qp; valid } =
     let spec = Reg_spec.create ~clock () in
     let stages = config.subtracter_stages in
-    let latency = Subtracter_pipe.latency ~stages in
+    let latency = Modulo_subtractor_pipe.latency ~stages in
     let p = of_z ~width:(Signal.width a_minus_qp) p in
     { a_mod_p =
-        Subtracter_pipe.create
+        Modulo_subtractor_pipe.create
           ~clock
           ~enable
           ~stages
