@@ -7,7 +7,7 @@ module Montgomery_mult = Montgomery_mult.With_interface(struct let bits = 377 en
 let fp_multiply : Config.fn =
   let montgomery_mult_config =
     { Montgomery_mult.Config.
-      multiplier_depth = 3
+      multiplier_depth = 4
     ; adder_depth = 3
     ; subtracter_depth = 3
     }
@@ -38,7 +38,7 @@ let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =
   Stdio.printf "latency = %d\n" latency;
-  [%expect {| latency = 117 |}]
+  [%expect {| latency = 141 |}]
 ;;
 
 let%expect_test "Test on some test cases" =

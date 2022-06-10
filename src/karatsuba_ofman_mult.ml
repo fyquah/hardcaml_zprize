@@ -58,6 +58,27 @@ type m_terms =
   ; m2 : Signal.t
   }
 
+let lut_and_carry_multiply ~pivot big =
+  List.mapi (Signal.bits_lsb pivot) ~f:(fun i b ->
+      mux2 b
+        (concat_msb_e [ big; zero i ])
+        (zero (i + width big)))
+  |> Signal.tree ~arity:2 ~f:(reduce ~f:Uop.( +: ))
+;;
+
+let umul (a : Signal.t) (b : Signal.t) =
+  assert (Signal.width a = Signal.width b);
+  let w = Signal.width a in
+  if w <= 17 then
+    a *: b
+  else
+    let smaller = a *: b.:[16, 0] in
+    let bigger = lut_and_carry_multiply ~pivot:(drop_bottom b 17) a in
+    let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
+    assert (width result = width a + width b);
+    result
+;;
+
 let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
   let (--) = Scope.naming scope in
   let a = a -- "in_a" in
@@ -107,9 +128,9 @@ let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal
     in
     match level with
     | 1 ->
-      let m0 = Scope.naming scope (reg (top_half a' *: top_half b')) "m0" in
-      let m2 = Scope.naming scope (reg (btm_half a' *: btm_half b')) "m2" in
-      let m1 = Scope.naming scope (reg (a0 *: a1)) "m1" in
+      let m0 = Scope.naming scope (reg (umul (top_half a') (top_half b'))) "m0" in
+      let m2 = Scope.naming scope (reg (umul (btm_half a') (btm_half b'))) "m2" in
+      let m1 = Scope.naming scope (reg (umul a0 a1)) "m1" in
       { m0; m1; m2 }
     | _ ->
       let recurse subscope x y =
