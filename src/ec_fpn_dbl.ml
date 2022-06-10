@@ -29,12 +29,11 @@ end
 
 let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
   let spec = Reg_spec.create ~clock () in
-  let width = width a in
   let stages = adder_stages in
   Modulo_adder_pipe.hierarchical
     ~scope
     ~clock ~enable:vdd ~stages
-    ~p:(of_z ~width config.p)
+    ~p:config.p
     a
     b
   |> pipeline spec ~n:(latency config - Modulo_adder_pipe.latency ~stages)
@@ -67,7 +66,7 @@ let sub_pipe ~latency ~(config : Config.t) ~clock ~enable a b =
     ~clock
     ~enable
     ~stages:subtractor_stages
-    ~p:(of_z ~width:(width a) config.p)
+    ~p:config.p
     a
     b
   |> pipeline spec ~n:(latency config - Modulo_subtractor_pipe.latency ~stages) ~enable
@@ -332,7 +331,7 @@ module Stage7 = struct
               ~clock
               ~enable
               ~stages:subtractor_stages
-              ~p:(of_z ~width:(width m_times_s_minus_x') config.p)
+              ~p:config.p
               m_times_s_minus_x'
               y_pow_4_times_8
         ; z = pipe z'

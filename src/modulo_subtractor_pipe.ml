@@ -80,7 +80,7 @@ let create_stage (type a)
   { Subtractor_state. with_mod; no_mod }
 ;;
 
-let create ~clock ~enable ~stages ~p (x : Signal.t) (y : Signal.t) : Signal.t =
+let create ~clock ~enable ~stages ~(p : Z.t) (x : Signal.t) (y : Signal.t) : Signal.t =
   let open Signal in
   let wx = Signal.width x in
   let wy = Signal.width y in
@@ -89,7 +89,9 @@ let create ~clock ~enable ~stages ~p (x : Signal.t) (y : Signal.t) : Signal.t =
        "Width mismatch of inputs in Subtractor_pipe" (wx : int) (wy : int)
     ]
   );
-  assert (Signal.width p = Signal.width x);
+  assert (Z.numbits p <= Signal.width x);
+  assert Z.(gt p (neg one));
+  let p = Signal.of_z ~width:wx p in
   let w = Signal.width x in
   let stage_width = (w + (stages - 1)) / stages in
   let spec = Reg_spec.create ~clock () in
@@ -97,8 +99,14 @@ let create ~clock ~enable ~stages ~p (x : Signal.t) (y : Signal.t) : Signal.t =
     { Subtractor_input. x; y; p }
     |> Subtractor_input.map ~f:(Signal.split_lsb ~exact:false ~part_width:stage_width)
     |> Subtractor_input.to_interface_list
-    |> List.mapi ~f:(fun n subtractor_input ->
-        Subtractor_input.map ~f:(pipeline spec ~enable ~n) subtractor_input)
+    |> List.mapi ~f:(fun n { Subtractor_input. x; y; p } ->
+        let pipe = pipeline spec ~enable ~n in
+        { Subtractor_input.
+          x = pipe x;
+          y = pipe y;
+          p;
+          (* [p] is a constant, so no need to pipe it. *)
+        })
   in
   let spec = Reg_spec.create ~clock () in
   let final_state =
@@ -130,7 +138,6 @@ module With_interface(M : sig val bits : int end) = struct
     type 'a t =
       { clock : 'a
       ; enable : 'a
-      ; p : 'a [@bits bits]
       ; x : 'a [@bits bits]
       ; y : 'a [@bits bits]
       ; valid : 'a [@rtlname "in_valid"]
@@ -146,7 +153,7 @@ module With_interface(M : sig val bits : int end) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~stages (_scope : Scope.t) ({ I. clock; enable; x; y; p; valid }) =
+  let create ~stages ~p (_scope : Scope.t) ({ I. clock; enable; x; y; valid }) =
     let spec = Reg_spec.create ~clock () in
     { O.
       z = create ~clock ~enable ~stages ~p x y
@@ -154,4 +161,3 @@ module With_interface(M : sig val bits : int end) = struct
     }
   ;;
 end
-

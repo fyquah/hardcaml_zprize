@@ -130,7 +130,7 @@ module Stage3 = struct
           ~clock
           ~enable
           ~stages
-          ~p:(of_z ~width:(Signal.width a) p)
+          ~p
           a
           qp
         |> Fn.flip sel_bottom a_minus_qp_width
@@ -150,7 +150,6 @@ module Stage4 = struct
     let spec = Reg_spec.create ~clock () in
     let stages = config.subtracter_stages in
     let latency = Modulo_subtractor_pipe.latency ~stages in
-    let p = of_z ~width:(Signal.width a_minus_qp) p in
     { a_mod_p =
         Modulo_subtractor_pipe.create
           ~clock
@@ -158,7 +157,7 @@ module Stage4 = struct
           ~stages
           ~p
           a_minus_qp
-          p
+          (of_z ~width:(Signal.width a_minus_qp) p)
     ; valid = pipeline ~enable ~n:latency spec valid
     }
   ;;

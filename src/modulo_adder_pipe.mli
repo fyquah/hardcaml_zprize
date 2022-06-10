@@ -9,7 +9,7 @@ val hierarchical
   -> clock: Signal.t
   -> enable: Signal.t
   -> stages: int
-  -> p: Signal.t
+  -> p: Z.t
   -> Signal.t
   -> Signal.t
   -> Signal.t
@@ -21,7 +21,6 @@ module With_interface(M : sig val bits : int end) : sig
     type 'a t =
       { clock : 'a
       ; enable : 'a
-      ; p : 'a
       ; x : 'a
       ; y : 'a
       ; valid : 'a
@@ -37,5 +36,5 @@ module With_interface(M : sig val bits : int end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create : stages: int -> Scope.t -> Signal.t I.t -> Signal.t O.t
+  val create : stages: int -> p: Z.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end

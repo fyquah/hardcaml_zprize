@@ -8,14 +8,13 @@ let latency ~stages =
 
 let create ~stages ~p ~scope ~clock ~enable a =
   let spec = Reg_spec.create ~clock () in
-  let width = Signal.width a in
   let a_times_2 =
     Modulo_double_pipe.hierarchical ~enable ~scope ~clock ~stages ~p a
   in
   let a = pipeline spec ~enable ~n:(Modulo_adder_pipe.latency ~stages) a in
   Modulo_adder_pipe.hierarchical
     ~scope ~clock ~enable ~stages
-    ~p:(Signal.of_z ~width p)
+    ~p
     a
     a_times_2
 ;;

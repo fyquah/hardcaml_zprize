@@ -9,13 +9,6 @@ module Sim = Cyclesim.With_interface(Ec_fpn_dbl.I)(Ec_fpn_dbl.O)
 
 let p = Ark_bls12_377_g1.modulus ()
 
-let%expect_test "Print the modulus" =
-  print_s [%message (p : Utils.z)];
-  [%expect {|
-    (p
-     0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001) |}]
-;;
-
 let create_sim config = 
   let scope = Scope.create ~flatten_design:true () in
   let is_internal_port x =

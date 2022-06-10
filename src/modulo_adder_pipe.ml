@@ -74,22 +74,29 @@ let create_adder_stage (type a)
 
 let latency ~stages = stages
 
-let create ~clock ~enable ~stages ~p (a : Signal.t) (b : Signal.t) : Signal.t =
+let create ~clock ~enable ~stages ~(p : Z.t) (a : Signal.t) (b : Signal.t) : Signal.t =
   let open Signal in
   assert (Signal.width a = Signal.width b);
-  assert (Signal.width p = Signal.width a);
+  if Z.lt p Z.zero then (
+    raise_s [%message "modulus [p] cannot be negative!"];
+  );
+  assert (Z.numbits p <= Signal.width a);
   let w = Signal.width a in
   let adder_stage_width = (w + (stages - 1)) / stages in
   let spec = Reg_spec.create ~clock () in
   let adder_inputs =
+    let p = Signal.of_z ~width:w p in
     { Adder_input. a; b; p }
     |> Adder_input.map ~f:(Signal.split_lsb ~exact:false ~part_width:adder_stage_width)
     |> Adder_input.to_interface_list
-    |> List.mapi ~f:(fun n adder_input ->
+    |> List.mapi ~f:(fun n { Adder_input. a; b; p } ->
         (* Pipeline the n-th chunk by [n] cycles to align it appropriately
          * to the right clock cycle of the adder stage.
-         * *)
-        Adder_input.map ~f:(pipeline spec ~enable ~n) adder_input)
+         *
+         * As [p] is a constant, it does not need to be piped.
+         *)
+        let pipe = pipeline spec ~enable ~n in
+        { Adder_input. a = pipe a; b = pipe b; p })
   in
   let final_adder_state =
     let init =
@@ -119,7 +126,6 @@ module With_interface(M : sig val bits : int end) = struct
     type 'a t =
       { clock : 'a
       ; enable : 'a
-      ; p : 'a [@bits bits]
       ; x : 'a [@bits bits]
       ; y : 'a [@bits bits]
       ; valid : 'a [@rtlname "in_valid"]
@@ -135,7 +141,7 @@ module With_interface(M : sig val bits : int end) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~stages (_scope : Scope.t) ({ I. clock; enable; x; y; p; valid }) =
+  let create ~stages ~p (_scope : Scope.t) ({ I. clock; enable; x; y; valid }) =
     let spec = Reg_spec.create ~clock () in
     { O.
       z = create ~clock ~enable ~stages ~p x y
@@ -143,12 +149,12 @@ module With_interface(M : sig val bits : int end) = struct
     }
   ;;
 
-  let hierarchical ~stages scope i =
+  let hierarchical ~stages ~p scope i =
     let module H = Hierarchy.In_scope(I)(O) in
     H.hierarchical
       ~scope
       ~name:(Printf.sprintf "modulo_adder_pipe_%dbits" bits)
-      (create ~stages)
+      (create ~stages ~p)
       i
   ;;
 end
@@ -161,10 +167,9 @@ let hierarchical ~scope ~clock ~enable ~stages ~p x y =
   );
   let module M = With_interface(struct let bits = Signal.width x end) in
   let { M.O. z; valid = _ } =
-    M.hierarchical ~stages scope
+    M.hierarchical ~stages ~p scope
       { clock
       ; enable
-      ; p
       ; x
       ; y
       ; valid = Signal.vdd
