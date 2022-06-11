@@ -154,9 +154,7 @@ module Stage2 = struct
       { Stage1. y_squared; x_squared; x_times_4; y_times_z; valid } =
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline spec ~n:(latency config) ~enable in
-    let fp_multiply =
-      fp_multiply ~latency ~(config : Config.t) ~scope ~clock ~enable
-    in
+    let fp_multiply = fp_multiply ~latency ~config ~scope ~clock ~enable in
     let triple_pipe = triple_pipe ~scope ~latency ~config ~clock ~enable in
     let add_pipe = add_pipe ~scope ~latency ~config ~clock ~enable in
     { y_pow_4 = fp_multiply "y_pow_4" y_squared y_squared
@@ -189,9 +187,7 @@ module Stage3 = struct
   let create ~scope ~clock ~enable (config : Config.t) { Stage2. y_pow_4; m; s; z'; valid } =
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline ~n:(latency config) ~enable spec in
-    let fp_multiply =
-      fp_multiply ~latency ~(config : Config.t) ~scope ~clock ~enable
-    in
+    let fp_multiply = fp_multiply ~latency ~config ~scope ~clock ~enable in
     let add_pipe a b = add_pipe ~scope ~latency ~config ~clock ~enable a b in
     { y_pow_4_times_2 = add_pipe y_pow_4 y_pow_4
     ; s_times_2       = add_pipe s s
@@ -298,9 +294,7 @@ module Stage6 = struct
     let scope = Scope.sub_scope scope "stage6" in
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline spec ~n:(latency config) ~enable in
-    let fp_multiply =
-      fp_multiply ~latency ~(config : Config.t) ~scope ~clock ~enable
-    in
+    let fp_multiply = fp_multiply ~latency ~config ~scope ~clock ~enable in
     { m_times_s_minus_x' = fp_multiply "m_times_s_minus_x'" m s_minus_x'
     ; y_pow_4_times_8    = pipe y_pow_4_times_8
     ; x'                 = pipe x'
