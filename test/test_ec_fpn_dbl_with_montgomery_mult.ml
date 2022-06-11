@@ -5,9 +5,10 @@ open Test_ec_fpn_dbl
 module Montgomery_mult = Montgomery_mult.With_interface(struct let bits = 377 end)
 
 let fp_multiply : Config.fn =
+  let multiplier_config = Test_karatsuba_ofman_mult.config_four_stages in
   let montgomery_mult_config =
     { Montgomery_mult.Config.
-      multiplier_depth = 4
+      multiplier_config
     ; adder_depth = 3
     ; subtracter_depth = 3
     }

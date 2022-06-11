@@ -4,20 +4,23 @@ open Snarks_r_fun
 open Test_ec_fpn_dbl
 
 let fp_multiply : Config.fn =
-  let depth = 3 in
+  let multiplier_config = Test_karatsuba_ofman_mult.config_four_stages in
   let barrett_reduction_config =
     { Barrett_reduction.Config.
-      multiplier_depth = 3
+      multiplier_config
     ; subtracter_stages = 3
     }
   in
   let latency =
-    Karatsuba_ofman_mult.latency ~depth
+    Karatsuba_ofman_mult.Config.latency barrett_reduction_config.multiplier_config
     + Barrett_reduction.Config.latency barrett_reduction_config
   in
   let impl ~scope ~clock ~enable a b =
     assert (Signal.width a = Signal.width b);
-    let mult_value = Karatsuba_ofman_mult.hierarchical ~enable ~scope ~depth ~clock a b in
+    let mult_value =
+      Karatsuba_ofman_mult.hierarchical
+        ~enable ~scope ~config:multiplier_config ~clock a b
+    in
     let { With_valid. valid = _; value } =
       Barrett_reduction.hierarchical ~scope ~p ~clock ~enable
         ~config:barrett_reduction_config
@@ -35,7 +38,7 @@ let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =
   Stdio.printf "latency = %d\n" latency;
-  [%expect {| latency = 117 |}]
+  [%expect {| latency = 141 |}]
 ;;
 
 let%expect_test "Test on random test cases" =

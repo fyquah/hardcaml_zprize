@@ -47,10 +47,59 @@
 open Base
 open Hardcaml
 open Signal
+open Reg_with_enable
+
+module Config = struct
+  type t =
+    | Ground_multiplier of ground_multiplier
+    | Karatsubsa_ofman_stage of karatsubsa_ofman_stage
+
+  and karatsubsa_ofman_stage =
+    { post_adder_stages : int
+    ; config_m0 : t
+    ; config_m1 : t
+    ; config_m2 : t
+    }
+
+  and ground_multiplier =
+    | Verilog_multiply of { latency : int }
+    | Hybrid_dsp_and_luts of { latency : int }
+
+  (* TODO(fyquah): Consider making this configurable. *)
+  let pre_compare_stages = 1
+
+  let rec latency (t : t) =
+    match t with
+    | Ground_multiplier ground_multiplier ->
+      ground_multiplier_latency ground_multiplier
+    | Karatsubsa_ofman_stage karatsubsa_ofman_stage ->
+      karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
+
+  and karatsubsa_ofman_stage_latency { post_adder_stages; config_m0; config_m1; config_m2 } = 
+    pre_compare_stages
+    + Int.max (Int.max (latency config_m0) (latency config_m1)) (latency config_m2)
+    + post_adder_stages
+
+  and ground_multiplier_latency = function
+    | Verilog_multiply { latency } -> latency
+    | Hybrid_dsp_and_luts { latency } -> latency
+  ;;
+
+  let rec generate ~ground_multiplier ~depth =
+    match depth with
+    | 0 -> Ground_multiplier ground_multiplier
+    | _ ->
+      let child = generate ~ground_multiplier ~depth:(depth - 1) in
+      Karatsubsa_ofman_stage
+        { post_adder_stages = 1
+        ; config_m0 = child
+        ; config_m1 = child
+        ; config_m2 = child
+        }
+  ;;
+end
 
 let (<<) a b = sll a b 
-
-let latency ~depth = 2 * depth + 1
 
 type m_terms =
   { m0 : Signal.t
@@ -66,7 +115,7 @@ let lut_and_carry_multiply ~pivot big =
   |> Signal.tree ~arity:2 ~f:(reduce ~f:Uop.( +: ))
 ;;
 
-let umul (a : Signal.t) (b : Signal.t) =
+let hybrid_dsp_and_luts_umul a b =
   assert (Signal.width a = Signal.width b);
   let w = Signal.width a in
   if w <= 17 then
@@ -79,7 +128,13 @@ let umul (a : Signal.t) (b : Signal.t) =
     result
 ;;
 
-let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal.t) =
+let rec create_recursive
+    ~scope
+    ~clock
+    ~enable
+    ~(config : Config.t)
+    (a : Signal.t)
+    (b : Signal.t) =
   let (--) = Scope.naming scope in
   let a = a -- "in_a" in
   let b = b -- "in_b" in
@@ -92,7 +147,34 @@ let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal
         (wb : int)
     ]
   );
-  assert (level >= 1);
+  match config with 
+  | Karatsubsa_ofman_stage config ->
+    create_karatsuba_ofman_stage ~scope ~clock ~enable ~config a b
+  | Ground_multiplier config ->
+    create_ground_multiplier ~clock ~enable ~config a b
+
+and create_ground_multiplier ~clock ~enable ~config a b =
+  (* TODO(fyquah): Special-case multiplication by constants. *)
+  let spec = Reg_spec.create ~clock () in
+  let pipeline ~n x = pipeline ~n spec ~enable x in
+  match config with
+  | Config.Verilog_multiply { latency } -> 
+    pipeline ~n:latency (a *: b)
+  | Config.Hybrid_dsp_and_luts { latency } -> 
+    (* TODO(fyquah): either annotate this with backwards retiming, or
+     * balance the register stages better.
+     *)
+    pipeline ~n:latency (hybrid_dsp_and_luts_umul a b)
+
+and create_karatsuba_ofman_stage
+    ~scope
+    ~clock
+    ~enable
+    ~config
+    (a : Signal.t)
+    (b : Signal.t) =
+  let { Config. config_m0; config_m1; config_m2; post_adder_stages } = config in
+  let wa = width a in
   let spec = Reg_spec.create ~clock () in
   let reg x = reg spec ~enable x in
   let pipeline ~n x = pipeline ~enable spec x ~n in
@@ -107,7 +189,7 @@ let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal
   let b' = reg b in
   let sign =
     pipeline
-      ~n:(2 * level)
+      ~n:(Config.karatsubsa_ofman_stage_latency config - post_adder_stages)
       (((btm_half a -- "btm_a") <: (top_half a -- "top_a"))
        ^: ((top_half b -- "top_b") <: (btm_half b -- "btm_b")))
   in
@@ -126,21 +208,14 @@ let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal
       |> reg
       |> Fn.flip (Scope.naming scope) "a1"
     in
-    match level with
-    | 1 ->
-      let m0 = Scope.naming scope (reg (umul (top_half a') (top_half b'))) "m0" in
-      let m2 = Scope.naming scope (reg (umul (btm_half a') (btm_half b'))) "m2" in
-      let m1 = Scope.naming scope (reg (umul a0 a1)) "m1" in
-      { m0; m1; m2 }
-    | _ ->
-      let recurse subscope x y =
-        let scope = Scope.sub_scope scope subscope in
-        create_recursive ~scope ~enable ~clock ~level:(level - 1) x y
-      in
-      let m0 = recurse "m0" (top_half a') (top_half b') in
-      let m2 = recurse "m2" (btm_half a') (btm_half b') in
-      let m1 = recurse "m1" a0 a1 in
-      { m0; m1; m2 }
+    let recurse config subscope x y =
+      let scope = Scope.sub_scope scope subscope in
+      create_recursive ~scope ~enable ~clock ~config x y
+    in
+    let m0 = recurse config_m0 "m0" (top_half a') (top_half b') in
+    let m2 = recurse config_m2 "m2" (btm_half a') (btm_half b') in
+    let m1 = recurse config_m1 "m1" a0 a1 in
+    { m0; m1; m2 }
   in
   let m0 = uresize m0 (w * 2) in
   let m1 = uresize m1 (w * 2) in
@@ -156,14 +231,11 @@ let rec create_recursive ~scope ~clock ~enable ~level (a : Signal.t) (b : Signal
   |> Fn.flip (--) "out"
 ;;
 
-let create ?(enable = vdd) ~depth ~scope ~clock a b : Signal.t =
-  create_recursive ~level:depth ~scope ~enable ~clock a b
+let create ?(enable = vdd) ~config ~scope ~clock a b : Signal.t =
+  create_recursive ~config ~scope ~enable ~clock a b
 ;;
 
-module With_interface(M : sig
-    val num_bits : int
-    val depth : int
-  end) = struct
+module With_interface(M : sig val bits : int end) = struct
   open M
 
   module I = struct
@@ -171,46 +243,42 @@ module With_interface(M : sig
       { clock : 'a
       ; enable : 'a
       ; valid : 'a [@rtlname "in_valid"]
-      ; a : 'a [@bits num_bits]
-      ; b : 'a [@bits num_bits]
+      ; a : 'a [@bits bits]
+      ; b : 'a [@bits bits]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
     type 'a t =
-      { c : 'a [@bits num_bits * 2]
+      { c : 'a [@bits bits * 2]
       ; valid : 'a [@rtlname "out_valid"]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create (scope : Scope.t) { I. clock; enable; a; b; valid }  =
-    { O.c = create ~clock ~enable ~depth ~scope a b
+  let create ~config (scope : Scope.t) { I. clock; enable; a; b; valid }  =
+    { O.c = create ~config ~clock ~enable ~scope a b
     ; valid =
-        pipeline ~n:(latency ~depth) (Reg_spec.create ~clock ()) ~enable valid
+        pipeline ~n:(Config.latency config) (Reg_spec.create ~clock ()) ~enable valid
     }
   ;;
 
-  let hierarchical scope (input : _ I.t) : _ O.t =
+  let hierarchical ~config scope (input : _ I.t) : _ O.t =
     let module H = Hierarchy.In_scope(I)(O) in
     H.hierarchical
       ~scope
-      ~name:(Printf.sprintf "karatsuba_ofman_mult_%d_depth_%d" num_bits depth)
-      create
+      ~name:(Printf.sprintf "karatsuba_ofman_mult_%d" bits)
+      (create ~config)
       input
   ;;
 end
 
-let hierarchical ~enable ~depth ~scope ~clock a b =
-  let num_bits = Signal.width a in
-  let module M = With_interface(struct
-      let num_bits = num_bits
-      let depth = depth
-    end)
-  in
+let hierarchical ~enable ~config ~scope ~clock a b =
+  let bits = Signal.width a in
+  let module M = With_interface(struct let bits = bits end) in
   let o =
-    M.hierarchical scope
+    M.hierarchical ~config scope
       { clock
       ; enable
       ; valid = vdd

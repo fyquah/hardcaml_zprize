@@ -19,14 +19,14 @@ module Stage1 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~scope ~depth ~clock ~enable { Stage0. x; y; valid } =
-    let latency = Karatsuba_ofman_mult.latency ~depth in
+  let create ~scope ~multiplier_config ~clock ~enable { Stage0. x; y; valid } =
+    let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     { xy =
       Karatsuba_ofman_mult.create
         ~scope
         ~clock
         ~enable
-        ~depth
+        ~config:multiplier_config
         x
         y
     ; valid = Signal.pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
@@ -45,19 +45,19 @@ module Stage2 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~scope ~depth ~(logr : int) ~p' ~clock ~enable { Stage1. xy; valid } =
+  let create ~scope ~multiplier_config ~(logr : int) ~p' ~clock ~enable { Stage1. xy; valid } =
     let spec = Reg_spec.create ~clock () in
     let m =
       Karatsuba_ofman_mult.create
         ~scope
         ~clock
         ~enable
-        ~depth
+        ~config:multiplier_config
         (sel_bottom xy logr)
         (of_z ~width:logr p')
       |> Fn.flip sel_bottom logr
     in
-    let latency = Karatsuba_ofman_mult.latency ~depth in
+    let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     { m
     ; xy = pipeline spec ~n:latency ~enable xy
     ; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
@@ -73,7 +73,7 @@ module Stage3 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~scope ~depth ~p ~clock ~enable { Stage2. m; xy; valid } =
+  let create ~scope ~multiplier_config ~p ~clock ~enable { Stage2. m; xy; valid } =
     let spec = Reg_spec.create ~clock () in
     let mp =
       let width = width m in
@@ -81,11 +81,11 @@ module Stage3 = struct
         ~scope
         ~clock
         ~enable
-        ~depth
+        ~config:multiplier_config
         m
         (of_z ~width p)
     in
-    let latency = (Karatsuba_ofman_mult.latency ~depth) in
+    let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     { mp
     ; xy = pipeline spec ~enable ~n:latency xy
     ; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
@@ -148,13 +148,13 @@ end
 
 module Config = struct
   type t =
-    { multiplier_depth : int
+    { multiplier_config : Karatsuba_ofman_mult.Config.t
     ; adder_depth : int
     ; subtracter_depth : int
     }
 
-  let latency ({ multiplier_depth; adder_depth; subtracter_depth } : t) =
-    3 * (Karatsuba_ofman_mult.latency ~depth:multiplier_depth)
+  let latency ({ multiplier_config; adder_depth; subtracter_depth } : t) =
+    3 * (Karatsuba_ofman_mult.Config.latency multiplier_config)
     + adder_depth
     + subtracter_depth
   ;;
@@ -198,13 +198,13 @@ let create
   let (--) = Scope.naming scope in
   assert Z.(equal ((p * p') mod r) (r - one));
   { x; y; valid }
-  |> Stage1.create ~scope ~depth:config.multiplier_depth ~clock ~enable
+  |> Stage1.create ~scope ~multiplier_config:config.multiplier_config ~clock ~enable
   |> Stage1.map2 Stage1.port_names ~f:(fun port_name x ->
       x -- ("stage1$" ^ port_name))
-  |> Stage2.create ~scope ~depth:config.multiplier_depth ~logr ~p' ~clock ~enable
+  |> Stage2.create ~scope ~multiplier_config:config.multiplier_config ~logr ~p' ~clock ~enable
   |> Stage2.map2 Stage2.port_names ~f:(fun port_name x ->
       x -- ("stage2$" ^ port_name))
-  |> Stage3.create ~scope ~depth:config.multiplier_depth ~p ~clock ~enable
+  |> Stage3.create ~scope ~multiplier_config:config.multiplier_config ~p ~clock ~enable
   |> Stage3.map2 Stage3.port_names ~f:(fun port_name x ->
       x -- ("stage3$" ^ port_name))
   |> Stage4.create ~scope ~depth:config.adder_depth ~logr ~clock ~enable

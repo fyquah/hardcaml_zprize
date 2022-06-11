@@ -92,7 +92,7 @@ let random_bigint () =
 let%expect_test _ =
   let config =
     { Montgomery_mult.Config.
-      multiplier_depth = 3
+      multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
     ; adder_depth = 1
     ; subtracter_depth = 1
     }

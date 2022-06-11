@@ -25,12 +25,12 @@ open Reg_with_enable
 
 module Config = struct
   type t =
-    { multiplier_depth : int
+    { multiplier_config : Karatsuba_ofman_mult.Config.t
     ; subtracter_stages : int
     }
 
   let latency (config : t) =
-    (2 * Karatsuba_ofman_mult.latency ~depth:config.multiplier_depth)
+    (2 * Karatsuba_ofman_mult.Config.latency config.multiplier_config)
     + (2 * Modulo_subtractor_pipe.latency ~stages:config.subtracter_stages)
   ;;
 end
@@ -54,8 +54,8 @@ module Stage1 = struct
   let create ~scope ~clock ~enable ~m ~k ~(config : Config.t) { Stage0. a; valid } =
     let logm = Z.log2up m in
     let wa = Signal.width a in
-    let depth = config.multiplier_depth in
-    let latency = Karatsuba_ofman_mult.latency ~depth in
+    let multiplier_config = config.multiplier_config in
+    let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     let spec = Reg_spec.create ~clock () in
     (* [a] can occupy up to [wa] bits whereas [m] and occupy [logm] bits, hence
        [a * m] can occupy [wa + logm] bits, and shifting by [k] should only occupy
@@ -64,7 +64,7 @@ module Stage1 = struct
     { q = 
         Karatsuba_ofman_mult.create
           ~scope
-          ~depth
+          ~config:multiplier_config
           ~clock
           ~enable
           a
@@ -86,14 +86,14 @@ module Stage2 = struct
   [@@deriving sexp_of, hardcaml]
 
   let create ~clock ~scope ~enable ~p ~(config : Config.t) { Stage1. q; a; valid } =
-    let depth = config.multiplier_depth in
-    let latency = Karatsuba_ofman_mult.latency ~depth in
+    let multiplier_config = config.multiplier_config in
+    let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     let spec = Reg_spec.create ~clock () in
     assert (width q >= Z.log2up p);
     { qp =
         Karatsuba_ofman_mult.create
+          ~config:multiplier_config
           ~scope
-          ~depth
           ~clock
           ~enable
           q
