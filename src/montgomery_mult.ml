@@ -103,14 +103,9 @@ module Stage4 = struct
   let create ~scope ~depth ~logr ~clock ~enable { Stage3. mp; xy; valid } =
     assert (Signal.width mp = Signal.width xy);
     let t =
-      (* TODO(fyquah): Change Modulo_adder_pipe to use a proper adder pipe that
-       * doesn't perform modulo under-the-hood.
-       *)
-      Modulo_adder_pipe.hierarchical ~scope ~clock ~enable
+      Adder_pipe.hierarchical ~scope ~clock ~enable
         ~stages:depth
-        ~p:Z.zero
-        (gnd @: xy)
-        (gnd @: mp)
+        [ (gnd @: xy); (gnd @: mp) ]
       |> Fn.flip (Scope.naming scope) "stage4$xy_plus_mp"
       |> Fn.flip drop_bottom logr
     in
