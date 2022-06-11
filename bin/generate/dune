@@ -1,0 +1,8 @@
+(executables
+  (names verilog)
+  (libraries base
+             core_unix.command_unix
+             hardcaml
+             snarks_r_fun
+             snarks_r_fun_test)
+  (preprocess (pps ppx_jane ppx_deriving_hardcaml)))
