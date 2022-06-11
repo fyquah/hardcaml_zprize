@@ -83,7 +83,6 @@ module Config = struct
   and ground_multiplier_latency = function
     | Verilog_multiply { latency } -> latency
     | Hybrid_dsp_and_luts { latency } -> latency
-
   ;;
 
   let rec generate ~ground_multiplier ~depth =
