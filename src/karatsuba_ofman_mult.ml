@@ -85,6 +85,19 @@ module Config = struct
     | Hybrid_dsp_and_luts { latency } -> latency
 
   ;;
+
+  let rec generate ~ground_multiplier ~depth =
+    match depth with
+    | 0 -> Ground_multiplier ground_multiplier
+    | _ ->
+      let child = generate ~ground_multiplier ~depth:(depth - 1) in
+      Karatsubsa_ofman_stage
+        { post_adder_stages = 1
+        ; config_m0 = child
+        ; config_m1 = child
+        ; config_m2 = child
+        }
+  ;;
 end
 
 let (<<) a b = sll a b 

@@ -43,7 +43,7 @@ let compute_software_model ~p ~a =
 let%expect_test _ =
   let config =
     { Config.
-      multiplier_depth = 3
+      multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
     ; subtracter_stages = 3
     }
   in

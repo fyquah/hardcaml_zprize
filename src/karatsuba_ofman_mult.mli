@@ -17,6 +17,11 @@ module Config : sig
     | Hybrid_dsp_and_luts of { latency : int }
 
   val latency : t -> int
+
+  val generate
+    : ground_multiplier: ground_multiplier
+    -> depth: int
+    -> t
 end
 
 val create

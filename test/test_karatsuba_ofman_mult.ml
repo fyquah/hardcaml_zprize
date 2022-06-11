@@ -8,32 +8,38 @@ open! Snarks_r_fun
 
 let debug = false
 
-module Make(M : sig
-    val num_bits : int
-    val depth : int
-  end) = struct
+module Make(M : sig val bits : int end) = struct
   include M
   include Karatsuba_ofman_mult.With_interface(M)
 
-  let latency = Karatsuba_ofman_mult.latency ~depth
-
-  let create_sim () =
+  let create_sim config =
     let scope = Scope.create ~flatten_design:true () in
     let module Sim = Cyclesim.With_interface(I)(O) in
-    Sim.create ~config:Cyclesim.Config.trace_all (create scope)
+    Sim.create ~config:Cyclesim.Config.trace_all (create ~config scope)
   ;;
 end
 
-module Single_depth_mult = Make(struct
-    let num_bits = 32
-    let depth = 1
-  end)
+let config_single_stage =
+  let open Karatsuba_ofman_mult.Config in
+  let config_ground_multiplier =
+    Ground_multiplier (Verilog_multiply { latency = 1 })
+  in
+  Karatsubsa_ofman_stage
+    { post_adder_stages = 1
+    ; config_m0 = config_ground_multiplier
+    ; config_m1 = config_ground_multiplier
+    ; config_m2 = config_ground_multiplier
+    }
+;;
+
+module Mult32 = Make(struct let bits = 32 end)
+module Mult377 = Make(struct let bits = 377 end)
 
 let (<--.) dst src = dst := Bits.of_int ~width:(Bits.width !dst) src
 
 let%expect_test "Demonstrate pipelining and control signals" =
-  let sim = Single_depth_mult.create_sim () in
-  let latency = Karatsuba_ofman_mult.latency ~depth:1 in
+  let sim = Mult32.create_sim config_single_stage in
+  let latency = Karatsuba_ofman_mult.Config.latency config_single_stage in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   inputs.enable <--. 1;
@@ -65,18 +71,20 @@ let%expect_test "Demonstrate pipelining and control signals" =
   [%expect {| 0 |}];
 ;;
 
-module Triple_depth_mult = Make(struct
-    let num_bits = 377
-    let depth = 3
-  end)
-
 type test_case =
   { a : Z.t
   ; b : Z.t
   }
 
+let config_four_stages =
+  Karatsuba_ofman_mult.Config.generate
+    ~depth:4
+    ~ground_multiplier:(Verilog_multiply { latency = 1 })
+;;
+
 let%expect_test "Large multiplier" =
-  let sim = Triple_depth_mult.create_sim () in
+  let latency = Karatsuba_ofman_mult.Config.latency config_four_stages in
+  let sim = Mult377.create_sim config_four_stages in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   let internal_ports = Cyclesim.internal_ports sim in
@@ -108,7 +116,6 @@ let%expect_test "Large multiplier" =
           })
     ]
   in
-  let latency = Triple_depth_mult.latency in
   let obtained_results = Queue.create () in
   let cycle () =
     Cyclesim.cycle sim;
@@ -126,7 +133,7 @@ let%expect_test "Large multiplier" =
   in
   inputs.enable <--. 1;
   inputs.valid <--. 1;
-  let width = Triple_depth_mult.num_bits in
+  let width = Mult377.bits in
   List.iter test_cases ~f:(fun { a; b } ->
       inputs.a := Bits.of_z ~width a;
       inputs.b := Bits.of_z ~width b;
@@ -142,7 +149,7 @@ let%expect_test "Large multiplier" =
       let expected = Z.mul a b in
       let obtained = Queue.dequeue_exn obtained_results in
       let num_bits_for_expected = Z.numbits expected in
-      let result_num_bits = Triple_depth_mult.num_bits * 2 in
+      let result_num_bits = Mult377.bits * 2 in
       if num_bits_for_expected > result_num_bits then (
         failwithf "Cannot represent result in the available num_bits, \
                    required %d, but multiplier only supports %d (a=%s, b=%s)"
