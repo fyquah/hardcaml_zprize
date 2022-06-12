@@ -117,6 +117,7 @@ module With_interface(M : sig
   module O = struct
     type 'a t =
       { result : 'a [@bits bits] [@rtlprefix "out_"]
+      ; carries : 'a list [@bits 1] [@length num_inputs - 1]
       ; valid : 'a [@rtlprefix "out_"]
       }
     [@@deriving sexp_of, hardcaml]
@@ -125,9 +126,9 @@ module With_interface(M : sig
   let create ~op ~stages (_ : Scope.t) ({ I. clock; enable; data; valid } : _ I.t) =
     let spec = Reg_spec.create ~clock () in
     let pipe ~n x = pipeline spec ~n ~enable x in
-    let { result; carries = _ } = create ~op ~stages ~pipe data in
+    let { result; carries } = create ~op ~stages ~pipe data in
     let valid = pipe ~n:stages valid in
-    { O. result; valid }
+    { O. result; carries; valid }
   ;;
 
   let hierarchical ~op ~stages scope i =
@@ -154,10 +155,10 @@ let hierarchical ~scope ~clock ~enable ~op ~stages data =
       let bits = bits
     end)
   in
-  let { M.O. result; valid = _ } =
+  let { M.O. result; carries; valid = _ } =
     M.hierarchical ~op ~stages scope { clock; enable; data; valid = Signal.vdd }
   in
-  result
+  { result; carries }
 ;;
 
 module For_testing = struct

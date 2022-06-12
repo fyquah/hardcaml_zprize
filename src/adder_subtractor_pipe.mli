@@ -30,7 +30,7 @@ val hierarchical
   -> op: [ `Add | `Sub ]
   -> stages: int
   -> Signal.t list
-  -> Signal.t
+  -> (Signal.t, Signal.t list) result
 
 module For_testing : sig
   (** A combinational implementation for writing proofs. *)

@@ -103,9 +103,12 @@ module Stage4 = struct
   let create ~scope ~depth ~logr ~clock ~enable { Stage3. mp; xy; valid } =
     assert (Signal.width mp = Signal.width xy);
     let t =
-      Adder_pipe.hierarchical ~op:`Add ~scope ~clock ~enable
-        ~stages:depth
-        [ (gnd @: xy); (gnd @: mp) ]
+      let { Adder_subtractor_pipe. result; carries = _ } =
+        Adder_subtractor_pipe.hierarchical ~op:`Add ~scope ~clock ~enable
+          ~stages:depth
+          [ (gnd @: xy); (gnd @: mp) ]
+      in
+      result
       |> Fn.flip (Scope.naming scope) "stage4$xy_plus_mp"
       |> Fn.flip drop_bottom logr
     in
@@ -127,16 +130,23 @@ module Stage5 = struct
     let width = width t in
     let latency = Modulo_subtractor_pipe.latency ~stages:depth in
     let pipe = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency in
-    let { Subtractor_pipe. difference; borrows } =
-      Subtractor_pipe.hierarchical
+    let { Adder_subtractor_pipe. result = subtractor_result; carries = borrow } =
+      Adder_subtractor_pipe.hierarchical
+        ~op:`Sub
         ~clock
         ~scope
         ~enable
         ~stages:depth
-        t
-        (of_z ~width p)
+        [ t
+        ; of_z ~width p
+        ]
     in
-    { result = lsbs (mux2 borrows (pipe t) difference)
+    let borrow =
+      match borrow with
+      | [ hd ] -> hd
+      | _ -> assert false
+    in
+    { result = lsbs (mux2 borrow (pipe t) subtractor_result)
     ; valid  = pipe valid
     }
   ;;
