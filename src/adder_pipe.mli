@@ -27,7 +27,7 @@ val hierarchical
   -> Signal.t
 
 module For_testing : sig
-  (** A combinationa implementation for writing proofs. *)
+  (** A combinational implementation for writing proofs. *)
   val create_combinational
     : (module Comb.S with type t = 'a)
     -> stages: int

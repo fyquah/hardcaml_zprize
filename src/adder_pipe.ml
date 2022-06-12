@@ -78,6 +78,10 @@ module Adder_implementation(Comb : Comb.S) = struct
   let create ~stages ~pipe inputs =
     let bits = validate_same_width inputs in
     let input_parts =
+      (* [ a; b; c ] -> [ [ a1; b1; c1 ]; [ a2; b2; c2; ] [ a3; b3; c3 ] ]
+       *
+       * where a = concat_lsb [ a1; a2; a3 ]
+       *)
       let part_width = (bits + (stages - 1)) / stages in
       List.map inputs ~f:(split_lsb ~exact:false ~part_width)
       |> List.transpose_exn
