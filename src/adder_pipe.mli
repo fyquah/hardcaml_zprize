@@ -18,6 +18,11 @@
 
 open Hardcaml
 
+type ('result, 'carries) result =
+  { result  : 'result
+  ; carries : 'carries
+  }
+
 val hierarchical
   : scope: Scope.t
   -> clock: Signal.t
@@ -32,5 +37,5 @@ module For_testing : sig
     : (module Comb.S with type t = 'a)
     -> stages: int
     -> 'a list
-    -> 'a 
+    -> ('a, 'a list) result
 end

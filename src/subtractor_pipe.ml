@@ -7,7 +7,7 @@ type ('difference, 'borrows) result =
   ; borrows    : 'borrows
   }
 
-module Subtractor_implementation(Comb : Comb.S) = struct
+module Implementation(Comb : Comb.S) = struct
   open Comb
 
   type stage_input =
@@ -92,7 +92,7 @@ module With_interface(M : sig
     val num_inputs : int
   end) = struct
   include M
-  include Subtractor_implementation(Signal)
+  include Implementation(Signal)
 
   module I = struct
     type 'a t =
@@ -162,7 +162,7 @@ module For_testing = struct
       (module Comb : Comb.S with type t = a)
       ~stages
       inputs =
-    let open Subtractor_implementation(Comb) in
+    let open Implementation(Comb) in
     create ~stages ~pipe:(fun ~n:_ x -> x) inputs
   ;;
 end

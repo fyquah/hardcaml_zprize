@@ -12,7 +12,7 @@ let test ~bits ~stages ~num_inputs =
       Adder_pipe.For_testing.create_combinational (module Comb_gates) ~stages inputs
     in
     let simple = List.reduce_exn ~f:(+:) inputs in
-    simple ==: optimized
+    simple ==: optimized.result
   in
   begin match Solver.solve (cnf ~:(eqn)) with
   | Ok Unsat -> Ok ()
