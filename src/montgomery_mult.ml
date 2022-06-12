@@ -103,7 +103,7 @@ module Stage4 = struct
   let create ~scope ~depth ~logr ~clock ~enable { Stage3. mp; xy; valid } =
     assert (Signal.width mp = Signal.width xy);
     let t =
-      Adder_pipe.hierarchical ~scope ~clock ~enable
+      Adder_pipe.hierarchical ~op:`Add ~scope ~clock ~enable
         ~stages:depth
         [ (gnd @: xy); (gnd @: mp) ]
       |> Fn.flip (Scope.naming scope) "stage4$xy_plus_mp"

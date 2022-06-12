@@ -9,7 +9,7 @@ let test ~bits ~stages ~num_inputs =
       List.init num_inputs ~f:(fun i -> input (sprintf "x%d" i) bits)
     in
     let optimized =
-      Adder_pipe.For_testing.create_combinational (module Comb_gates) ~stages inputs
+      Adder_pipe.For_testing.create_combinational ~op:`Add (module Comb_gates) ~stages inputs
     in
     let simple = List.reduce_exn ~f:(+:) inputs in
     simple ==: optimized.result
