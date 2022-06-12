@@ -2,9 +2,9 @@ open Base
 open Hardcaml
 open Reg_with_enable
 
-type 'a result =
-  { difference : 'a
-  ; borrows    : 'a list
+type ('difference, 'borrows) result =
+  { difference : 'difference
+  ; borrows    : 'borrows
   }
 
 module Subtractor_implementation(Comb : Comb.S) = struct
@@ -131,7 +131,7 @@ module With_interface(M : sig
   ;;
 end
 
-let hierarchical ~scope ~clock ~enable ~stages data =
+let hierarchical_general ~scope ~clock ~enable ~stages data =
   let bits = Signal.width (List.hd_exn data) in
   let module M =
     With_interface(struct
@@ -141,6 +141,18 @@ let hierarchical ~scope ~clock ~enable ~stages data =
   in
   let { M.O. difference; borrows; valid = _ } =
     M.hierarchical ~stages scope { clock; enable; data; valid = Signal.vdd }
+  in
+  { difference; borrows }
+;;
+
+let hierarchical ~scope ~clock ~enable ~stages a b =
+  let { difference; borrows } =
+    hierarchical_general ~scope ~clock ~enable ~stages [ a; b ]
+  in
+  let borrows =
+    match borrows with
+    | [ x ] -> x
+    | _ -> assert false
   in
   { difference; borrows }
 ;;

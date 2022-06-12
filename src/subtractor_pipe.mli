@@ -9,9 +9,9 @@
 
 open Hardcaml
 
-type 'a result =
-  { difference : 'a
-  ; borrows    : 'a list
+type ('difference, 'borrows) result =
+  { difference : 'difference
+  ; borrows    : 'borrows
   }
 
 val hierarchical
@@ -19,8 +19,17 @@ val hierarchical
   -> clock: Signal.t
   -> enable: Signal.t
   -> stages: int
+  -> Signal.t
+  -> Signal.t
+  -> (Signal.t, Signal.t) result
+
+val hierarchical_general
+  : scope: Scope.t
+  -> clock: Signal.t
+  -> enable: Signal.t
+  -> stages: int
   -> Signal.t list
-  -> Signal.t result
+  -> (Signal.t, Signal.t list) result
 
 module For_testing : sig
   (** A combinational implementation for writing proofs. *)
@@ -28,6 +37,6 @@ module For_testing : sig
     : (module Comb.S with type t = 'a)
     -> stages: int
     -> 'a list
-    -> 'a result
+    -> ('a, 'a list) result
 end
 

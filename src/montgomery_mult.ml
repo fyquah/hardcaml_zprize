@@ -123,20 +123,21 @@ module Stage5 = struct
     }
   [@@deriving sexp_of, hardcaml, fields]
 
-  let create ~depth ~p ~clock ~enable { Stage4. t; valid } =
+  let create ~scope ~depth ~p ~clock ~enable { Stage4. t; valid } =
     let width = width t in
     let latency = Modulo_subtractor_pipe.latency ~stages:depth in
-    { result =
-        (* TODO(fyquah): Replace subtracter_pipe with something simpler and
-         * more specialized.
-        *)
-        Modulo_subtractor_pipe.create ~clock ~enable
-          ~stages:depth
-          ~p
-          t
-          (of_z ~width p)
-        |> lsbs
-    ; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
+    let pipe = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency in
+    let { Subtractor_pipe. difference; borrows } =
+      Subtractor_pipe.hierarchical
+        ~clock
+        ~scope
+        ~enable
+        ~stages:depth
+        t
+        (of_z ~width p)
+    in
+    { result = lsbs (mux2 borrows (pipe t) difference)
+    ; valid  = pipe valid
     }
   ;;
 end
@@ -205,7 +206,7 @@ let create
   |> Stage4.create ~scope ~depth:config.adder_depth ~logr ~clock ~enable
   |> Stage4.map2 Stage4.port_names ~f:(fun port_name x ->
       x -- ("stage4$" ^ port_name))
-  |> Stage5.create ~depth:config.subtracter_depth ~p ~clock ~enable
+  |> Stage5.create ~scope ~depth:config.subtracter_depth ~p ~clock ~enable
   |> Stage5.map2 Stage5.port_names ~f:(fun port_name x ->
       x -- ("stage5$" ^ port_name))
 ;;
