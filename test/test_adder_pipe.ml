@@ -3,16 +3,13 @@ open Hardcaml_verify
 open Comb_gates
 open Snarks_r_fun
 
-module Adder_pipe_proof = Adder_pipe.Make_comb_implementation(Comb_gates)
-
 let test ~bits ~stages ~num_inputs =
   let eqn =
     let inputs = 
       List.init num_inputs ~f:(fun i -> input (sprintf "x%d" i) bits)
     in
     let optimized =
-      Adder_pipe_proof.create ~stages ~pipe:(fun ~n:_ x -> x)
-        inputs
+      Adder_pipe.For_testing.create_combinational (module Comb_gates) ~stages inputs
     in
     let simple = List.reduce_exn ~f:(+:) inputs in
     simple ==: optimized

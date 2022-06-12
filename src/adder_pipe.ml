@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Reg_with_enable
 
-module Make_comb_implementation(Comb : Comb.S) = struct
+module Adder_implementation(Comb : Comb.S) = struct
   open Comb
 
   type stage_input =
@@ -106,13 +106,12 @@ module Make_comb_implementation(Comb : Comb.S) = struct
   ;;
 end
 
-open Make_comb_implementation(Signal)
-
 module With_interface(M : sig
     val bits : int
     val num_inputs : int
   end) = struct
   include M
+  include Adder_implementation(Signal)
 
   module I = struct
     type 'a t =
@@ -163,3 +162,13 @@ let hierarchical ~scope ~clock ~enable ~stages data =
   in
   sum
 ;;
+
+module For_testing = struct
+  let create_combinational (type a)
+      (module Comb : Comb.S with type t = a)
+      ~stages
+      inputs =
+    let open Adder_implementation(Comb) in
+    create ~stages ~pipe:(fun ~n:_ x -> x) inputs
+  ;;
+end

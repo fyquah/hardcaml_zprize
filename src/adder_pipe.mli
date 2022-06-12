@@ -1,13 +1,6 @@
-open Hardcaml
+(** Multistage pipelined ripple-carry-adder. *)
 
-(** For running this through a SAT solver. *)
-module Make_comb_implementation(Comb : Comb.S) : sig
-  val create
-    : stages: int
-    -> pipe: (n: int -> Comb.t -> Comb.t)
-    -> Comb.t list
-    -> Comb.t
-end
+open Hardcaml
 
 val hierarchical
   : scope: Scope.t
@@ -16,3 +9,12 @@ val hierarchical
   -> stages: int
   -> Signal.t list
   -> Signal.t
+
+module For_testing : sig
+  (** A combinationa implementation for writing proofs. *)
+  val create_combinational
+    : (module Comb.S with type t = 'a)
+    -> stages: int
+    -> 'a list
+    -> 'a 
+end
