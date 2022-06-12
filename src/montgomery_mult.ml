@@ -103,9 +103,12 @@ module Stage4 = struct
   let create ~scope ~depth ~logr ~clock ~enable { Stage3. mp; xy; valid } =
     assert (Signal.width mp = Signal.width xy);
     let t =
-      Adder_pipe.hierarchical ~scope ~clock ~enable
-        ~stages:depth
-        [ (gnd @: xy); (gnd @: mp) ]
+      let { Adder_subtractor_pipe. result; carries = _ } =
+        Adder_subtractor_pipe.hierarchical ~op:`Add ~scope ~clock ~enable
+          ~stages:depth
+          [ (gnd @: xy); (gnd @: mp) ]
+      in
+      result
       |> Fn.flip (Scope.naming scope) "stage4$xy_plus_mp"
       |> Fn.flip drop_bottom logr
     in
@@ -123,20 +126,32 @@ module Stage5 = struct
     }
   [@@deriving sexp_of, hardcaml, fields]
 
-  let create ~depth ~p ~clock ~enable { Stage4. t; valid } =
+  let create ~scope ~depth ~p ~clock ~enable { Stage4. t; valid } =
     let width = width t in
-    let latency = Modulo_subtractor_pipe.latency ~stages:depth in
-    { result =
-        (* TODO(fyquah): Replace subtracter_pipe with something simpler and
-         * more specialized.
-        *)
-        Modulo_subtractor_pipe.create ~clock ~enable
-          ~stages:depth
-          ~p
-          t
-          (of_z ~width p)
-        |> lsbs
-    ; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
+    (* At this point, [0 <= t < 2p]. This step puts [result] backs into
+     * the modulo range by computing [mux2 (t <: p) t (t -: p)]. The following
+     * circuits implements this in a pipelined fashion.
+    *)
+    let latency = depth in
+    let pipe = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency in
+    let { Adder_subtractor_pipe. result = subtractor_result; carries = borrow } =
+      Adder_subtractor_pipe.hierarchical
+        ~op:`Sub
+        ~clock
+        ~scope
+        ~enable
+        ~stages:depth
+        [ t
+        ; of_z ~width p
+        ]
+    in
+    let borrow =
+      match borrow with
+      | [ hd ] -> hd
+      | _ -> assert false
+    in
+    { result = lsbs (mux2 borrow (pipe t) subtractor_result)
+    ; valid  = pipe valid
     }
   ;;
 end
@@ -205,7 +220,7 @@ let create
   |> Stage4.create ~scope ~depth:config.adder_depth ~logr ~clock ~enable
   |> Stage4.map2 Stage4.port_names ~f:(fun port_name x ->
       x -- ("stage4$" ^ port_name))
-  |> Stage5.create ~depth:config.subtracter_depth ~p ~clock ~enable
+  |> Stage5.create ~scope ~depth:config.subtracter_depth ~p ~clock ~enable
   |> Stage5.map2 Stage5.port_names ~f:(fun port_name x ->
       x -- ("stage5$" ^ port_name))
 ;;

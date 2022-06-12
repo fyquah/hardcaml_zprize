@@ -2,7 +2,7 @@ let%expect_test "" =
   for num_inputs = 2 to 5 do
     for stages = 1 to 5 do
       let result =
-        match Test_adder_subtractor_pipe.test ~op:`Add ~bits:32 ~stages:8 ~num_inputs:3 with
+        match Test_adder_subtractor_pipe.test ~op:`Sub ~bits:32 ~stages:8 ~num_inputs:3 with
         | Ok () -> "OKAY!"
         | Error _ -> "FAILED!"
       in
