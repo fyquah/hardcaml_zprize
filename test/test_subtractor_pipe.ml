@@ -3,6 +3,11 @@ open Hardcaml_verify
 open Comb_gates
 open Snarks_r_fun
 
+(* Unfortunately, writing proofs for including the borrow would increase the
+ * runtime of this proof substantially. But fortunately, the existing
+ * computation already make use of the borrows in intermediate stages quite
+ * extensively, so this is a sufficient coverage test.
+ *)
 let test ~bits ~stages ~num_inputs =
   let eqn =
     let inputs = 
