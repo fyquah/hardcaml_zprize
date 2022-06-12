@@ -94,7 +94,7 @@ let%expect_test _ =
     { Montgomery_mult.Config.
       multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
     ; adder_depth = 1
-    ; subtracter_depth = 1
+    ; subtractor_depth = 1
     }
   in
   let test_cases =

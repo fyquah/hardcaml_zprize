@@ -22,7 +22,7 @@ module Stage1 = struct
   let create ~scope ~multiplier_config ~clock ~enable { Stage0. x; y; valid } =
     let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     { xy =
-      Karatsuba_ofman_mult.create
+      Karatsuba_ofman_mult.hierarchical
         ~scope
         ~clock
         ~enable
@@ -160,13 +160,13 @@ module Config = struct
   type t =
     { multiplier_config : Karatsuba_ofman_mult.Config.t
     ; adder_depth : int
-    ; subtracter_depth : int
+    ; subtractor_depth : int
     }
 
-  let latency ({ multiplier_config; adder_depth; subtracter_depth } : t) =
+  let latency ({ multiplier_config; adder_depth; subtractor_depth } : t) =
     3 * (Karatsuba_ofman_mult.Config.latency multiplier_config)
     + adder_depth
-    + subtracter_depth
+    + subtractor_depth
   ;;
 end
 
@@ -220,7 +220,7 @@ let create
   |> Stage4.create ~scope ~depth:config.adder_depth ~logr ~clock ~enable
   |> Stage4.map2 Stage4.port_names ~f:(fun port_name x ->
       x -- ("stage4$" ^ port_name))
-  |> Stage5.create ~scope ~depth:config.subtracter_depth ~p ~clock ~enable
+  |> Stage5.create ~scope ~depth:config.subtractor_depth ~p ~clock ~enable
   |> Stage5.map2 Stage5.port_names ~f:(fun port_name x ->
       x -- ("stage5$" ^ port_name))
 ;;

@@ -8,7 +8,7 @@ module Config : sig
   type t =
     { multiplier_config : Karatsuba_ofman_mult.Config.t
     ; adder_depth : int
-    ; subtracter_depth : int
+    ; subtractor_depth : int
     }
 
   val latency : t -> int
