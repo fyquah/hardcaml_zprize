@@ -128,7 +128,11 @@ module Stage5 = struct
 
   let create ~scope ~depth ~p ~clock ~enable { Stage4. t; valid } =
     let width = width t in
-    let latency = Modulo_subtractor_pipe.latency ~stages:depth in
+    (* At this point, [0 <= t < 2p]. This step puts [result] backs into
+     * the modulo range by computing [mux2 (t <: p) t (t -: p)]. The following
+     * circuits implements this in a pipelined fashion.
+    *)
+    let latency = depth in
     let pipe = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency in
     let { Adder_subtractor_pipe. result = subtractor_result; carries = borrow } =
       Adder_subtractor_pipe.hierarchical
