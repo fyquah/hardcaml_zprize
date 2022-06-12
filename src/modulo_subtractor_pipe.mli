@@ -14,7 +14,6 @@ val create
   -> Signal.t
 
 module With_interface(M : sig val bits : int end) : sig
-
   val bits : int
 
   module I : sig
