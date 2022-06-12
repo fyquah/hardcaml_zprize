@@ -10,12 +10,17 @@ module Make_comb_implementation(Comb : Comb.S) = struct
     }
 
   type stage_output =
-    { carry : Comb.t option
+    { carries : Comb.t list option
     ; accumulated_result : Comb.t
     }
 
-  let map_stage_output ~f { carry; accumulated_result } =
-    { carry = Option.map ~f carry
+  type carry_and_partial_sum =
+    { carries : Comb.t list
+    ; partial_sum : Comb.t
+    }
+
+  let map_stage_output ~f { carries; accumulated_result } =
+    { carries = Option.map ~f:(List.map ~f) carries
     ; accumulated_result = f accumulated_result
     }
   ;;
@@ -27,33 +32,56 @@ module Make_comb_implementation(Comb : Comb.S) = struct
     w
   ;;
 
-  let create_stage { carry; accumulated_result } ({ input_parts } : stage_input) =
+  (* The desired arthiecture we want to generate in every stage is
+   *
+   * -> LUT -> CARRY8 -> LUT -> CARRY8
+   *             ^                ^
+   * -> LUT -> CARRY8 -> LUT -> CARRY8
+   *             ^                ^
+   * -> LUT -> CARRY8 -> LUT -> CARRY8
+   *             ^                ^
+   * -> LUT -> CARRY8 -> LUT -> CARRY8
+   *
+   * This uses the least resources (ignoring FFs..) with a modest critical path
+   * of N - 1 LUTs and the carry chain for summing up N number.
+  *)
+  let rec create_stage_impl ~(carry_ins : Comb.t option list) ~input_parts =
+    match input_parts, carry_ins with
+    | [ partial_sum ], [] ->
+      { partial_sum; carries = [] }
+    | (a :: b :: tl_parts), (carry_in :: tl_carry_in) ->
+      let this_sum =
+        let w = width a in
+        match carry_in with
+        | None -> Uop.(a +: b)
+        | Some carry_in -> Uop.(a +: b) +: (uresize carry_in (w + 1))
+      in
+      let this_carry = msb this_sum in
+      let { partial_sum; carries = remaining_carries } =
+        create_stage_impl
+          ~input_parts:(lsbs this_sum :: tl_parts)
+          ~carry_ins:tl_carry_in
+      in
+      { partial_sum
+      ; carries = this_carry :: remaining_carries
+      }
+    | _, _ -> assert false
+  ;;
+
+  let create_stage
+      { carries = carry_ins; accumulated_result }
+      ({ input_parts } : stage_input) =
     let part_width = width (List.hd_exn input_parts) in
     List.iter input_parts ~f:(fun p ->
         assert (width p = part_width));
-    let max_adder_result =
-      let carry_in_width =
-        match carry with
-        | None -> 0
-        | Some x -> width x
-      in
-      let open Z in
-      (of_int (List.length input_parts) * ((one lsl part_width) - one))
-      +  ((one lsl carry_in_width) - one)
+    let carry_ins =
+      match carry_ins with
+      | None -> List.init ~f:(Fn.const None) (List.length input_parts - 1)
+      | Some l -> List.map l ~f:(fun x -> Some x)
     in
-    let partial_adder_width = Z.(log2up (max_adder_result + one)) in
-    let this_output =
-      List.concat [
-        (match carry with
-         | None -> []
-         | Some x -> [ x ])
-      ; input_parts
-      ]
-      |> List.map ~f:(Fn.flip uresize partial_adder_width)
-      |> List.reduce_exn ~f:( +: )
-    in
-    { carry = Some (drop_bottom this_output part_width)
-    ; accumulated_result = concat_msb_e [ sel_bottom this_output part_width; accumulated_result ]
+    let { partial_sum; carries } = create_stage_impl ~carry_ins ~input_parts in
+    { accumulated_result = concat_msb_e [ partial_sum; accumulated_result ]
+    ; carries = Some carries
     }
   ;;
 
@@ -64,9 +92,9 @@ module Make_comb_implementation(Comb : Comb.S) = struct
       List.map inputs ~f:(split_lsb ~exact:false ~part_width)
       |> List.transpose_exn
     in
-    let { accumulated_result; carry = _ } =
+    let { accumulated_result; carries = _ } =
       List.foldi input_parts
-        ~init:{ carry = None; accumulated_result = empty }
+        ~init:{ carries = None; accumulated_result = empty }
         ~f:(fun n acc input_parts ->
             map_stage_output ~f:(pipe ~n:1)
               (create_stage acc { input_parts = List.map ~f:(pipe ~n) input_parts }))
