@@ -34,13 +34,13 @@ module Make_comb_implementation(Comb : Comb.S) = struct
 
   (* The desired arthiecture we want to generate in every stage is
    *
-   * -> LUT -> CARRY8 -> LUT -> CARRY8
-   *             ^                ^
-   * -> LUT -> CARRY8 -> LUT -> CARRY8
-   *             ^                ^
-   * -> LUT -> CARRY8 -> LUT -> CARRY8
-   *             ^                ^
-   * -> LUT -> CARRY8 -> LUT -> CARRY8
+   * > LUT > CARRY8 > LUT > CARRY8
+   *           ^              ^
+   * > LUT > CARRY8 > LUT > CARRY8
+   *           ^              ^
+   * > LUT > CARRY8 > LUT > CARRY8
+   *           ^              ^
+   * > LUT > CARRY8 > LUT > CARRY8
    *
    * This uses the least resources (ignoring FFs..) with a modest critical path
    * of N - 1 LUTs and the carry chain for summing up N number.
@@ -54,7 +54,7 @@ module Make_comb_implementation(Comb : Comb.S) = struct
         let w = width a in
         match carry_in with
         | None -> Uop.(a +: b)
-        | Some carry_in -> Uop.(a +: b) +: (uresize carry_in (w + 1))
+        | Some carry_in -> Uop.(a +: b) +: uresize carry_in (w + 1)
       in
       let this_carry = msb this_sum in
       let { partial_sum; carries = remaining_carries } =
@@ -76,8 +76,11 @@ module Make_comb_implementation(Comb : Comb.S) = struct
         assert (width p = part_width));
     let carry_ins =
       match carry_ins with
-      | None -> List.init ~f:(Fn.const None) (List.length input_parts - 1)
-      | Some l -> List.map l ~f:(fun x -> Some x)
+      | None ->
+        List.init ~f:(Fn.const None) (List.length input_parts - 1)
+      | Some l ->
+        assert (List.length l = List.length input_parts - 1);
+        List.map l ~f:(fun x -> Some x)
     in
     let { partial_sum; carries } = create_stage_impl ~carry_ins ~input_parts in
     { accumulated_result = concat_msb_e [ partial_sum; accumulated_result ]
