@@ -32,19 +32,6 @@ module Adder_implementation(Comb : Comb.S) = struct
     w
   ;;
 
-  (* The desired arthiecture we want to generate in every stage is
-   *
-   * > LUT > CARRY8 > LUT > CARRY8
-   *           ^              ^
-   * > LUT > CARRY8 > LUT > CARRY8
-   *           ^              ^
-   * > LUT > CARRY8 > LUT > CARRY8
-   *           ^              ^
-   * > LUT > CARRY8 > LUT > CARRY8
-   *
-   * This uses the least resources (ignoring FFs..) with a modest critical path
-   * of N - 1 LUTs and the carry chain for summing up N number.
-  *)
   let rec create_stage_impl ~(carry_ins : Comb.t option list) ~input_parts =
     match input_parts, carry_ins with
     | [ partial_sum ], [] ->
