@@ -62,7 +62,7 @@ module Stage1 = struct
        [wa + logm - k] bits
     *)
     { q = 
-        Karatsuba_ofman_mult.create
+        Karatsuba_ofman_mult.hierarchical
           ~scope
           ~config:multiplier_config
           ~clock
@@ -91,7 +91,7 @@ module Stage2 = struct
     let spec = Reg_spec.create ~clock () in
     assert (width q >= Z.log2up p);
     { qp =
-        Karatsuba_ofman_mult.create
+        Karatsuba_ofman_mult.hierarchical
           ~config:multiplier_config
           ~scope
           ~clock

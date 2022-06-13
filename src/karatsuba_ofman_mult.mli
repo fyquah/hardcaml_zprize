@@ -24,15 +24,6 @@ module Config : sig
     -> t
 end
 
-val create
-  : ?enable: Signal.t
-  -> config: Config.t
-  -> scope: Scope.t
-  -> clock:Signal.t
-  -> Signal.t
-  -> Signal.t
-  -> Signal.t
-
 val hierarchical
   : enable: Signal.t
   -> config: Config.t

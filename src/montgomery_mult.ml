@@ -48,7 +48,7 @@ module Stage2 = struct
   let create ~scope ~multiplier_config ~(logr : int) ~p' ~clock ~enable { Stage1. xy; valid } =
     let spec = Reg_spec.create ~clock () in
     let m =
-      Karatsuba_ofman_mult.create
+      Karatsuba_ofman_mult.hierarchical
         ~scope
         ~clock
         ~enable
@@ -77,7 +77,7 @@ module Stage3 = struct
     let spec = Reg_spec.create ~clock () in
     let mp =
       let width = width m in
-      Karatsuba_ofman_mult.create
+      Karatsuba_ofman_mult.hierarchical
         ~scope
         ~clock
         ~enable
