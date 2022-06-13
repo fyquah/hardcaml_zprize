@@ -17,7 +17,7 @@ module External = struct
      * with Caml.Sys, rather than Sys_unix, for the time-being.
      *)
     let filename = List.find_exn potential_dl_filenames ~f:Caml.Sys.file_exists in
-    ignore (Dl.dlopen ~filename ~flags:[ RTLD_LAZY ] : Dl.library)
+    ignore (Dl.dlopen ~filename ~flags:[ RTLD_LAZY; RTLD_GLOBAL ] : Dl.library)
   ;;
 
   type affine = unit ptr
