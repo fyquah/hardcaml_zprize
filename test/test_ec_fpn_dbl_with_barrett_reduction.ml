@@ -19,7 +19,7 @@ let fp_multiply : Config.fn =
     assert (Signal.width a = Signal.width b);
     let mult_value =
       Karatsuba_ofman_mult.hierarchical
-        ~enable ~scope ~config:multiplier_config ~clock a b
+        ~enable ~scope ~config:multiplier_config ~clock a (`Signal b)
     in
     let { With_valid. valid = _; value } =
       Barrett_reduction.hierarchical ~scope ~p ~clock ~enable

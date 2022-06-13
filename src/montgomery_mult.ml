@@ -28,7 +28,7 @@ module Stage1 = struct
         ~enable
         ~config:multiplier_config
         x
-        y
+        (`Signal y)
     ; valid = Signal.pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
     }
   ;;

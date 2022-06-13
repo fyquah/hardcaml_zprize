@@ -30,7 +30,7 @@ val hierarchical
   -> scope: Scope.t
   -> clock:Signal.t
   -> Signal.t
-  -> Signal.t
+  -> [ `Constant of Z.t | `Signal of Signal.t ]
   -> Signal.t
 
 module With_interface(M : sig val bits : int end) : sig

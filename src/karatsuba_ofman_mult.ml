@@ -176,8 +176,18 @@ and create_karatsuba_ofman_stage
   let { Config. config_m0; config_m1; config_m2; post_adder_stages } = config in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
-  let reg x = reg spec ~enable x in
-  let pipeline ~n x = pipeline ~enable spec x ~n in
+  let reg x =
+    if Signal.is_const x then
+      x
+    else
+      reg spec ~enable x
+  in
+  let pipeline ~n x =
+    if Signal.is_const x then
+      x
+    else
+      pipeline ~enable spec x ~n
+  in
   let hw = (width a + 1) / 2 in
   let w = hw * 2 in
   let top_half x =
@@ -274,17 +284,71 @@ module With_interface(M : sig val bits : int end) = struct
   ;;
 end
 
+module With_interface_multiply_constant(M : sig val bits : int end) = struct
+  open M
+
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; enable : 'a
+      ; valid : 'a [@rtlname "in_valid"]
+      ; x : 'a [@bits bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { y : 'a [@bits bits * 2]
+      ; valid : 'a [@rtlname "out_valid"]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  let create ~config ~multiply_by (scope : Scope.t) { I. clock; enable; x; valid }  =
+    { O.y = create ~config ~clock ~enable ~scope x (Signal.of_z ~width:bits multiply_by)
+    ; valid =
+        pipeline ~n:(Config.latency config) (Reg_spec.create ~clock ()) ~enable valid
+    }
+  ;;
+
+  let hierarchical ~config ~multiply_by scope (input : _ I.t) : _ O.t =
+    let module H = Hierarchy.In_scope(I)(O) in
+    H.hierarchical
+      ~scope
+      ~name:(Printf.sprintf "karatsuba_ofman_mult_%d_by_constant" bits)
+      (create ~config ~multiply_by)
+      input
+  ;;
+end
+
 let hierarchical ~enable ~config ~scope ~clock a b =
   let bits = Signal.width a in
-  let module M = With_interface(struct let bits = bits end) in
-  let o =
-    M.hierarchical ~config scope
-      { clock
-      ; enable
-      ; valid = vdd
-      ; a
-      ; b
-      }
-  in
-  o.c
+  match b with
+  | `Constant multiply_by ->
+    let module M = With_interface_multiply_constant(struct let bits = bits end) in
+    let o =
+      M.hierarchical
+        ~config
+        ~multiply_by
+        scope
+        { clock
+        ; enable
+        ; valid = vdd
+        ; x = a
+        }
+    in
+    o.y
+  | `Signal b ->
+    let module M = With_interface(struct let bits = bits end) in
+    let o =
+      M.hierarchical ~config scope
+        { clock
+        ; enable
+        ; valid = vdd
+        ; a
+        ; b
+        }
+    in
+    o.c
 ;;
