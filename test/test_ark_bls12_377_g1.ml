@@ -30,16 +30,6 @@ let%expect_test "Print model coefficient and constants." =
     ((a 0x0) (b 0x1)
      (modulus
       0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001)) |}];
-  let modulus_parts =
-    Hardcaml.Bits.of_z ~width:377 modulus
-    |> Hardcaml.Bits.split_lsb ~exact:false ~part_width:24
-    |> List.map ~f:(Hardcaml.Bits.to_z ~signedness:Unsigned)
-  in
-  Stdio.print_s [%message (modulus_parts : z list)];
-  [%expect {|
-    (modulus_parts
-     (0x1 0xc00000 0x8508 0x300000 0xb5d44 0x480017 0x2fba09 0x1ef362 0xf5138f
-      0xd9f300 0x3b1a22 0x6ca149 0x3b05c0 0x10eac6 0x4617c5 0x1ae3a)) |}]
 ;;
 
 let%expect_test "Check points that should be on the curve" =
