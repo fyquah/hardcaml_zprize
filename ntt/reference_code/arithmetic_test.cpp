@@ -109,3 +109,6 @@ int arithmetic_test() {
 
 	return 0;
 }
+
+int main() { arithmetic_test(); return 0; }
+
