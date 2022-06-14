@@ -59,14 +59,12 @@ end
 module For_testing : sig
   val long_multiplication_with_addition
     : (module Comb.S with type t = 'a)
-    -> is_definitely:('a -> int -> bool)
     -> pivot: 'a
     -> 'a
     -> 'a
 
   val long_multiplication_with_subtraction
     : (module Comb.S with type t = 'a)
-    -> is_definitely:('a -> int -> bool)
     -> pivot: 'a
     -> 'a
     -> 'a

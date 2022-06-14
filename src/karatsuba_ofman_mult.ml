@@ -107,36 +107,24 @@ type m_terms =
   ; m2 : Signal.t
   }
 
-let is_definitely a x =
-  match a with
-  | Const { signal_id = _; constant } ->
-    Bits.is_vdd (Bits.( ==:. ) constant x)
-  | _ -> false
-;;
-
 let long_multiplication_with_addition
     (type a)
     (module Comb : Comb.S with type t = a)
-    ~(is_definitely : a -> int -> bool)
     ~pivot
     big =
   let open Comb in
   let output_width = width pivot + width big in
   let addition_terms =
     List.filter_mapi (bits_lsb pivot) ~f:(fun i b ->
-        (* I don't think hardcaml will optimize away mux2 if it't not
-         * necessary, hence the code segment below to optimize out mux2
-         * where it's not necessary.
-         *)
-        if is_definitely b 1 then
-          Some (concat_msb_e [ big; zero i ])
-        else if is_definitely b 0 then
+        let term =
+          mux2 b
+            (concat_msb_e [ big; zero i ])
+            (zero (i + width big))
+        in
+        if is_vdd (term ==:. 0) then (
           None
-        else
-          Some (
-            mux2 b
-              (concat_msb_e [ big; zero i ])
-              (zero (i + width big))))
+        ) else
+          Some term)
   in
   match addition_terms with
   | [] ->
@@ -150,7 +138,6 @@ let long_multiplication_with_addition
 let long_multiplication_with_subtraction
     (type a)
     (module Comb : Comb.S with type t = a)
-    ~(is_definitely : a -> int -> bool)
     ~pivot
     big =
   let open Comb in
@@ -166,16 +153,15 @@ let long_multiplication_with_subtraction
   let output_width = width pivot + width big in
   let subtraction_terms =
     List.filter_mapi (bits_lsb pivot) ~f:(fun i b ->
-        (* I don't think hardcaml will optimize away mux2 if it't not necessary *)
-        if is_definitely b 1 then
+        let term =
+          mux2 b
+            (zero (i + width big))
+            (concat_msb_e [ big; zero i ])
+        in
+        if is_vdd (term ==:. 0) then (
           None
-        else if is_definitely b 0 then
-          Some (concat_msb_e [ big; zero i ])
-        else
-          Some (
-            mux2 b
-              (zero (i + width big))
-              (concat_msb_e [ big; zero i ])))
+        ) else
+          Some term)
   in
   List.fold
     ~init:(big @: zero (width pivot))
@@ -192,7 +178,7 @@ let hybrid_dsp_and_luts_umul a b =
     let smaller = a *: b.:[16, 0] in
     let bigger =
       long_multiplication_with_addition (module Signal)
-        ~is_definitely ~pivot:(drop_bottom b 17) a
+        ~pivot:(drop_bottom b 17) a
     in
     let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
     assert (width result = width a + width b);
@@ -239,10 +225,10 @@ and create_ground_multiplier ~clock ~enable ~config a b =
        * anyway, so 6 sounds like a reasonable threshold where we get a net win
        * using a naive multiplication algo.
        *)
-      long_multiplication_with_addition (module Signal) ~is_definitely ~pivot:b a
+      long_multiplication_with_addition (module Signal) ~pivot:b a
       |> pipeline ~n:latency
     ) else if constant_b_popcount >= w - 5 then (
-      long_multiplication_with_subtraction (module Signal) ~is_definitely ~pivot:b a
+      long_multiplication_with_subtraction (module Signal) ~pivot:b a
       |> pipeline ~n:latency
     ) else (
       create_ground_multiplier_non_constant ~clock ~enable ~config a b
