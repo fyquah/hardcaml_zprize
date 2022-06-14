@@ -39,6 +39,16 @@ let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
   |> pipeline spec ~n:(latency config - Modulo_adder_pipe.latency ~stages)
 ;;
 
+let double_pipe ~scope ~latency ~(config : Config.t) ~clock ~enable a =
+  let stages = adder_stages in
+  let spec = Reg_spec.create ~clock () in
+  a
+  |> Modulo_double_pipe.hierarchical
+    ~scope ~stages ~p:config.p ~clock ~enable
+  |> pipeline spec ~enable
+    ~n:(latency config - (Modulo_double_pipe.latency ~stages))
+;;
+
 let triple_pipe ~scope ~latency ~(config : Config.t) ~clock ~enable a =
   let stages = adder_stages in
   let spec = Reg_spec.create ~clock () in
@@ -156,11 +166,11 @@ module Stage2 = struct
     let pipe = pipeline spec ~n:(latency config) ~enable in
     let fp_multiply = fp_multiply ~latency ~config ~scope ~clock ~enable in
     let triple_pipe = triple_pipe ~scope ~latency ~config ~clock ~enable in
-    let add_pipe = add_pipe ~scope ~latency ~config ~clock ~enable in
+    let double_pipe = double_pipe ~scope ~latency ~config ~clock ~enable in
     { y_pow_4 = fp_multiply "y_pow_4" y_squared y_squared
     ; m       = triple_pipe x_squared
     ; s       = fp_multiply "s" x_times_4 y_squared
-    ; z'      = add_pipe y_times_z y_times_z
+    ; z'      = double_pipe y_times_z
     ; valid   = pipe valid
     }
     |> map2 port_names ~f:(Fn.flip (Scope.naming (Scope.sub_scope scope "stage2")))
