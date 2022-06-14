@@ -2,162 +2,243 @@ open Base
 open Hardcaml
 open Reg_with_enable
 
-type ('result, 'carries) result =
-  { result : 'result
-  ; carries : 'carries
-  }
+module Single_op_output = struct
+  type 'a t =
+    { result : 'a
+    ; carry : 'a
+    }
+  [@@deriving sexp_of, hardcaml, fields]
+end
 
-module Implementation (Comb : Comb.S) = struct
-  open Comb
+module Term_and_op = struct
+  type 'a t =
+    { op : [ `Add | `Sub ]
+    ; term : 'a
+    }
+  [@@deriving fields]
 
-  type stage_input = { input_parts : Comb.t list }
+  let map ~f { op; term } = { op; term = f term }
+  let transpose { op; term } = List.map term ~f:(fun term -> { op; term })
+end
 
-  type borrow_and_partial_result =
-    { carries : t list
-    ; partial_result : t
+(* [lhs `op` rhs[0] `op` rhs[1] `op` rhs[2] ... `op` rhs[-1]
+ *
+ * where `op` can be (+) or (-)
+ *)
+module Input = struct
+  type 'a t =
+    { lhs : 'a
+    ; rhs_list : 'a Term_and_op.t list
     }
 
-  let map_stage_output ~f { carries; result } =
-    { carries = List.map ~f carries; result = f result }
+  let map ~f { lhs; rhs_list } =
+    { lhs = f lhs; rhs_list = List.map ~f:(Term_and_op.map ~f) rhs_list }
   ;;
 
-  let validate_same_width p =
-    let w = width (List.hd_exn p) in
-    List.iter p ~f:(fun x -> assert (width x = w));
+  let transpose { lhs; rhs_list } =
+    List.map2_exn
+      lhs
+      (List.transpose_exn (List.map ~f:Term_and_op.transpose rhs_list))
+      ~f:(fun lhs rhs_list -> { lhs; rhs_list })
+  ;;
+
+  let validate_same_width (type a) (module Comb : Comb.S with type t = a) (i : _ t) =
+    let open Comb in
+    let w = width i.lhs in
+    List.iter i.rhs_list ~f:(fun x -> assert (width x.term = w));
     w
   ;;
+end
 
-  let rec create_stage_impl ~op ~carry_ins ~input_parts =
-    match input_parts, carry_ins with
-    | [ partial_result ], [] -> { partial_result; carries = [] }
-    | a :: b :: tl_parts, carry_in :: tl_carry_in ->
+module Output = struct
+  type 'a t = 'a Single_op_output.t list
+
+  let map ~f stage_output : _ t =
+    List.map stage_output ~f:(fun ({ result; carry } : _ Single_op_output.t) ->
+        { Single_op_output.carry = f carry; result = f result })
+  ;;
+end
+
+module Make_stage (Comb : Comb.S) = struct
+  open Comb
+
+  module Term_and_op_and_carry = struct
+    type t =
+      { op : [ `Add | `Sub ]
+      ; term : Comb.t
+      ; carry_in : Comb.t
+      }
+  end
+
+  let rec create_stage_impl
+      prev
+      (term_and_op_and_carry_list : Term_and_op_and_carry.t list)
+    =
+    match term_and_op_and_carry_list with
+    | [] -> []
+    | { Term_and_op_and_carry.term; op; carry_in } :: tl ->
       let this_sum =
-        let w = width a in
-        op (op (uresize a (w + 1)) (uresize b (w + 1))) (uresize carry_in (w + 1))
-      in
-      let this_carry = msb this_sum in
-      let { partial_result; carries = remaining_carries } =
-        create_stage_impl
-          ~op
-          ~input_parts:(lsbs this_sum :: tl_parts)
-          ~carry_ins:tl_carry_in
-      in
-      { partial_result; carries = this_carry :: remaining_carries }
-    | _, _ -> assert false
-  ;;
-
-  let create_stage ~op { carries = carry_ins; result } ({ input_parts } : stage_input) =
-    let part_width = width (List.hd_exn input_parts) in
-    List.iter input_parts ~f:(fun p -> assert (width p = part_width));
-    assert (List.length carry_ins = List.length input_parts - 1);
-    let { partial_result; carries } =
-      create_stage_impl
-        ~op:
-          (match op with
+        let w = width prev in
+        let op =
+          match op with
           | `Add -> ( +: )
-          | `Sub -> ( -: ))
-        ~carry_ins
-        ~input_parts
-    in
-    { result = concat_msb_e [ partial_result; result ]; carries }
+          | `Sub -> ( -: )
+        in
+        op (op (uresize prev (w + 1)) (uresize term (w + 1))) (uresize carry_in (w + 1))
+      in
+      let hd = { Single_op_output.result = lsbs this_sum; carry = msb this_sum } in
+      hd :: create_stage_impl (lsbs this_sum) tl
   ;;
 
-  let create ~op ~stages ~pipe inputs =
-    let bits = validate_same_width inputs in
-    let input_parts =
-      (* [ a; b; c ] -> [ [ a1; b1; c1 ]; [ a2; b2; c2; ] [ a3; b3; c3 ] ]
-       *
-       * where a = concat_lsb [ a1; a2; a3 ]
-       *)
-      let part_width = (bits + (stages - 1)) / stages in
-      List.map inputs ~f:(split_lsb ~exact:false ~part_width) |> List.transpose_exn
+  let create (prev_stage_output : _ Output.t) ({ lhs; rhs_list } : _ Input.t) : _ Output.t
+    =
+    assert (not (List.is_empty rhs_list));
+    let part_width = width lhs in
+    List.iter rhs_list ~f:(fun p -> assert (width p.term = part_width));
+    let partial_output =
+      List.map2_exn
+        rhs_list
+        prev_stage_output
+        ~f:(fun { Term_and_op.term; op } { result = _; carry = carry_in } ->
+          { Term_and_op_and_carry.term; op; carry_in })
+      |> create_stage_impl lhs
     in
-    let num_parts = List.length (List.hd_exn input_parts) in
-    List.foldi
-      input_parts
-      ~init:{ carries = List.init (num_parts - 1) ~f:(Fn.const gnd); result = empty }
-      ~f:(fun n acc input_parts ->
-        map_stage_output
-          ~f:(pipe ~n:1)
-          (create_stage ~op acc { input_parts = List.map ~f:(pipe ~n) input_parts }))
+    List.map2_exn prev_stage_output partial_output ~f:(fun prev this ->
+        { Single_op_output.result = concat_msb_e [ this.result; prev.result ]
+        ; carry = this.carry
+        })
+  ;;
+end
+
+module Make_implementation (Comb : Comb.S) = struct
+  open Comb
+  module Stage = Make_stage (Comb)
+
+  let create ~stages ~pipe (input : _ Input.t) =
+    let bits = Input.validate_same_width (module Comb) input in
+    let num_rhs_terms = List.length input.rhs_list in
+    let part_width = (bits + (stages - 1)) / stages in
+    assert (num_rhs_terms >= 1);
+    (* [ a; b; c ] -> [ [ a1; b1; c1 ]; [ a2; b2; c2; ] [ a3; b3; c3 ] ]
+     *
+     * where a = concat_lsb [ a1; a2; a3 ]
+     *)
+    input
+    |> Input.map ~f:(split_lsb ~exact:false ~part_width)
+    |> Input.transpose
+    |> List.foldi
+         ~init:
+           (List.init num_rhs_terms ~f:(fun _ ->
+                { Single_op_output.result = empty; carry = gnd }))
+         ~f:(fun n (acc : _ Output.t) (stage_input : _ Input.t) ->
+           stage_input
+           |> Input.map ~f:(pipe ~n)
+           |> Stage.create acc
+           |> Output.map ~f:(pipe ~n:1))
   ;;
 end
 
 module With_interface (M : sig
   val bits : int
-  val num_inputs : int
+  val rhs_list_length : int
 end) =
 struct
+  module Implementation = Make_implementation (Signal)
   include M
-  include Implementation (Signal)
+
+  module Single_op_output =
+    Interface.Update
+      (Single_op_output)
+      (struct
+        let t = { Single_op_output.result = "result", bits; carry = "carry", 1 }
+      end)
 
   module I = struct
     type 'a t =
       { clock : 'a
       ; enable : 'a
-      ; data : 'a list [@bits bits] [@length num_inputs] [@rtlprefix "in_"]
-      ; valid : 'a [@rtlprefix "in_"]
+      ; lhs : 'a [@bits bits]
+      ; rhs_list : 'a list [@bits bits] [@length rhs_list_length]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
-    type 'a t =
-      { result : 'a [@bits bits] [@rtlprefix "out_"]
-      ; carries : 'a list [@bits 1] [@length num_inputs - 1]
-      ; valid : 'a [@rtlprefix "out_"]
-      }
-    [@@deriving sexp_of, hardcaml]
+    type 'a t = { results : 'a Single_op_output.t list [@length rhs_list_length] }
+    [@@deriving sexp_of, hardcaml, fields]
   end
 
-  let create ~op ~stages (_ : Scope.t) ({ I.clock; enable; data; valid } : _ I.t) =
+  let create
+      ~stages
+      ~ops
+      ~rhs_constant_overrides
+      (_ : Scope.t)
+      { I.clock; enable; lhs; rhs_list }
+    =
     let spec = Reg_spec.create ~clock () in
-    let pipe ~n x = pipeline spec ~n ~enable x in
-    let { result; carries } = create ~op ~stages ~pipe data in
-    let valid = pipe ~n:stages valid in
-    { O.result; carries; valid }
+    let results =
+      Implementation.create
+        ~stages
+        ~pipe:(fun ~n x -> if Signal.is_const x then x else pipeline ~n spec ~enable x)
+        { lhs
+        ; rhs_list =
+            List.map3_exn
+              ops
+              rhs_list
+              rhs_constant_overrides
+              ~f:(fun op term rhs_constant_override ->
+                let term =
+                  match rhs_constant_override with
+                  | None -> term
+                  | Some x -> Signal.of_constant (Bits.to_constant x)
+                in
+                { Term_and_op.op; term })
+        }
+    in
+    { O.results }
   ;;
 
-  let hierarchical ~op ~stages scope i =
+  let hierarchical ~instance ~name ~stages ~ops ~rhs_constant_overrides scope i =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical
-      ~scope
-      ~name:
-        (Printf.sprintf
-           "%s_pipe_%dbits_%dinputs"
-           (match op with
-           | `Add -> "add"
-           | `Sub -> "sub")
-           bits
-           num_inputs)
-      (create ~op ~stages)
-      i
+    H.hierarchical ?instance ~scope ~name (create ~stages ~ops ~rhs_constant_overrides) i
   ;;
 end
 
-let hierarchical ~scope ~clock ~enable ~op ~stages data =
-  let bits = Signal.width (List.hd_exn data) in
+let hierarchical
+    ?(name = "adder_subtractor_pipe")
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    (input : _ Input.t)
+  =
+  let bits = Input.validate_same_width (module Signal) input in
   let module M =
     With_interface (struct
-      let num_inputs = List.length data
       let bits = bits
+      let rhs_list_length = List.length input.rhs_list
     end)
   in
-  let { M.O.result; carries; valid = _ } =
-    M.hierarchical ~op ~stages scope { clock; enable; data; valid = Signal.vdd }
+  let ops = List.map ~f:Term_and_op.op input.rhs_list in
+  let rhs_list = List.map ~f:Term_and_op.term input.rhs_list in
+  let rhs_constant_overrides =
+    List.map rhs_list ~f:(function
+        | Const { signal_id = _; constant } -> Some constant
+        | _ -> None)
   in
-  { result; carries }
+  M.hierarchical
+    ~instance
+    ~rhs_constant_overrides
+    ~name
+    ~stages
+    ~ops
+    scope
+    { clock; enable; lhs = input.lhs; rhs_list }
+  |> M.O.results
 ;;
 
-module For_testing = struct
-  let create_combinational
-      (type a)
-      (module Comb : Comb.S with type t = a)
-      ~op
-      ~stages
-      inputs
-    =
-    let open Implementation (Comb) in
-    create ~op ~stages ~pipe:(fun ~n:_ x -> x) inputs
-  ;;
-end
+let create (type a) (module Comb : Comb.S with type t = a) ~stages ~pipe input =
+  let module Impl = Make_implementation (Comb) in
+  Impl.create ~stages ~pipe input
+;;

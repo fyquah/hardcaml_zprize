@@ -1,4 +1,13 @@
-(** Multistage pipelined ripple-carry-adder.
+(** Multistage pipelined ripple-carry-adder (or subtractor).
+ *
+ * This module computs [a `op1` b `op2` c `op3` d...], where each of the ops
+ * are either (+) or (-) (they don't have to be the same). The output of the
+ * module will contain all the results and carries of the following:
+ *
+ * - a `op1` b
+ * - a `op1` b `op2` c
+ * - a `op1` b `op2` c `op3` d
+ * - ...
  *
  * The generated architecture for a single pipeline stage for summing 3 numbers
  * looks something like the following:
@@ -18,26 +27,44 @@
 
 open Hardcaml
 
-type ('result, 'carries) result =
-  { result : 'result
-  ; carries : 'carries
-  }
-
-val hierarchical
-  :  scope:Scope.t
-  -> clock:Signal.t
-  -> enable:Signal.t
-  -> op:[ `Add | `Sub ]
-  -> stages:int
-  -> Signal.t list
-  -> (Signal.t, Signal.t list) result
-
-module For_testing : sig
-  (** A combinational implementation for writing proofs. *)
-  val create_combinational
-    :  (module Comb.S with type t = 'a)
-    -> op:[ `Add | `Sub ]
-    -> stages:int
-    -> 'a list
-    -> ('a, 'a list) result
+(** Output from performing a single [a `op1` b] step. *)
+module Single_op_output : sig
+  type 'a t =
+    { result : 'a
+    ; carry : 'a
+    }
+  [@@deriving fields]
 end
+
+module Term_and_op : sig
+  type 'a t =
+    { op : [ `Add | `Sub ]
+    ; term : 'a
+    }
+end
+
+module Input : sig
+  type 'a t =
+    { lhs : 'a
+    ; rhs_list : 'a Term_and_op.t list
+    }
+end
+
+(** Instantiate a hierarchical pipelined adder/subtractor chain. *)
+val hierarchical
+  :  ?name:string
+  -> ?instance:string
+  -> stages:int
+  -> scope:Scope.t
+  -> enable:Signal.t
+  -> clock:Signal.t
+  -> Signal.t Input.t
+  -> Signal.t Single_op_output.t list
+
+(** Similar to [hierarchical], but without hierarchy. *)
+val create
+  :  (module Comb.S with type t = 'a)
+  -> stages:int
+  -> pipe:(n:int -> 'a -> 'a)
+  -> 'a Input.t
+  -> 'a Single_op_output.t list

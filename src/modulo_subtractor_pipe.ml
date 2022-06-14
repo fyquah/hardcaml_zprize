@@ -17,110 +17,29 @@
 
 open Base
 open Hardcaml
-
-module Borrow_and_result = struct
-  type 'a t =
-    { carry : 'a
-    ; borrow : 'a
-    ; result : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
-module Subtractor_state = struct
-  type 'a t =
-    { with_mod : 'a Borrow_and_result.t
-    ; no_mod : 'a Borrow_and_result.t
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
-module Subtractor_input = struct
-  type 'a t =
-    { x : 'a
-    ; y : 'a
-    ; p : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
+open Signal
+open Reg_with_enable
 
 let latency ~stages = stages
 
-let create_stage
-    (type a)
-    (module Comb : Comb.S with type t = a)
-    (state : a Subtractor_state.t)
-    (input : a Subtractor_input.t)
-  =
-  let open Comb in
-  let w = width input.x in
-  let with_mod =
-    let { Subtractor_input.x; y; p } =
-      Subtractor_input.map input ~f:(fun x -> uresize x (w + 1))
-    in
-    let lhs = uresize state.with_mod.carry (w + 1) +: x +: p in
-    let rhs = uresize state.with_mod.borrow (w + 1) +: y in
-    let partial_result = lhs -: rhs in
-    let borrow = lhs <: rhs in
-    let carry = ~:borrow &: msb partial_result in
-    let result = concat_msb_e [ lsbs partial_result; state.with_mod.result ] in
-    { Borrow_and_result.borrow; result; carry }
+let create ~clock ~enable ~stages ~(p : Z.t) (a : Signal.t) (b : Signal.t) : Signal.t =
+  let width = width a in
+  let res0, res1 =
+    let spec = Reg_spec.create ~clock () in
+    let pipe ~n x = if Signal.is_const x then x else pipeline spec ~enable ~n x in
+    match
+      Adder_subtractor_pipe.create
+        (module Signal)
+        ~stages
+        ~pipe
+        { lhs = a
+        ; rhs_list = [ { op = `Sub; term = b }; { op = `Add; term = of_z ~width p } ]
+        }
+    with
+    | [ res0; res1 ] -> res0, res1
+    | _ -> assert false
   in
-  let no_mod =
-    (* [no_mod] will never required the [carry] bit, since we are never adding
-     * anything.
-     *)
-    let x = uresize input.x (w + 1) in
-    let y = uresize input.y (w + 1) in
-    let partial_result = x -: y -: uresize state.no_mod.borrow (w + 1) in
-    { Borrow_and_result.borrow = msb partial_result
-    ; result = concat_msb_e [ lsbs partial_result; state.no_mod.result ]
-    ; carry = gnd
-    }
-  in
-  { Subtractor_state.with_mod; no_mod }
-;;
-
-let create ~clock ~enable ~stages ~(p : Z.t) (x : Signal.t) (y : Signal.t) : Signal.t =
-  let open Signal in
-  let wx = Signal.width x in
-  let wy = Signal.width y in
-  if wx <> wy
-  then
-    raise_s [%message "Width mismatch of inputs in Subtractor_pipe" (wx : int) (wy : int)];
-  assert (Z.numbits p <= Signal.width x);
-  assert (Z.(gt p (neg one)));
-  let p = Signal.of_z ~width:wx p in
-  let w = Signal.width x in
-  let stage_width = (w + (stages - 1)) / stages in
-  let spec = Reg_spec.create ~clock () in
-  let stage_inputs =
-    { Subtractor_input.x; y; p }
-    |> Subtractor_input.map ~f:(Signal.split_lsb ~exact:false ~part_width:stage_width)
-    |> Subtractor_input.to_interface_list
-    |> List.mapi ~f:(fun n { Subtractor_input.x; y; p } ->
-           let pipe = pipeline spec ~enable ~n in
-           { Subtractor_input.x = pipe x
-           ; y = pipe y
-           ; p (* [p] is a constant, so no need to pipe it. *)
-           })
-  in
-  let spec = Reg_spec.create ~clock () in
-  let final_state =
-    let init =
-      let no_borrow_and_result =
-        { Borrow_and_result.borrow = gnd; result = empty; carry = gnd }
-      in
-      { Subtractor_state.no_mod = no_borrow_and_result; with_mod = no_borrow_and_result }
-    in
-    List.fold stage_inputs ~init ~f:(fun stage_state stage_input ->
-        create_stage (module Signal) stage_state stage_input
-        |> Subtractor_state.map ~f:(reg ~enable spec))
-  in
-  let final_result =
-    mux2 final_state.no_mod.borrow final_state.with_mod.result final_state.no_mod.result
-  in
-  final_result
+  uresize (mux2 res0.carry res1.result res0.result) width
 ;;
 
 module With_interface (M : sig
