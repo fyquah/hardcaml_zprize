@@ -57,14 +57,14 @@ module With_interface(M : sig val bits : int end) : sig
 end
 
 module For_testing : sig
-  val naive_addition_multiply
+  val long_multiplication_with_addition
     : (module Comb.S with type t = 'a)
     -> is_definitely:('a -> int -> bool)
     -> pivot: 'a
     -> 'a
     -> 'a
 
-  val naive_subtraction_multiply
+  val long_multiplication_with_subtraction
     : (module Comb.S with type t = 'a)
     -> is_definitely:('a -> int -> bool)
     -> pivot: 'a

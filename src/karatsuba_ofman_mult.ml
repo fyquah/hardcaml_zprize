@@ -114,7 +114,7 @@ let is_definitely a x =
   | _ -> false
 ;;
 
-let naive_addition_multiply
+let long_multiplication_with_addition
     (type a)
     (module Comb : Comb.S with type t = a)
     ~(is_definitely : a -> int -> bool)
@@ -147,7 +147,7 @@ let naive_addition_multiply
     |> Fn.flip uresize output_width
 ;;
 
-let naive_subtraction_multiply
+let long_multiplication_with_subtraction
     (type a)
     (module Comb : Comb.S with type t = a)
     ~(is_definitely : a -> int -> bool)
@@ -174,8 +174,8 @@ let naive_subtraction_multiply
         else
           Some (
             mux2 b
-              (concat_msb_e [ big; zero i ])
-              (zero (i + width big))))
+              (zero (i + width big))
+              (concat_msb_e [ big; zero i ])))
   in
   List.fold
     ~init:(big @: zero (width pivot))
@@ -191,7 +191,7 @@ let hybrid_dsp_and_luts_umul a b =
   else
     let smaller = a *: b.:[16, 0] in
     let bigger =
-      naive_addition_multiply (module Signal)
+      long_multiplication_with_addition (module Signal)
         ~is_definitely ~pivot:(drop_bottom b 17) a
     in
     let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
@@ -239,10 +239,10 @@ and create_ground_multiplier ~clock ~enable ~config a b =
        * anyway, so 6 sounds like a reasonable threshold where we get a net win
        * using a naive multiplication algo.
        *)
-      naive_addition_multiply (module Signal) ~is_definitely ~pivot:b a
+      long_multiplication_with_addition (module Signal) ~is_definitely ~pivot:b a
       |> pipeline ~n:latency
     ) else if constant_b_popcount >= w - 5 then (
-      naive_subtraction_multiply (module Signal) ~is_definitely ~pivot:b a
+      long_multiplication_with_subtraction (module Signal) ~is_definitely ~pivot:b a
       |> pipeline ~n:latency
     ) else (
       create_ground_multiplier_non_constant ~clock ~enable ~config a b
@@ -450,6 +450,6 @@ let hierarchical ~enable ~config ~scope ~clock a b =
 ;;
 
 module For_testing = struct
-  let naive_addition_multiply = naive_addition_multiply
-  let naive_subtraction_multiply = naive_subtraction_multiply
+  let long_multiplication_with_addition = long_multiplication_with_addition
+  let long_multiplication_with_subtraction = long_multiplication_with_subtraction
 end
