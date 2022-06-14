@@ -13,105 +13,32 @@
 
 open Base
 open Hardcaml
-
-module Adder_state = struct
-  type 'a t =
-    { result0 : 'a
-    ; result0_carry : 'a
-    ; result1 : 'a
-    ; result1_carry : 'a
-    ; carry_neg : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
-module Adder_input = struct
-  type 'a t =
-    { a : 'a
-    ; b : 'a
-    ; p : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
-let create_adder_stage
-    (type a)
-    (module Comb : Comb.S with type t = a)
-    (state : a Adder_state.t)
-    (input : a Adder_input.t)
-  =
-  let open Comb in
-  assert (width input.a = width input.b);
-  assert (width input.p = width input.b);
-  let w = width input.a in
-  let add_res0 =
-    uresize input.a (w + 1)
-    +: uresize input.b (w + 1)
-    +: uresize state.result0_carry (w + 1)
-  in
-  let add_res0_ =
-    uresize input.a (w + 1)
-    +: uresize input.b (w + 1)
-    +: uresize state.result1_carry (w + 1)
-  in
-  assert (width add_res0 = w + 1);
-  let carry_neg = add_res0_ <: Uop.(input.p +: state.carry_neg) in
-  let add_res1 =
-    let p = uresize input.p (w + 1) in
-    let borrow =
-      (* Equivalent to 2^w = 1 << w *)
-      carry_neg @: zero w
-    in
-    add_res0_ -: p +: borrow -: uresize state.carry_neg (w + 1)
-  in
-  assert (width add_res1 = w + 1);
-  { Adder_state.result0 = concat_msb_e [ lsbs add_res0; state.result0 ]
-  ; result0_carry = msb add_res0
-  ; result1 = concat_msb_e [ lsbs add_res1; state.result1 ]
-  ; result1_carry = msb add_res1
-  ; carry_neg
-  }
-;;
+open Signal
+open Reg_with_enable
 
 let latency ~stages = stages
 
 let create ~clock ~enable ~stages ~(p : Z.t) (a : Signal.t) (b : Signal.t) : Signal.t =
-  let open Signal in
-  assert (Signal.width a = Signal.width b);
-  if Z.lt p Z.zero then raise_s [%message "modulus [p] cannot be negative!"];
-  assert (Z.numbits p <= Signal.width a);
-  let w = Signal.width a in
-  let adder_stage_width = (w + (stages - 1)) / stages in
-  let spec = Reg_spec.create ~clock () in
-  let adder_inputs =
-    let p = Signal.of_z ~width:w p in
-    { Adder_input.a; b; p }
-    |> Adder_input.map ~f:(Signal.split_lsb ~exact:false ~part_width:adder_stage_width)
-    |> Adder_input.to_interface_list
-    |> List.mapi ~f:(fun n { Adder_input.a; b; p } ->
-           (* Pipeline the n-th chunk by [n] cycles to align it appropriately
-            * to the right clock cycle of the adder stage.
-            *
-            * As [p] is a constant, it does not need to be piped.
-            *)
-           let pipe = pipeline spec ~enable ~n in
-           { Adder_input.a = pipe a; b = pipe b; p })
+  let width = width a in
+  let res0, res1 =
+    let spec = Reg_spec.create ~clock () in
+    let pipe ~n x = if Signal.is_const x then x else pipeline spec ~enable ~n x in
+    match
+      Adder_subtractor_pipe.create
+        (module Signal)
+        ~stages
+        ~pipe
+        { lhs = gnd @: a
+        ; rhs_list =
+            [ { op = `Add; term = gnd @: b }
+            ; { op = `Sub; term = of_z ~width:(width + 1) p }
+            ]
+        }
+    with
+    | [ res0; res1 ] -> res0, res1
+    | _ -> assert false
   in
-  let final_adder_state =
-    let init =
-      { Adder_state.result0 = empty
-      ; result0_carry = gnd
-      ; result1 = empty
-      ; result1_carry = gnd
-      ; carry_neg = gnd
-      }
-    in
-    List.fold ~init adder_inputs ~f:(fun adder_state adder_input ->
-        create_adder_stage (module Signal) adder_state adder_input
-        |> Adder_state.map ~f:(Signal.reg spec ~enable))
-  in
-  mux2 final_adder_state.carry_neg final_adder_state.result0 final_adder_state.result1
-  |> Fn.flip uresize w
+  uresize (mux2 res1.carry res0.result res1.result) width
 ;;
 
 module With_interface (M : sig
