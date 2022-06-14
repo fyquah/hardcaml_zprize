@@ -6,4 +6,4 @@ open Hardcaml
 open Signal
 
 val reg : Reg_spec.t -> enable:t -> t -> t
-val pipeline : Reg_spec.t -> enable: t -> n: int -> t -> t
+val pipeline : Reg_spec.t -> enable:t -> n:int -> t -> t

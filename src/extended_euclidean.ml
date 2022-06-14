@@ -9,7 +9,6 @@ type t =
   }
 
 let extended_euclidean ~x ~y =
-  let (gcd, coef_x, coef_y) = Z.gcdext x y in
+  let gcd, coef_x, coef_y = Z.gcdext x y in
   { gcd; coef_x; coef_y }
 ;;
-

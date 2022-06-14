@@ -70,12 +70,13 @@ module Config = struct
 
   let rec latency (t : t) =
     match t with
-    | Ground_multiplier ground_multiplier ->
-      ground_multiplier_latency ground_multiplier
+    | Ground_multiplier ground_multiplier -> ground_multiplier_latency ground_multiplier
     | Karatsubsa_ofman_stage karatsubsa_ofman_stage ->
       karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
 
-  and karatsubsa_ofman_stage_latency { post_adder_stages; config_m0; config_m1; config_m2 } = 
+  and karatsubsa_ofman_stage_latency
+      { post_adder_stages; config_m0; config_m1; config_m2 }
+    =
     pre_compare_stages
     + Int.max (Int.max (latency config_m0) (latency config_m1)) (latency config_m2)
     + post_adder_stages
@@ -91,15 +92,11 @@ module Config = struct
     | _ ->
       let child = generate ~ground_multiplier ~depth:(depth - 1) in
       Karatsubsa_ofman_stage
-        { post_adder_stages = 1
-        ; config_m0 = child
-        ; config_m1 = child
-        ; config_m2 = child
-        }
+        { post_adder_stages = 1; config_m0 = child; config_m1 = child; config_m2 = child }
   ;;
 end
 
-let (<<) a b = sll a b 
+let ( << ) a b = sll a b
 
 type m_terms =
   { m0 : Signal.t
@@ -111,24 +108,17 @@ let long_multiplication_with_addition
     (type a)
     (module Comb : Comb.S with type t = a)
     ~pivot
-    big =
+    big
+  =
   let open Comb in
   let output_width = width pivot + width big in
   let addition_terms =
     List.filter_mapi (bits_lsb pivot) ~f:(fun i b ->
-        let term =
-          mux2 b
-            (concat_msb_e [ big; zero i ])
-            (zero (i + width big))
-        in
-        if is_vdd (term ==:. 0) then (
-          None
-        ) else
-          Some term)
+        let term = mux2 b (concat_msb_e [ big; zero i ]) (zero (i + width big)) in
+        if is_vdd (term ==:. 0) then None else Some term)
   in
   match addition_terms with
-  | [] ->
-    zero output_width
+  | [] -> zero output_width
   | _ ->
     addition_terms
     |> Signal.tree ~arity:2 ~f:(reduce ~f:Uop.( +: ))
@@ -139,7 +129,8 @@ let long_multiplication_with_subtraction
     (type a)
     (module Comb : Comb.S with type t = a)
     ~pivot
-    big =
+    big
+  =
   let open Comb in
   (* The idea is to represent some multiplications as subtractions, namely:
    *
@@ -153,36 +144,28 @@ let long_multiplication_with_subtraction
   let output_width = width pivot + width big in
   let subtraction_terms =
     List.filter_mapi (bits_lsb pivot) ~f:(fun i b ->
-        let term =
-          mux2 b
-            (zero (i + width big))
-            (concat_msb_e [ big; zero i ])
-        in
-        if is_vdd (term ==:. 0) then (
-          None
-        ) else
-          Some term)
+        let term = mux2 b (zero (i + width big)) (concat_msb_e [ big; zero i ]) in
+        if is_vdd (term ==:. 0) then None else Some term)
   in
   List.fold
     ~init:(big @: zero (width pivot))
-    ~f:(fun acc x -> acc -: (uresize x output_width))
+    ~f:(fun acc x -> acc -: uresize x output_width)
     (uresize big output_width :: subtraction_terms)
 ;;
 
 let hybrid_dsp_and_luts_umul a b =
   assert (Signal.width a = Signal.width b);
   let w = Signal.width a in
-  if w <= 17 then
-    a *: b
-  else
+  if w <= 17
+  then a *: b
+  else (
     let smaller = a *: b.:[16, 0] in
     let bigger =
-      long_multiplication_with_addition (module Signal)
-        ~pivot:(drop_bottom b 17) a
+      long_multiplication_with_addition (module Signal) ~pivot:(drop_bottom b 17) a
     in
     let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
     assert (width result = width a + width b);
-    result
+    result)
 ;;
 
 let rec create_recursive
@@ -191,24 +174,24 @@ let rec create_recursive
     ~enable
     ~(config : Config.t)
     (a : Signal.t)
-    (b : Signal.t) =
-  let (--) = Scope.naming scope in
+    (b : Signal.t)
+  =
+  let ( -- ) = Scope.naming scope in
   let a = a -- "in_a" in
   let b = b -- "in_b" in
   let wa = width a in
   let wb = width b in
-  if wa <> wb then (
-    raise_s [%message
-      "Width of [a] and [b] argument of karatsuba ofman multiplier mismatch"
-        (wa : int)
-        (wb : int)
-    ]
-  );
-  match config with 
+  if wa <> wb
+  then
+    raise_s
+      [%message
+        "Width of [a] and [b] argument of karatsuba ofman multiplier mismatch"
+          (wa : int)
+          (wb : int)];
+  match config with
   | Karatsubsa_ofman_stage config ->
     create_karatsuba_ofman_stage ~scope ~clock ~enable ~config a b
-  | Ground_multiplier config ->
-    create_ground_multiplier ~clock ~enable ~config a b
+  | Ground_multiplier config -> create_ground_multiplier ~clock ~enable ~config a b
 
 and create_ground_multiplier ~clock ~enable ~config a b =
   let pipeline ~n x =
@@ -220,29 +203,26 @@ and create_ground_multiplier ~clock ~enable ~config a b =
   | Signal.Const { signal_id = _; constant = constant_b } ->
     let w = width a in
     let constant_b_popcount = Bits.to_int (Bits.popcount constant_b) in
-    if constant_b_popcount <= 6 then (
+    if constant_b_popcount <= 6
+    then
       (* The hybrid multiplier needs to perform a 24 * 6 multiply using LUTs
        * anyway, so 6 sounds like a reasonable threshold where we get a net win
        * using a naive multiplication algo.
        *)
-      long_multiplication_with_addition (module Signal) ~pivot:b a
-      |> pipeline ~n:latency
-    ) else if constant_b_popcount >= w - 5 then (
+      long_multiplication_with_addition (module Signal) ~pivot:b a |> pipeline ~n:latency
+    else if constant_b_popcount >= w - 5
+    then
       long_multiplication_with_subtraction (module Signal) ~pivot:b a
       |> pipeline ~n:latency
-    ) else (
-      create_ground_multiplier_non_constant ~clock ~enable ~config a b
-    )
-  | _ ->
-    create_ground_multiplier_non_constant ~clock ~enable ~config a b
+    else create_ground_multiplier_non_constant ~clock ~enable ~config a b
+  | _ -> create_ground_multiplier_non_constant ~clock ~enable ~config a b
 
 and create_ground_multiplier_non_constant ~clock ~enable ~config a b =
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = pipeline ~n spec ~enable x in
   match config with
-  | Config.Verilog_multiply { latency } -> 
-    pipeline ~n:latency (a *: b)
-  | Config.Hybrid_dsp_and_luts { latency } -> 
+  | Config.Verilog_multiply { latency } -> pipeline ~n:latency (a *: b)
+  | Config.Hybrid_dsp_and_luts { latency } ->
     (* TODO(fyquah): either annotate this with backwards retiming, or
      * balance the register stages better.
      *)
@@ -254,22 +234,13 @@ and create_karatsuba_ofman_stage
     ~enable
     ~config
     (a : Signal.t)
-    (b : Signal.t) =
-  let { Config. config_m0; config_m1; config_m2; post_adder_stages } = config in
+    (b : Signal.t)
+  =
+  let { Config.config_m0; config_m1; config_m2; post_adder_stages } = config in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
-  let reg x =
-    if Signal.is_const x then
-      x
-    else
-      reg spec ~enable x
-  in
-  let pipeline ~n x =
-    if Signal.is_const x then
-      x
-    else
-      pipeline ~enable spec x ~n
-  in
+  let reg x = if Signal.is_const x then x else reg spec ~enable x in
+  let pipeline ~n x = if Signal.is_const x then x else pipeline ~enable spec x ~n in
   let hw = (width a + 1) / 2 in
   let w = hw * 2 in
   let top_half x =
@@ -282,21 +253,17 @@ and create_karatsuba_ofman_stage
   let sign =
     pipeline
       ~n:(Config.karatsubsa_ofman_stage_latency config - post_adder_stages)
-      (((btm_half a -- "btm_a") <: (top_half a -- "top_a"))
-       ^: ((top_half b -- "top_b") <: (btm_half b -- "btm_b")))
+      ((btm_half a -- "btm_a" <: top_half a -- "top_a")
+      ^: (top_half b -- "top_b" <: btm_half b -- "btm_b"))
   in
   let { m0; m1; m2 } =
     let a0 =
-      mux2 (btm_half a >: top_half a)
-        (btm_half a -: top_half a)
-        (top_half a -: btm_half a)
+      mux2 (btm_half a >: top_half a) (btm_half a -: top_half a) (top_half a -: btm_half a)
       |> reg
       |> Fn.flip (Scope.naming scope) "a0"
     in
     let a1 =
-      mux2 (top_half b >: btm_half b)
-        (top_half b -: btm_half b)
-        (btm_half b -: top_half b)
+      mux2 (top_half b >: btm_half b) (top_half b -: btm_half b) (btm_half b -: top_half b)
       |> reg
       |> Fn.flip (Scope.naming scope) "a1"
     in
@@ -312,22 +279,20 @@ and create_karatsuba_ofman_stage
   let m0 = uresize m0 (w * 2) in
   let m1 = uresize m1 (w * 2) in
   let m2 = uresize m2 (w * 2) in
-  ((m0 << w)
-   +: ((m0
-        +: m2
-        +: (mux2 sign (negate m1) m1))
-       << hw)
-   +: m2)
+  (m0 << w) +: (m0 +: m2 +: mux2 sign (negate m1) m1 << hw) +: m2
   |> Fn.flip uresize (2 * wa)
   |> reg
-  |> Fn.flip (--) "out"
+  |> Fn.flip ( -- ) "out"
 ;;
 
 let create ?(enable = vdd) ~config ~scope ~clock a b : Signal.t =
   create_recursive ~config ~scope ~enable ~clock a b
 ;;
 
-module With_interface(M : sig val bits : int end) = struct
+module With_interface (M : sig
+  val bits : int
+end) =
+struct
   open M
 
   module I = struct
@@ -349,7 +314,7 @@ module With_interface(M : sig val bits : int end) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~config (scope : Scope.t) { I. clock; enable; a; b; valid }  =
+  let create ~config (scope : Scope.t) { I.clock; enable; a; b; valid } =
     { O.c = create ~config ~clock ~enable ~scope a b
     ; valid =
         pipeline ~n:(Config.latency config) (Reg_spec.create ~clock ()) ~enable valid
@@ -357,7 +322,7 @@ module With_interface(M : sig val bits : int end) = struct
   ;;
 
   let hierarchical ~config scope (input : _ I.t) : _ O.t =
-    let module H = Hierarchy.In_scope(I)(O) in
+    let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical
       ~scope
       ~name:(Printf.sprintf "karatsuba_ofman_mult_%d" bits)
@@ -366,7 +331,10 @@ module With_interface(M : sig val bits : int end) = struct
   ;;
 end
 
-module With_interface_multiply_constant(M : sig val bits : int end) = struct
+module With_interface_multiply_constant (M : sig
+  val bits : int
+end) =
+struct
   open M
 
   module I = struct
@@ -387,7 +355,7 @@ module With_interface_multiply_constant(M : sig val bits : int end) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~config ~multiply_by (scope : Scope.t) { I. clock; enable; x; valid }  =
+  let create ~config ~multiply_by (scope : Scope.t) { I.clock; enable; x; valid } =
     { O.y = create ~config ~clock ~enable ~scope x (Signal.of_z ~width:bits multiply_by)
     ; valid =
         pipeline ~n:(Config.latency config) (Reg_spec.create ~clock ()) ~enable valid
@@ -395,7 +363,7 @@ module With_interface_multiply_constant(M : sig val bits : int end) = struct
   ;;
 
   let hierarchical ~config ~multiply_by scope (input : _ I.t) : _ O.t =
-    let module H = Hierarchy.In_scope(I)(O) in
+    let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical
       ~scope
       ~name:(Printf.sprintf "karatsuba_ofman_mult_%d_by_constant" bits)
@@ -408,30 +376,22 @@ let hierarchical ~enable ~config ~scope ~clock a b =
   let bits = Signal.width a in
   match b with
   | `Constant multiply_by ->
-    let module M = With_interface_multiply_constant(struct let bits = bits end) in
+    let module M =
+      With_interface_multiply_constant (struct
+        let bits = bits
+      end)
+    in
     let o =
-      M.hierarchical
-        ~config
-        ~multiply_by
-        scope
-        { clock
-        ; enable
-        ; valid = vdd
-        ; x = a
-        }
+      M.hierarchical ~config ~multiply_by scope { clock; enable; valid = vdd; x = a }
     in
     o.y
   | `Signal b ->
-    let module M = With_interface(struct let bits = bits end) in
-    let o =
-      M.hierarchical ~config scope
-        { clock
-        ; enable
-        ; valid = vdd
-        ; a
-        ; b
-        }
+    let module M =
+      With_interface (struct
+        let bits = bits
+      end)
     in
+    let o = M.hierarchical ~config scope { clock; enable; valid = vdd; a; b } in
     o.c
 ;;
 

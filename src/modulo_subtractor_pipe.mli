@@ -2,18 +2,20 @@
 
 open Hardcaml
 
-val latency : stages: int -> int
+val latency : stages:int -> int
 
 val create
-   : clock: Signal.t
-  -> enable: Signal.t
-  -> stages: int
-  -> p: Z.t
+  :  clock:Signal.t
+  -> enable:Signal.t
+  -> stages:int
+  -> p:Z.t
   -> Signal.t
   -> Signal.t
   -> Signal.t
 
-module With_interface(M : sig val bits : int end) : sig
+module With_interface (M : sig
+  val bits : int
+end) : sig
   val bits : int
 
   module I : sig
@@ -35,5 +37,5 @@ module With_interface(M : sig val bits : int end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create : stages: int -> p: Z.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
+  val create : stages:int -> p:Z.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end

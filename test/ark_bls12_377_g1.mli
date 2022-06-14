@@ -11,7 +11,7 @@ type affine [@@deriving sexp_of, equal]
 (** Constructs an arbitrary value in the finite field. Note that an arbitrarily
  * constructed point may not lie on the curve.
  * *)
-val create : x: Z.t -> y: Z.t -> infinity: bool -> affine
+val create : x:Z.t -> y:Z.t -> infinity:bool -> affine
 
 (** Performs a point-addition between two points. This operation is
  *  commutative.
@@ -22,7 +22,7 @@ val add : affine -> affine -> affine
  *
  * Raises an exception if [by] is negative.
  *)
-val mul : affine -> by: int -> affine
+val mul : affine -> by:int -> affine
 
 (** Returns true if the point is on the eliptic bls12-377 curve. Note that for
  *  arbitrarily constructed points via [create], this might not be the case.
@@ -56,4 +56,3 @@ val modulus : unit -> Z.t
 
 (** Returns the bls12-377 subgroup generator. *)
 val subgroup_generator : unit -> affine
-
