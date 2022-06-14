@@ -11,23 +11,26 @@ open Snarks_r_fun
  *)
 let test ~op ~bits ~stages ~num_inputs =
   let eqn =
-    let inputs = 
-      List.init num_inputs ~f:(fun i -> input (sprintf "x%d" i) bits)
-    in
+    let inputs = List.init num_inputs ~f:(fun i -> input (sprintf "x%d" i) bits) in
     let optimized =
-      Adder_subtractor_pipe.For_testing.create_combinational (module Comb_gates)
-        ~op ~stages inputs
+      Adder_subtractor_pipe.For_testing.create_combinational
+        (module Comb_gates)
+        ~op
+        ~stages
+        inputs
     in
     let simple =
-      List.reduce_exn inputs
-        ~f:(match op with `Add -> ( +: ) | `Sub -> ( -: ))
+      List.reduce_exn
+        inputs
+        ~f:
+          (match op with
+          | `Add -> ( +: )
+          | `Sub -> ( -: ))
     in
     simple ==: optimized.result
   in
-  begin match Solver.solve (cnf ~:(eqn)) with
+  match Solver.solve (cnf ~:eqn) with
   | Ok Unsat -> Ok ()
   | Ok (Sat _) -> Or_error.error_s [%message "Found a counter example!"]
   | Error e -> Or_error.error_s [%message "Error running solver!" (e : Error.t)]
-  end;
 ;;
-

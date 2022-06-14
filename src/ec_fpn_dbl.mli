@@ -5,21 +5,21 @@ open Hardcaml
 module Config : sig
   type fn =
     { latency : int
-    ; impl : (scope: Scope.t
-              -> clock: Signal.t
-              -> enable: Signal.t
-              -> Signal.t
-              -> Signal.t
-              -> Signal.t)
+    ; impl :
+        scope:Scope.t
+        -> clock:Signal.t
+        -> enable:Signal.t
+        -> Signal.t
+        -> Signal.t
+        -> Signal.t
     }
 
   type t =
     { fp_multiply : fn
-    (** [fp_multiply] is the implementation of a finite-field multiplication.
+          (** [fp_multiply] is the implementation of a finite-field multiplication.
      * The output of has to be between 0 and p-1 inclusive.
      *)
-    ; p : Z.t
-    (** [p] is the modulus prime. *)
+    ; p : Z.t (** [p] is the modulus prime. *)
     }
 end
 
@@ -36,9 +36,10 @@ end
 (** Latency of the eliptic curve point doubling datapath. *)
 val latency : Config.t -> int
 
-module With_interface(M : sig val bits : int end) : sig
+module With_interface (M : sig
   val bits : int
-
+end) : sig
+  val bits : int
   val latency : Config.t -> int
 
   module I : sig
@@ -59,9 +60,5 @@ module With_interface(M : sig val bits : int end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create
-    : config: Config.t
-    -> Scope.t
-    -> Signal.t I.t
-    -> Signal.t O.t
+  val create : config:Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end

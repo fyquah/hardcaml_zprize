@@ -19,16 +19,16 @@ module Stage1 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~scope ~multiplier_config ~clock ~enable { Stage0. x; y; valid } =
+  let create ~scope ~multiplier_config ~clock ~enable { Stage0.x; y; valid } =
     let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     { xy =
-      Karatsuba_ofman_mult.hierarchical
-        ~scope
-        ~clock
-        ~enable
-        ~config:multiplier_config
-        x
-        (`Signal y)
+        Karatsuba_ofman_mult.hierarchical
+          ~scope
+          ~clock
+          ~enable
+          ~config:multiplier_config
+          x
+          (`Signal y)
     ; valid = Signal.pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
     }
   ;;
@@ -45,7 +45,15 @@ module Stage2 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~scope ~multiplier_config ~(logr : int) ~p' ~clock ~enable { Stage1. xy; valid } =
+  let create
+      ~scope
+      ~multiplier_config
+      ~(logr : int)
+      ~p'
+      ~clock
+      ~enable
+      { Stage1.xy; valid }
+    =
     let spec = Reg_spec.create ~clock () in
     let m =
       Karatsuba_ofman_mult.hierarchical
@@ -73,7 +81,7 @@ module Stage3 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~scope ~multiplier_config ~p ~clock ~enable { Stage2. m; xy; valid } =
+  let create ~scope ~multiplier_config ~p ~clock ~enable { Stage2.m; xy; valid } =
     let spec = Reg_spec.create ~clock () in
     let mp =
       Karatsuba_ofman_mult.hierarchical
@@ -99,22 +107,24 @@ module Stage4 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~scope ~depth ~logr ~clock ~enable { Stage3. mp; xy; valid } =
+  let create ~scope ~depth ~logr ~clock ~enable { Stage3.mp; xy; valid } =
     assert (Signal.width mp = Signal.width xy);
     let t =
-      let { Adder_subtractor_pipe. result; carries = _ } =
-        Adder_subtractor_pipe.hierarchical ~op:`Add ~scope ~clock ~enable
+      let { Adder_subtractor_pipe.result; carries = _ } =
+        Adder_subtractor_pipe.hierarchical
+          ~op:`Add
+          ~scope
+          ~clock
+          ~enable
           ~stages:depth
-          [ (gnd @: xy); (gnd @: mp) ]
+          [ gnd @: xy; gnd @: mp ]
       in
       result
       |> Fn.flip (Scope.naming scope) "stage4$xy_plus_mp"
       |> Fn.flip drop_bottom logr
     in
     let latency = Modulo_adder_pipe.latency ~stages:depth in
-    { t
-    ; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
-    }
+    { t; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid }
   ;;
 end
 
@@ -125,33 +135,29 @@ module Stage5 = struct
     }
   [@@deriving sexp_of, hardcaml, fields]
 
-  let create ~scope ~depth ~p ~clock ~enable { Stage4. t; valid } =
+  let create ~scope ~depth ~p ~clock ~enable { Stage4.t; valid } =
     let width = width t in
     (* At this point, [0 <= t < 2p]. This step puts [result] backs into
      * the modulo range by computing [mux2 (t <: p) t (t -: p)]. The following
      * circuits implements this in a pipelined fashion.
-    *)
+     *)
     let latency = depth in
     let pipe = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency in
-    let { Adder_subtractor_pipe. result = subtractor_result; carries = borrow } =
+    let { Adder_subtractor_pipe.result = subtractor_result; carries = borrow } =
       Adder_subtractor_pipe.hierarchical
         ~op:`Sub
         ~clock
         ~scope
         ~enable
         ~stages:depth
-        [ t
-        ; of_z ~width p
-        ]
+        [ t; of_z ~width p ]
     in
     let borrow =
       match borrow with
       | [ hd ] -> hd
       | _ -> assert false
     in
-    { result = lsbs (mux2 borrow (pipe t) subtractor_result)
-    ; valid  = pipe valid
-    }
+    { result = lsbs (mux2 borrow (pipe t) subtractor_result); valid = pipe valid }
   ;;
 end
 
@@ -163,7 +169,7 @@ module Config = struct
     }
 
   let latency ({ multiplier_config; adder_depth; subtractor_depth } : t) =
-    3 * (Karatsuba_ofman_mult.Config.latency multiplier_config)
+    (3 * Karatsuba_ofman_mult.Config.latency multiplier_config)
     + adder_depth
     + subtractor_depth
   ;;
@@ -177,7 +183,8 @@ let create
     ~(p : Z.t)
     ~valid
     (x : Signal.t)
-    (y : Signal.t) =
+    (y : Signal.t)
+  =
   assert (Signal.width x = Signal.width y);
   let logr = Signal.width x in
   let r = Z.(one lsl logr) in
@@ -194,37 +201,38 @@ let create
      * -bp = (-b+r)p mod r
      *
      *)
-    let { Extended_euclidean. coef_x = _ ; coef_y; gcd } =
+    let { Extended_euclidean.coef_x = _; coef_y; gcd } =
       Extended_euclidean.extended_euclidean ~x:r ~y:p
     in
     assert (Z.equal gcd Z.one);
     let p' = Z.neg coef_y in
-    if Z.lt p' Z.zero then
-      Z.(p' + r)
-    else
-      p'
+    if Z.lt p' Z.zero then Z.(p' + r) else p'
   in
-  let (--) = Scope.naming scope in
-  assert Z.(equal ((p * p') mod r) (r - one));
+  let ( -- ) = Scope.naming scope in
+  assert (Z.(equal (p * p' mod r) (r - one)));
   { x; y; valid }
   |> Stage1.create ~scope ~multiplier_config:config.multiplier_config ~clock ~enable
-  |> Stage1.map2 Stage1.port_names ~f:(fun port_name x ->
-      x -- ("stage1$" ^ port_name))
-  |> Stage2.create ~scope ~multiplier_config:config.multiplier_config ~logr ~p' ~clock ~enable
-  |> Stage2.map2 Stage2.port_names ~f:(fun port_name x ->
-      x -- ("stage2$" ^ port_name))
+  |> Stage1.map2 Stage1.port_names ~f:(fun port_name x -> x -- ("stage1$" ^ port_name))
+  |> Stage2.create
+       ~scope
+       ~multiplier_config:config.multiplier_config
+       ~logr
+       ~p'
+       ~clock
+       ~enable
+  |> Stage2.map2 Stage2.port_names ~f:(fun port_name x -> x -- ("stage2$" ^ port_name))
   |> Stage3.create ~scope ~multiplier_config:config.multiplier_config ~p ~clock ~enable
-  |> Stage3.map2 Stage3.port_names ~f:(fun port_name x ->
-      x -- ("stage3$" ^ port_name))
+  |> Stage3.map2 Stage3.port_names ~f:(fun port_name x -> x -- ("stage3$" ^ port_name))
   |> Stage4.create ~scope ~depth:config.adder_depth ~logr ~clock ~enable
-  |> Stage4.map2 Stage4.port_names ~f:(fun port_name x ->
-      x -- ("stage4$" ^ port_name))
+  |> Stage4.map2 Stage4.port_names ~f:(fun port_name x -> x -- ("stage4$" ^ port_name))
   |> Stage5.create ~scope ~depth:config.subtractor_depth ~p ~clock ~enable
-  |> Stage5.map2 Stage5.port_names ~f:(fun port_name x ->
-      x -- ("stage5$" ^ port_name))
+  |> Stage5.map2 Stage5.port_names ~f:(fun port_name x -> x -- ("stage5$" ^ port_name))
 ;;
 
-module With_interface(M : sig val bits : int end) = struct
+module With_interface (M : sig
+  val bits : int
+end) =
+struct
   module Config = Config
   include M
 
@@ -247,14 +255,8 @@ module With_interface(M : sig val bits : int end) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create
-      ~(config : Config.t)
-      ~p
-      scope
-      { I. clock; enable; x; y; valid } =
-    let { Stage5. result; valid } =
-      create ~valid ~scope ~config ~clock ~enable ~p x y 
-    in
-    { O. z = result ; valid }
+  let create ~(config : Config.t) ~p scope { I.clock; enable; x; y; valid } =
+    let { Stage5.result; valid } = create ~valid ~scope ~config ~clock ~enable ~p x y in
+    { O.z = result; valid }
   ;;
 end

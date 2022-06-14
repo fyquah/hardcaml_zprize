@@ -19,25 +19,25 @@
 open Hardcaml
 
 type ('result, 'carries) result =
-  { result  : 'result
+  { result : 'result
   ; carries : 'carries
   }
 
 val hierarchical
-  : scope: Scope.t
-  -> clock: Signal.t
-  -> enable: Signal.t
-  -> op: [ `Add | `Sub ]
-  -> stages: int
+  :  scope:Scope.t
+  -> clock:Signal.t
+  -> enable:Signal.t
+  -> op:[ `Add | `Sub ]
+  -> stages:int
   -> Signal.t list
   -> (Signal.t, Signal.t list) result
 
 module For_testing : sig
   (** A combinational implementation for writing proofs. *)
   val create_combinational
-    : (module Comb.S with type t = 'a)
-    -> op: [ `Add | `Sub ]
-    -> stages: int
+    :  (module Comb.S with type t = 'a)
+    -> op:[ `Add | `Sub ]
+    -> stages:int
     -> 'a list
     -> ('a, 'a list) result
 end

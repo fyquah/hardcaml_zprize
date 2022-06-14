@@ -17,23 +17,21 @@ module Config : sig
     | Hybrid_dsp_and_luts of { latency : int }
 
   val latency : t -> int
-
-  val generate
-    : ground_multiplier: ground_multiplier
-    -> depth: int
-    -> t
+  val generate : ground_multiplier:ground_multiplier -> depth:int -> t
 end
 
 val hierarchical
-  : enable: Signal.t
-  -> config: Config.t
-  -> scope: Scope.t
+  :  enable:Signal.t
+  -> config:Config.t
+  -> scope:Scope.t
   -> clock:Signal.t
   -> Signal.t
   -> [ `Constant of Z.t | `Signal of Signal.t ]
   -> Signal.t
 
-module With_interface(M : sig val bits : int end) : sig
+module With_interface (M : sig
+  val bits : int
+end) : sig
   module I : sig
     type 'a t =
       { clock : 'a
@@ -53,19 +51,19 @@ module With_interface(M : sig val bits : int end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create : config: Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
+  val create : config:Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end
 
 module For_testing : sig
   val long_multiplication_with_addition
-    : (module Comb.S with type t = 'a)
-    -> pivot: 'a
+    :  (module Comb.S with type t = 'a)
+    -> pivot:'a
     -> 'a
     -> 'a
 
   val long_multiplication_with_subtraction
-    : (module Comb.S with type t = 'a)
-    -> pivot: 'a
+    :  (module Comb.S with type t = 'a)
+    -> pivot:'a
     -> 'a
     -> 'a
 end

@@ -51,7 +51,7 @@ module Stage1 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~scope ~clock ~enable ~m ~k ~(config : Config.t) { Stage0. a; valid } =
+  let create ~scope ~clock ~enable ~m ~k ~(config : Config.t) { Stage0.a; valid } =
     let logm = Z.log2up m in
     let wa = Signal.width a in
     let multiplier_config = config.multiplier_config in
@@ -61,7 +61,7 @@ module Stage1 = struct
        [a * m] can occupy [wa + logm] bits, and shifting by [k] should only occupy
        [wa + logm - k] bits
     *)
-    { q = 
+    { q =
         Karatsuba_ofman_mult.hierarchical
           ~scope
           ~config:multiplier_config
@@ -85,7 +85,7 @@ module Stage2 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~clock ~scope ~enable ~p ~(config : Config.t) { Stage1. q; a; valid } =
+  let create ~clock ~scope ~enable ~p ~(config : Config.t) { Stage1.q; a; valid } =
     let multiplier_config = config.multiplier_config in
     let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     let spec = Reg_spec.create ~clock () in
@@ -99,12 +99,7 @@ module Stage2 = struct
           q
           (`Constant p)
         |> Fn.flip sel_bottom (width a)
-    ; a =
-        pipeline
-          ~enable
-          ~n:latency
-          spec
-          a
+    ; a = pipeline ~enable ~n:latency spec a
     ; valid = pipeline ~enable ~n:latency spec valid
     }
   ;;
@@ -116,23 +111,17 @@ module Stage3 = struct
     ; valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
-    
-  let create ~clock ~enable ~p ~(config : Config.t) { Stage2. qp; a; valid } =
+
+  let create ~clock ~enable ~p ~(config : Config.t) { Stage2.qp; a; valid } =
     let spec = Reg_spec.create ~clock () in
     let stages = config.subtracter_stages in
     let latency = Modulo_subtractor_pipe.latency ~stages in
     let a_minus_qp_width =
       (* [a - qp] possible range of values ios [0, 2p) *)
-      1 + (Z.log2up p)
+      1 + Z.log2up p
     in
     { a_minus_qp =
-        Modulo_subtractor_pipe.create
-          ~clock
-          ~enable
-          ~stages
-          ~p
-          a
-          qp
+        Modulo_subtractor_pipe.create ~clock ~enable ~stages ~p a qp
         |> Fn.flip sel_bottom a_minus_qp_width
     ; valid = pipeline ~enable ~n:latency spec valid
     }
@@ -146,7 +135,7 @@ module Stage4 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let create ~clock ~enable ~p ~(config : Config.t) { Stage3. a_minus_qp; valid } =
+  let create ~clock ~enable ~p ~(config : Config.t) { Stage3.a_minus_qp; valid } =
     let spec = Reg_spec.create ~clock () in
     let stages = config.subtracter_stages in
     let latency = Modulo_subtractor_pipe.latency ~stages in
@@ -163,15 +152,18 @@ module Stage4 = struct
   ;;
 end
 
-module With_interface(M : sig val bits : int end) = struct
+module With_interface (M : sig
+  val bits : int
+end) =
+struct
   include M
 
   module I = struct
     type 'a t =
       { clock : 'a
       ; enable : 'a
-      ; a : 'a [@bits (2 * bits)]
-      ; valid : 'a  [@rtlprefix "in_"]
+      ; a : 'a [@bits 2 * bits]
+      ; valid : 'a [@rtlprefix "in_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -184,50 +176,43 @@ module With_interface(M : sig val bits : int end) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~config ~p scope { I. clock; enable; a; valid } =
+  let create ~config ~p scope { I.clock; enable; a; valid } =
     (* TODO(fyquah): Not sure if [m] or [k] is appropriate here... i made it
        up :)
     *)
     let k = 2 * Z.log2up p in
     let m = Z.((one lsl k) / p) in
-    let { Stage4. a_mod_p; valid } =
-      let (--) = Scope.naming scope in
-      { Stage0. a; valid }
+    let { Stage4.a_mod_p; valid } =
+      let ( -- ) = Scope.naming scope in
+      { Stage0.a; valid }
       |> Stage1.create ~scope ~clock ~enable ~m ~k ~config
-      |> Stage1.map2 Stage1.port_names ~f:(fun n s ->
-          s -- ("stage1$" ^ n))
+      |> Stage1.map2 Stage1.port_names ~f:(fun n s -> s -- ("stage1$" ^ n))
       |> Stage2.create ~scope ~clock ~enable ~p ~config
-      |> Stage2.map2 Stage2.port_names ~f:(fun n s ->
-          s -- ("stage2$" ^ n))
+      |> Stage2.map2 Stage2.port_names ~f:(fun n s -> s -- ("stage2$" ^ n))
       |> Stage3.create ~clock ~enable ~p ~config
-      |> Stage3.map2 Stage3.port_names ~f:(fun n s ->
-          s -- ("stage3$" ^ n))
+      |> Stage3.map2 Stage3.port_names ~f:(fun n s -> s -- ("stage3$" ^ n))
       |> Stage4.create ~clock ~enable ~p ~config
-      |> Stage4.map2 Stage4.port_names ~f:(fun n s ->
-          s -- ("stage4$" ^ n))
+      |> Stage4.map2 Stage4.port_names ~f:(fun n s -> s -- ("stage4$" ^ n))
     in
-    { O. valid; a_mod_p = uresize a_mod_p bits }
+    { O.valid; a_mod_p = uresize a_mod_p bits }
   ;;
 
   let hierarchical ~config ~p scope i =
-    let module H = Hierarchy.In_scope(I)(O) in
+    let module H = Hierarchy.In_scope (I) (O) in
     let name = [%string "barrett_reduction_%{bits#Int}"] in
     H.hierarchical ~scope ~name (create ~config ~p) i
   ;;
 end
 
-let hierarchical ~scope ~config ~p ~clock ~enable { With_valid. valid = valid; value = a } =
+let hierarchical ~scope ~config ~p ~clock ~enable { With_valid.valid; value = a } =
   let bits = width a in
-  let module M = With_interface(struct let bits = (bits + 1) / 2 end) in
-  let { M.O. a_mod_p ; valid } =
-    M.hierarchical ~config ~p
-      scope
-      { M.I.clock
-      ; enable
-      ; a
-      ; valid
-      }
+  let module M =
+    With_interface (struct
+      let bits = (bits + 1) / 2
+    end)
   in
-  { With_valid. valid; value = a_mod_p }
-
+  let { M.O.a_mod_p; valid } =
+    M.hierarchical ~config ~p scope { M.I.clock; enable; a; valid }
+  in
+  { With_valid.valid; value = a_mod_p }
 ;;

@@ -9,7 +9,9 @@ module Config : sig
   val latency : t -> int
 end
 
-module With_interface(M : sig val bits : int end) : sig
+module With_interface (M : sig
+  val bits : int
+end) : sig
   val bits : int
 
   module I : sig
@@ -30,19 +32,14 @@ module With_interface(M : sig val bits : int end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create
-    : config: Config.t
-    -> p: Z.t
-    -> Scope.t
-    -> Signal.t I.t
-    -> Signal.t O.t
+  val create : config:Config.t -> p:Z.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end
 
 val hierarchical
-   : scope: Scope.t
-  -> config: Config.t
-  -> p: Z.t
-  -> clock: Signal.t
-  -> enable: Signal.t
+  :  scope:Scope.t
+  -> config:Config.t
+  -> p:Z.t
+  -> clock:Signal.t
+  -> enable:Signal.t
   -> Signal.t With_valid.t
   -> Signal.t With_valid.t
