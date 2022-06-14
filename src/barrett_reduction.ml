@@ -68,7 +68,7 @@ module Stage1 = struct
           ~clock
           ~enable
           a
-          (of_z ~width:(width a) m)
+          (`Constant m)
         |> Fn.flip drop_bottom k
         |> Fn.flip sel_bottom (wa + logm - k)
     ; a = pipeline ~enable ~n:latency spec a
@@ -97,7 +97,7 @@ module Stage2 = struct
           ~clock
           ~enable
           q
-          (of_z ~width:(width q) p)
+          (`Constant p)
         |> Fn.flip sel_bottom (width a)
     ; a =
         pipeline

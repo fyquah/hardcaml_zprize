@@ -30,7 +30,7 @@ val hierarchical
   -> scope: Scope.t
   -> clock:Signal.t
   -> Signal.t
-  -> Signal.t
+  -> [ `Constant of Z.t | `Signal of Signal.t ]
   -> Signal.t
 
 module With_interface(M : sig val bits : int end) : sig
@@ -54,4 +54,18 @@ module With_interface(M : sig val bits : int end) : sig
   end
 
   val create : config: Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
+end
+
+module For_testing : sig
+  val long_multiplication_with_addition
+    : (module Comb.S with type t = 'a)
+    -> pivot: 'a
+    -> 'a
+    -> 'a
+
+  val long_multiplication_with_subtraction
+    : (module Comb.S with type t = 'a)
+    -> pivot: 'a
+    -> 'a
+    -> 'a
 end

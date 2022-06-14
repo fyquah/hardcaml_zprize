@@ -29,7 +29,7 @@ let%expect_test "Print model coefficient and constants." =
   [%expect {|
     ((a 0x0) (b 0x1)
      (modulus
-      0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001)) |}]
+      0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001)) |}];
 ;;
 
 let%expect_test "Check points that should be on the curve" =

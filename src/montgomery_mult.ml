@@ -28,7 +28,7 @@ module Stage1 = struct
         ~enable
         ~config:multiplier_config
         x
-        y
+        (`Signal y)
     ; valid = Signal.pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
     }
   ;;
@@ -54,7 +54,7 @@ module Stage2 = struct
         ~enable
         ~config:multiplier_config
         (sel_bottom xy logr)
-        (of_z ~width:logr p')
+        (`Constant p')
       |> Fn.flip sel_bottom logr
     in
     let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
@@ -76,14 +76,13 @@ module Stage3 = struct
   let create ~scope ~multiplier_config ~p ~clock ~enable { Stage2. m; xy; valid } =
     let spec = Reg_spec.create ~clock () in
     let mp =
-      let width = width m in
       Karatsuba_ofman_mult.hierarchical
         ~scope
         ~clock
         ~enable
         ~config:multiplier_config
         m
-        (of_z ~width p)
+        (`Constant p)
     in
     let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
     { mp
