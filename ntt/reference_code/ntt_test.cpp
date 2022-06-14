@@ -120,3 +120,5 @@ int ntt_test() {
 
 	return 0;
 }
+
+int main() { ntt_test(); return 0; }
