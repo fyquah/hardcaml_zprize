@@ -55,3 +55,19 @@ module With_interface(M : sig val bits : int end) : sig
 
   val create : config: Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end
+
+module For_testing : sig
+  val naive_addition_multiply
+    : (module Comb.S with type t = 'a)
+    -> is_definitely:('a -> int -> bool)
+    -> pivot: 'a
+    -> 'a
+    -> 'a
+
+  val naive_subtraction_multiply
+    : (module Comb.S with type t = 'a)
+    -> is_definitely:('a -> int -> bool)
+    -> pivot: 'a
+    -> 'a
+    -> 'a
+end

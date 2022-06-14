@@ -114,11 +114,20 @@ let is_definitely a x =
   | _ -> false
 ;;
 
-let naive_addition_multiply ~pivot big =
+let naive_addition_multiply
+    (type a)
+    (module Comb : Comb.S with type t = a)
+    ~(is_definitely : a -> int -> bool)
+    ~pivot
+    big =
+  let open Comb in
   let output_width = width pivot + width big in
   let addition_terms =
     List.filter_mapi (bits_lsb pivot) ~f:(fun i b ->
-        (* I don't think hardcaml will optimize away mux2 if it't not necessary *)
+        (* I don't think hardcaml will optimize away mux2 if it't not
+         * necessary, hence the code segment below to optimize out mux2
+         * where it's not necessary.
+         *)
         if is_definitely b 1 then
           Some (concat_msb_e [ big; zero i ])
         else if is_definitely b 0 then
@@ -138,7 +147,13 @@ let naive_addition_multiply ~pivot big =
     |> Fn.flip uresize output_width
 ;;
 
-let naive_subtraction_multiply ~pivot big =
+let naive_subtraction_multiply
+    (type a)
+    (module Comb : Comb.S with type t = a)
+    ~(is_definitely : a -> int -> bool)
+    ~pivot
+    big =
+  let open Comb in
   (* The idea is to represent some multiplications as subtractions, namely:
    *
    * c = a * b
@@ -175,7 +190,10 @@ let hybrid_dsp_and_luts_umul a b =
     a *: b
   else
     let smaller = a *: b.:[16, 0] in
-    let bigger = naive_addition_multiply ~pivot:(drop_bottom b 17) a in
+    let bigger =
+      naive_addition_multiply (module Signal)
+        ~is_definitely ~pivot:(drop_bottom b 17) a
+    in
     let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
     assert (width result = width a + width b);
     result
@@ -221,10 +239,10 @@ and create_ground_multiplier ~clock ~enable ~config a b =
        * anyway, so 6 sounds like a reasonable threshold where we get a net win
        * using a naive multiplication algo.
        *)
-      naive_addition_multiply ~pivot:b a
+      naive_addition_multiply (module Signal) ~is_definitely ~pivot:b a
       |> pipeline ~n:latency
     ) else if constant_b_popcount >= w - 5 then (
-      naive_subtraction_multiply ~pivot:b a
+      naive_subtraction_multiply (module Signal) ~is_definitely ~pivot:b a
       |> pipeline ~n:latency
     ) else (
       create_ground_multiplier_non_constant ~clock ~enable ~config a b
@@ -430,3 +448,8 @@ let hierarchical ~enable ~config ~scope ~clock a b =
     in
     o.c
 ;;
+
+module For_testing = struct
+  let naive_addition_multiply = naive_addition_multiply
+  let naive_subtraction_multiply = naive_subtraction_multiply
+end
