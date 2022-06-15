@@ -1,5 +1,15 @@
 (library
-  (name snarks_r_fun_test)
-  (libraries base bignum core ctypes ctypes.foreign hardcaml hardcaml_verify snarks_r_fun unix)
-  (inline_tests)
-  (preprocess (pps ppx_jane)))
+ (name snarks_r_fun_test)
+ (libraries
+  base
+  bignum
+  core
+  ctypes
+  ctypes.foreign
+  hardcaml
+  hardcaml_verify
+  snarks_r_fun
+  unix)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

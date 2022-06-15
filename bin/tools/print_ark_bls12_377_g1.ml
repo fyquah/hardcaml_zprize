@@ -17,13 +17,18 @@ let () =
   Stdio.print_s [%message (subgroup_generator : affine)];
   let manually_constructed =
     Ark_bls12_377_g1.create
-      ~x:(Z.of_string_base 16 "8848DEFE740A67C8FC6225BF87FF5485951E2CAA9D41BB188282C8BD37CB5CD5481512FFCD394EEAB9B16EB21BE9EF")
-      ~y:(Z.of_string_base 16 "1914A69C5102EFF1F674F5D30AFEEC4BD7FB348CA3E52D96D182AD44FB82305C2FE3D3634A9591AFD82DE55559C8EA6")
+      ~x:
+        (Z.of_string_base
+           16
+           "8848DEFE740A67C8FC6225BF87FF5485951E2CAA9D41BB188282C8BD37CB5CD5481512FFCD394EEAB9B16EB21BE9EF")
+      ~y:
+        (Z.of_string_base
+           16
+           "1914A69C5102EFF1F674F5D30AFEEC4BD7FB348CA3E52D96D182AD44FB82305C2FE3D3634A9591AFD82DE55559C8EA6")
       ~infinity:false
   in
   Stdio.print_s [%message (manually_constructed : affine)];
   Stdio.printf
-    "is manually constructed and obtained from subgroup_generator \
-     equaivalent = %b\n"
+    "is manually constructed and obtained from subgroup_generator equaivalent = %b\n"
     ([%equal: affine] subgroup_generator manually_constructed)
 ;;

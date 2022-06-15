@@ -1,4 +1,5 @@
 (library
-  (name snarks_r_fun)
-  (libraries base hardcaml)
-  (preprocess (pps ppx_jane ppx_deriving_hardcaml)))
+ (name snarks_r_fun)
+ (libraries base hardcaml)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))
