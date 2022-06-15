@@ -204,15 +204,8 @@ struct
   ;;
 end
 
-let hierarchical
-    ?(name = "adder_subtractor_pipe")
-    ?instance
-    ~stages
-    ~scope
-    ~enable
-    ~clock
-    (input : _ Input.t)
-  =
+let hierarchical ?name ?instance ~stages ~scope ~enable ~clock (input : _ Input.t) =
+  assert (not (List.is_empty input.rhs_list));
   let bits = Input.validate_same_width (module Signal) input in
   let module M =
     With_interface (struct
@@ -226,6 +219,19 @@ let hierarchical
     List.map rhs_list ~f:(function
         | Const { signal_id = _; constant } -> Some constant
         | _ -> None)
+  in
+  let name =
+    match name with
+    | Some name -> name
+    | None ->
+      let all_op_matches op =
+        List.for_all input.rhs_list ~f:(fun t -> Poly.equal t.op op)
+      in
+      if all_op_matches `Add
+      then Printf.sprintf "adder_pipe_%dbits_%dstages" bits stages
+      else if all_op_matches `Sub
+      then Printf.sprintf "subtractor_pipe_%dbits_%dstages" bits stages
+      else Printf.sprintf "adder_subtractor_pipe_%dbits_%dstages" bits stages
   in
   M.hierarchical
     ~instance

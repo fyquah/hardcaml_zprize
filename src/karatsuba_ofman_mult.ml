@@ -91,8 +91,16 @@ module Config = struct
     | 0 -> Ground_multiplier ground_multiplier
     | _ ->
       let child = generate ~ground_multiplier ~depth:(depth - 1) in
+      let post_adder_stages =
+        match depth with
+        | 4 -> 3
+        | 3 -> 3
+        | 2 -> 1
+        | 1 -> 1
+        | _ -> assert false
+      in
       Karatsubsa_ofman_stage
-        { post_adder_stages = 1; config_m0 = child; config_m1 = child; config_m2 = child }
+        { post_adder_stages; config_m0 = child; config_m1 = child; config_m2 = child }
   ;;
 end
 
@@ -276,13 +284,37 @@ and create_karatsuba_ofman_stage
     let m1 = recurse config_m1 "m1" a0 a1 in
     { m0; m1; m2 }
   in
-  let m0 = uresize m0 (w * 2) in
-  let m1 = uresize m1 (w * 2) in
-  let m2 = uresize m2 (w * 2) in
-  (m0 << w) +: (m0 +: m2 +: mux2 sign (negate m1) m1 << hw) +: m2
-  |> Fn.flip uresize (2 * wa)
-  |> reg
-  |> Fn.flip ( -- ) "out"
+  assert (width m0 = w);
+  assert (width m1 = w);
+  assert (width m2 = w);
+  (* Last step is to compute
+   * [(m0 << w) + ((m0 + m2 + (sign * m1)) << hw) + m2]
+   *
+   * Notice that the bottom [hw] bits of [m2] will be the bottom [hw] bits of
+   * the output, so it doesn't need to go through the adder.
+   *)
+  let btm_half_m2_pipe = pipeline ~n:config.post_adder_stages (btm_half m2) in
+  let final_adder_raw =
+    Adder_subtractor_pipe.hierarchical
+      ~stages:config.post_adder_stages
+      ~scope
+      ~enable
+      ~clock
+      { lhs = uresize m0 (w + hw) << hw
+      ; rhs_list =
+          [ uresize m0 (w + hw)
+          ; uresize m2 (w + hw)
+          ; repeat sign (w + hw) ^: uresize m1 (w + hw)
+          ; uresize sign (w + hw)
+          ; uresize (top_half m2) (w + hw)
+          ]
+          |> List.map ~f:(fun term ->
+                 { Adder_subtractor_pipe.Term_and_op.term; op = `Add })
+      }
+    |> List.last_exn
+    |> Adder_subtractor_pipe.Single_op_output.result
+  in
+  uresize (final_adder_raw @: btm_half_m2_pipe) (2 * wa) -- "out"
 ;;
 
 let create ?(enable = vdd) ~config ~scope ~clock a b : Signal.t =
