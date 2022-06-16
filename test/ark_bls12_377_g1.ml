@@ -8,7 +8,9 @@ module External = struct
      * use .so or .dylib.. but this works well enough.
      * *)
     let%bind.List extension = [ "so"; "dylib" ] in
-    let%bind.List dir = [ "."; "../"; "../../"; "../../../" ] in
+    let%bind.List dir =
+      [ "."; "../"; "../../"; "../../../"; "../../../.."; "../../../../.." ]
+    in
     [ dir ^/ "rust/ark_bls12_377_g1/target/debug/libark_bls12_377_g1." ^ extension ]
   ;;
 
