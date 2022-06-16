@@ -176,41 +176,6 @@ let hybrid_dsp_and_luts_umul a b =
     result)
 ;;
 
-module Abs_diff = struct
-  type t =
-    { x_lt_y : Signal.t
-    ; abs_diff : Signal.t
-    }
-  [@@deriving fields]
-end
-
-let get_abs_diff ~scope ~clock ~enable x y =
-  if Signal.is_const x && Signal.is_const y
-  then { Abs_diff.x_lt_y = x <: y; abs_diff = mux2 (x <: y) (y -: x) (x -: y) }
-  else (
-    let x_minus_y =
-      Adder_subtractor_pipe.hierarchical
-        ~stages:1
-        ~scope
-        ~enable
-        ~clock
-        { lhs = x; rhs_list = [ { op = `Sub; term = y } ] }
-      |> List.last_exn
-    in
-    let y_minus_x =
-      Adder_subtractor_pipe.hierarchical
-        ~stages:1
-        ~scope
-        ~enable
-        ~clock
-        { lhs = y; rhs_list = [ { op = `Sub; term = x } ] }
-      |> List.last_exn
-    in
-    let x_lt_y = x_minus_y.carry in
-    let abs_diff = mux2 x_lt_y y_minus_x.result x_minus_y.result in
-    { Abs_diff.x_lt_y; abs_diff })
-;;
-
 let rec create_recursive
     ~scope
     ~clock
@@ -293,19 +258,23 @@ and create_karatsuba_ofman_stage
   let btm_half x = Signal.sel_bottom x hw in
   let a' = reg a in
   let b' = reg b in
-  let da = get_abs_diff ~scope ~clock ~enable (btm_half a) (top_half a) in
-  let db = get_abs_diff ~scope ~clock ~enable (top_half b) (btm_half b) in
   let sign =
     pipeline
-      ~n:
-        (Config.karatsubsa_ofman_stage_latency config
-        - post_adder_stages
-        - Config.pre_compare_stages)
-      (da.x_lt_y ^: db.x_lt_y)
+      ~n:(Config.karatsubsa_ofman_stage_latency config - post_adder_stages)
+      ((btm_half a -- "btm_a" <: top_half a -- "top_a")
+      ^: (top_half b -- "top_b" <: btm_half b -- "btm_b"))
   in
   let { m0; m1; m2 } =
-    let a0 = da |> Abs_diff.abs_diff |> Fn.flip (Scope.naming scope) "a0" in
-    let a1 = db |> Abs_diff.abs_diff |> Fn.flip (Scope.naming scope) "a1" in
+    let a0 =
+      mux2 (btm_half a >: top_half a) (btm_half a -: top_half a) (top_half a -: btm_half a)
+      |> reg
+      |> Fn.flip (Scope.naming scope) "a0"
+    in
+    let a1 =
+      mux2 (top_half b >: btm_half b) (top_half b -: btm_half b) (btm_half b -: top_half b)
+      |> reg
+      |> Fn.flip (Scope.naming scope) "a1"
+    in
     let recurse config subscope x y =
       let scope = Scope.sub_scope scope subscope in
       create_recursive ~scope ~enable ~clock ~config x y
