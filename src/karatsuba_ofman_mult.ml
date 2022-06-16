@@ -211,14 +211,14 @@ and create_ground_multiplier ~clock ~enable ~config a b =
   | Signal.Const { signal_id = _; constant = constant_b } ->
     let w = width a in
     let constant_b_popcount = Bits.to_int (Bits.popcount constant_b) in
-    if constant_b_popcount <= 6
+    if constant_b_popcount <= 2
     then
       (* The hybrid multiplier needs to perform a 24 * 6 multiply using LUTs
        * anyway, so 6 sounds like a reasonable threshold where we get a net win
        * using a naive multiplication algo.
        *)
       long_multiplication_with_addition (module Signal) ~pivot:b a |> pipeline ~n:latency
-    else if constant_b_popcount >= w - 5
+    else if constant_b_popcount >= w - 1
     then
       long_multiplication_with_subtraction (module Signal) ~pivot:b a
       |> pipeline ~n:latency
