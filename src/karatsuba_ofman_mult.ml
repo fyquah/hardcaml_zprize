@@ -50,6 +50,8 @@ open Signal
 open Reg_with_enable
 
 module Config = struct
+  type ground_multiplier = Ground_multiplier.Config.t
+
   type t =
     | Ground_multiplier of ground_multiplier
     | Karatsubsa_ofman_stage of karatsubsa_ofman_stage
@@ -60,10 +62,6 @@ module Config = struct
     ; config_m1 : t
     ; config_m2 : t
     }
-
-  and ground_multiplier =
-    | Verilog_multiply of { latency : int }
-    | Hybrid_dsp_and_luts of { latency : int }
 
   (* TODO(fyquah): Consider making this configurable. *)
   let pre_compare_stages = 1
@@ -86,21 +84,26 @@ module Config = struct
     | Hybrid_dsp_and_luts { latency } -> latency
   ;;
 
+  let post_adder_stages ~depth =
+    match depth with
+    | 4 -> 3
+    | 3 -> 3
+    | 2 -> 1
+    | 1 -> 1
+    | _ -> assert false
+  ;;
+
   let rec generate ~ground_multiplier ~depth =
     match depth with
     | 0 -> Ground_multiplier ground_multiplier
     | _ ->
       let child = generate ~ground_multiplier ~depth:(depth - 1) in
-      let post_adder_stages =
-        match depth with
-        | 4 -> 3
-        | 3 -> 3
-        | 2 -> 1
-        | 1 -> 1
-        | _ -> assert false
-      in
       Karatsubsa_ofman_stage
-        { post_adder_stages; config_m0 = child; config_m1 = child; config_m2 = child }
+        { post_adder_stages = post_adder_stages ~depth
+        ; config_m0 = child
+        ; config_m1 = child
+        ; config_m2 = child
+        }
   ;;
 end
 
@@ -229,8 +232,8 @@ and create_ground_multiplier_non_constant ~clock ~enable ~config a b =
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = pipeline ~n spec ~enable x in
   match config with
-  | Config.Verilog_multiply { latency } -> pipeline ~n:latency (a *: b)
-  | Config.Hybrid_dsp_and_luts { latency } ->
+  | Ground_multiplier.Config.Verilog_multiply { latency } -> pipeline ~n:latency (a *: b)
+  | Ground_multiplier.Config.Hybrid_dsp_and_luts { latency } ->
     (* TODO(fyquah): either annotate this with backwards retiming, or
      * balance the register stages better.
      *)

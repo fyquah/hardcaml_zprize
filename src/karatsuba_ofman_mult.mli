@@ -1,6 +1,8 @@
 open Hardcaml
 
 module Config : sig
+  type ground_multiplier = Ground_multiplier.Config.t
+
   type t =
     | Ground_multiplier of ground_multiplier
     | Karatsubsa_ofman_stage of karatsubsa_ofman_stage
@@ -12,11 +14,8 @@ module Config : sig
     ; config_m2 : t
     }
 
-  and ground_multiplier =
-    | Verilog_multiply of { latency : int }
-    | Hybrid_dsp_and_luts of { latency : int }
-
   val latency : t -> int
+  val post_adder_stages : depth:int -> int
   val generate : ground_multiplier:ground_multiplier -> depth:int -> t
 end
 
