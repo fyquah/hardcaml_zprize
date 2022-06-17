@@ -35,7 +35,7 @@ let flag_depth =
 let flag_ground_multiplier =
   let%map_open.Command latency =
     flag
-      "multiplier-latency"
+      "ground-multiplier-latency"
       (optional_with_default 1 int)
       ~doc:" Latency of ground multipliers"
   and use_vanila_multiply =
