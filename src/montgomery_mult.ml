@@ -56,16 +56,14 @@ module Stage2 = struct
     =
     let spec = Reg_spec.create ~clock () in
     let m =
-      Karatsuba_ofman_mult.hierarchical
+      Half_width_multiplier.create
         ~scope
         ~clock
         ~enable
         ~config:multiplier_config
-        (sel_bottom xy logr)
-        (`Constant p')
-      |> Fn.flip sel_bottom logr
+        (Multiply (sel_bottom xy logr, of_z ~width:logr p'))
     in
-    let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
+    let latency = Half_width_multiplier.Config.latency multiplier_config in
     { m
     ; xy = pipeline spec ~n:latency ~enable xy
     ; valid = pipeline (Reg_spec.create ~clock ()) ~enable ~n:latency valid
@@ -163,13 +161,17 @@ end
 
 module Config = struct
   type t =
-    { multiplier_config : Karatsuba_ofman_mult.Config.t
+    { m0_config : Karatsuba_ofman_mult.Config.t
+    ; m1_config : Half_width_multiplier.Config.t
+    ; m2_config : Karatsuba_ofman_mult.Config.t
     ; adder_depth : int
     ; subtractor_depth : int
     }
 
-  let latency ({ multiplier_config; adder_depth; subtractor_depth } : t) =
-    (3 * Karatsuba_ofman_mult.Config.latency multiplier_config)
+  let latency ({ m0_config; m1_config; m2_config; adder_depth; subtractor_depth } : t) =
+    Karatsuba_ofman_mult.Config.latency m0_config
+    + Half_width_multiplier.Config.latency m1_config
+    + Karatsuba_ofman_mult.Config.latency m2_config
     + adder_depth
     + subtractor_depth
   ;;
@@ -211,17 +213,11 @@ let create
   let ( -- ) = Scope.naming scope in
   assert (Z.(equal (p * p' mod r) (r - one)));
   { x; y; valid }
-  |> Stage1.create ~scope ~multiplier_config:config.multiplier_config ~clock ~enable
+  |> Stage1.create ~scope ~multiplier_config:config.m0_config ~clock ~enable
   |> Stage1.map2 Stage1.port_names ~f:(fun port_name x -> x -- ("stage1$" ^ port_name))
-  |> Stage2.create
-       ~scope
-       ~multiplier_config:config.multiplier_config
-       ~logr
-       ~p'
-       ~clock
-       ~enable
+  |> Stage2.create ~scope ~multiplier_config:config.m1_config ~logr ~p' ~clock ~enable
   |> Stage2.map2 Stage2.port_names ~f:(fun port_name x -> x -- ("stage2$" ^ port_name))
-  |> Stage3.create ~scope ~multiplier_config:config.multiplier_config ~p ~clock ~enable
+  |> Stage3.create ~scope ~multiplier_config:config.m2_config ~p ~clock ~enable
   |> Stage3.map2 Stage3.port_names ~f:(fun port_name x -> x -- ("stage3$" ^ port_name))
   |> Stage4.create ~scope ~depth:config.adder_depth ~logr ~clock ~enable
   |> Stage4.map2 Stage4.port_names ~f:(fun port_name x -> x -- ("stage4$" ^ port_name))

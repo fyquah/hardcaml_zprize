@@ -69,8 +69,12 @@ let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one)
 
 let%expect_test _ =
   let config =
-    { Montgomery_mult.Config.multiplier_config =
-        Test_karatsuba_ofman_mult.config_four_stages
+    { Montgomery_mult.Config.m0_config = Test_karatsuba_ofman_mult.config_four_stages
+    ; m1_config =
+        { Half_width_multiplier.Config.depth = 4
+        ; ground_multiplier = Verilog_multiply { latency = 1 }
+        }
+    ; m2_config = Test_karatsuba_ofman_mult.config_four_stages
     ; adder_depth = 1
     ; subtractor_depth = 1
     }
