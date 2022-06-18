@@ -7,8 +7,8 @@ all: arithmetic_test ntt_test
 clean:
 	rm -f arithmetic_test ntt_test
 
-arithmetic_test:
+arithmetic_test: arithmetic.cpp ntt.cpp arithmetic_test.cpp
 	g++ -I ${VIVADO} arithmetic.cpp ntt.cpp arithmetic_test.cpp -o arithmetic_test
 
-ntt_test:
+ntt_test: arithmetic.cpp ntt.cpp ntt_test.cpp
 	g++ -I ${VIVADO} arithmetic.cpp ntt.cpp ntt_test.cpp -o ntt_test
