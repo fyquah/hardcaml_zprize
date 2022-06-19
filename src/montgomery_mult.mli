@@ -6,7 +6,8 @@ open! Hardcaml
 
 module Config : sig
   type t =
-    { multiplier_config : Karatsuba_ofman_mult.Config.t
+    { multiplier_config :
+        [ `Squarer of Squarer.Config.t | `Multiplier of Karatsuba_ofman_mult.Config.t ]
     ; montgomery_reduction_config : Montgomery_reduction.Config.t
     }
 

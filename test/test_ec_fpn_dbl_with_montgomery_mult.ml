@@ -7,31 +7,32 @@ module Montgomery_mult = Montgomery_mult.With_interface (struct
   let bits = 377
 end)
 
-let fp_multiply : Config.fn =
-  let multiplier_config = Test_karatsuba_ofman_mult.config_four_stages in
-  let half_multiplier_config =
-    { Half_width_multiplier.Config.depth = 4
-    ; ground_multiplier = Verilog_multiply { latency = 1 }
-    }
-  in
+let create_fn what_to_create : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
   let montgomery_mult_config =
-    { Montgomery_mult.Config.multiplier_config
+    { Montgomery_mult.Config.multiplier_config =
+        (match what_to_create with
+        | `Squarer ->
+          `Squarer
+            { Squarer.Config.depth = 4
+            ; ground_multiplier = Verilog_multiply { latency = 1 }
+            }
+        | `Multiplier -> `Multiplier Test_karatsuba_ofman_mult.config_four_stages)
     ; montgomery_reduction_config =
-        { multiplier_config
-        ; half_multiplier_config
+        { multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
+        ; half_multiplier_config =
+            { depth = 4; ground_multiplier = Verilog_multiply { latency = 1 } }
         ; adder_depth = 3
         ; subtractor_depth = 3
         }
     }
   in
   let impl ~scope ~clock ~enable x y =
-    assert (Signal.width x = Signal.width y);
     let o =
       Montgomery_mult.create
         ~config:montgomery_mult_config
         ~p
         scope
-        { clock; enable; valid = Signal.vdd; x; y }
+        { clock; enable; valid = Signal.vdd; x; y = Option.value ~default:x y }
     in
     o.z
   in
@@ -39,7 +40,10 @@ let fp_multiply : Config.fn =
   { impl; latency }
 ;;
 
-let config = { Config.fp_multiply; p }
+let config =
+  { Config.fp_multiply = create_fn `Multiplier; fp_square = create_fn `Squarer; p }
+;;
+
 let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =

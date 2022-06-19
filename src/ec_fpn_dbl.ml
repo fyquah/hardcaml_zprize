@@ -18,11 +18,12 @@ let adder_stages = 3
 module Config = struct
   type fn =
     { latency : int
-    ; impl : scope:Scope.t -> clock:t -> enable:t -> t -> t -> t
+    ; impl : scope:Scope.t -> clock:t -> enable:t -> t -> t option -> t
     }
 
   type t =
     { fp_multiply : fn
+    ; fp_square : fn
     ; p : Z.t
     }
 end
@@ -61,8 +62,15 @@ let sub_pipe ~latency ~(config : Config.t) ~clock ~enable a b =
 let fp_multiply ~latency ~(config : Config.t) ~scope ~clock ~enable subscope a b =
   let spec = Reg_spec.create ~clock () in
   let scope = Scope.sub_scope scope subscope in
-  config.fp_multiply.impl ~scope ~clock ~enable a b
+  config.fp_multiply.impl ~scope ~clock ~enable a (Some b)
   |> pipeline spec ~enable ~n:(latency config - config.fp_multiply.latency)
+;;
+
+let fp_square ~latency ~(config : Config.t) ~scope ~clock ~enable subscope a =
+  let spec = Reg_spec.create ~clock () in
+  let scope = Scope.sub_scope scope subscope in
+  config.fp_square.impl ~scope ~clock ~enable a None
+  |> pipeline spec ~enable ~n:(latency config - config.fp_square.latency)
 ;;
 
 module Jacobian = struct
@@ -97,7 +105,9 @@ module Stage1 = struct
   [@@deriving sexp_of, hardcaml]
 
   let latency (config : Config.t) =
-    Int.max config.fp_multiply.latency (Modulo_fourfold_pipe.latency ~stages:adder_stages)
+    config.fp_multiply.latency
+    |> Int.max (Modulo_fourfold_pipe.latency ~stages:adder_stages)
+    |> Int.max config.fp_square.latency
   ;;
 
   let create
@@ -111,9 +121,10 @@ module Stage1 = struct
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline spec ~n:(latency config) ~enable in
     let fp_multiply = fp_multiply ~latency ~config ~scope ~clock ~enable in
+    let fp_square = fp_square ~latency ~config ~scope ~clock ~enable in
     let fourfold_pipe = fourfold_pipe ~scope ~latency ~config ~clock ~enable in
-    { y_squared = fp_multiply "y_squared" y y
-    ; x_squared = fp_multiply "x_squared" x x
+    { y_squared = fp_square "y_squared" y
+    ; x_squared = fp_square "x_squared" x
     ; y_times_z = fp_multiply "y_times_z" y z
     ; x_times_4 = fourfold_pipe x
     ; valid = pipe valid_in
@@ -147,9 +158,10 @@ module Stage2 = struct
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline spec ~n:(latency config) ~enable in
     let fp_multiply = fp_multiply ~latency ~config ~scope ~clock ~enable in
+    let fp_square = fp_square ~latency ~config ~scope ~clock ~enable in
     let triple_pipe = triple_pipe ~scope ~latency ~config ~clock ~enable in
     let double_pipe = double_pipe ~scope ~latency ~config ~clock ~enable in
-    { y_pow_4 = fp_multiply "y_pow_4" y_squared y_squared
+    { y_pow_4 = fp_square "y_pow_4" y_squared
     ; m = triple_pipe x_squared
     ; s = fp_multiply "s" x_times_4 y_squared
     ; z' = double_pipe y_times_z
@@ -180,11 +192,11 @@ module Stage3 = struct
     =
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline ~n:(latency config) ~enable spec in
-    let fp_multiply = fp_multiply ~latency ~config ~scope ~clock ~enable in
+    let fp_square = fp_square ~latency ~config ~scope ~clock ~enable in
     let double_pipe = double_pipe ~scope ~latency ~config ~clock ~enable in
     { y_pow_4_times_2 = double_pipe y_pow_4
     ; s_times_2 = double_pipe s
-    ; m_pow_2 = fp_multiply "m_pow_2" m m
+    ; m_pow_2 = fp_square "m_pow_2" m
     ; m = pipe m
     ; s = pipe s
     ; z' = pipe z'
