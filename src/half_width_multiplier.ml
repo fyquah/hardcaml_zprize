@@ -16,7 +16,8 @@ module Config = struct
     | 0 -> Ground_multiplier.Config.latency ground_multiplier
     | _ ->
       let slowest_multiplier =
-        Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth:(depth - 1)
+        List.init (depth - 1) ~f:(fun _ -> Radix.Radix_2)
+        |> Karatsuba_ofman_mult.Config.generate ~ground_multiplier
         |> Karatsuba_ofman_mult.Config.latency
       in
       slowest_multiplier + post_adder_stages ~depth
@@ -42,7 +43,7 @@ let rec create_recursive ~scope ~clock ~enable ~(config : Config.t) (input : Inp
     let child_karatsuba_config =
       Karatsuba_ofman_mult.Config.generate
         ~ground_multiplier:config.ground_multiplier
-        ~depth:(config.depth - 1)
+        (List.init (config.depth - 1) ~f:(fun _ -> Radix.Radix_2))
     in
     let child_halfwidth_config = { config with depth = config.depth - 1 } in
     let create_recursive input =

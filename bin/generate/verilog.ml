@@ -52,7 +52,11 @@ let flag_depth =
 let flag_multiplier_config =
   let%map_open.Command depth = flag_depth
   and ground_multiplier = flag_ground_multiplier in
-  let full = Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth in
+  let full =
+    Karatsuba_ofman_mult.Config.generate
+      ~ground_multiplier
+      (List.init depth ~f:(Fn.const Radix.Radix_2))
+  in
   let half = { Half_width_multiplier.Config.depth; ground_multiplier } in
   half, full
 ;;
@@ -101,11 +105,15 @@ let command_montgomery_mult =
                  then `Squarer { Squarer.Config.depth; ground_multiplier }
                  else
                    `Multiplier
-                     (Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth))
+                     (Karatsuba_ofman_mult.Config.generate
+                        ~ground_multiplier
+                        (List.init depth ~f:(Fn.const Radix.Radix_2))))
              ; montgomery_reduction_config =
                  { half_multiplier_config = { depth; ground_multiplier }
                  ; multiplier_config =
-                     Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth
+                     Karatsuba_ofman_mult.Config.generate
+                       ~ground_multiplier
+                       (List.init depth ~f:(Fn.const Radix.Radix_2))
                  ; adder_depth
                  ; subtractor_depth
                  }
@@ -145,12 +153,16 @@ let command_point_double =
                (match what with
                | `Multiplier ->
                  `Multiplier
-                   (Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth)
+                   (Karatsuba_ofman_mult.Config.generate
+                      ~ground_multiplier
+                      (List.init depth ~f:(Fn.const Radix.Radix_2)))
                | `Squarer -> `Squarer { Squarer.Config.depth; ground_multiplier })
            ; montgomery_reduction_config =
                { half_multiplier_config = { depth; ground_multiplier }
                ; multiplier_config =
-                   Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth
+                   Karatsuba_ofman_mult.Config.generate
+                     ~ground_multiplier
+                     (List.init depth ~f:(Fn.const Radix.Radix_2))
                ; adder_depth
                ; subtractor_depth
                }

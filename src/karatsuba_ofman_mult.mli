@@ -7,13 +7,12 @@ module Config : sig
 
   and karatsubsa_ofman_stage =
     { post_adder_stages : int
-    ; config_m0 : t
-    ; config_m1 : t
-    ; config_m2 : t
+    ; radix : Radix.t
+    ; child_config : t
     }
 
   val latency : t -> int
-  val generate : ground_multiplier:Ground_multiplier.Config.t -> depth:int -> t
+  val generate : ground_multiplier:Ground_multiplier.Config.t -> Radix.t list -> t
 end
 
 val hierarchical

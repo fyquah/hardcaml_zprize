@@ -26,11 +26,7 @@ let config_single_stage =
   let open Karatsuba_ofman_mult.Config in
   let config_ground_multiplier = Ground_multiplier (Verilog_multiply { latency = 1 }) in
   Karatsubsa_ofman_stage
-    { post_adder_stages = 1
-    ; config_m0 = config_ground_multiplier
-    ; config_m1 = config_ground_multiplier
-    ; config_m2 = config_ground_multiplier
-    }
+    { post_adder_stages = 1; radix = Radix_2; child_config = config_ground_multiplier }
 ;;
 
 module Mult32 = Make (struct
@@ -80,15 +76,9 @@ type test_case =
   ; b : Z.t
   }
 
-let config_four_stages =
-  Karatsuba_ofman_mult.Config.generate
-    ~depth:4
-    ~ground_multiplier:(Verilog_multiply { latency = 1 })
-;;
-
-let%expect_test "Large multiplier" =
-  let latency = Karatsuba_ofman_mult.Config.latency config_four_stages in
-  let sim = Mult377.create_sim config_four_stages in
+let test config =
+  let latency = Karatsuba_ofman_mult.Config.latency config in
+  let sim = Mult377.create_sim config in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   let internal_ports = Cyclesim.internal_ports sim in
@@ -178,6 +168,27 @@ let%expect_test "Large multiplier" =
               (expected : z)
               (obtained : z)
               (num_bits_for_expected : int)
-              (result_num_bits : int)]));
+              (result_num_bits : int)]))
+;;
+
+let config_four_stages =
+  Karatsuba_ofman_mult.Config.generate
+    ~ground_multiplier:(Verilog_multiply { latency = 1 })
+    [ Radix_2; Radix_2; Radix_2; Radix_2 ]
+;;
+
+let%expect_test "Large multiplier all radix 2" =
+  test config_four_stages;
+  [%expect {||}]
+;;
+
+let config_3_stages_with_mixed_radixes =
+  Karatsuba_ofman_mult.Config.generate
+    ~ground_multiplier:(Verilog_multiply { latency = 1 })
+    [ Radix_2; Radix_3; Radix_3 ]
+;;
+
+let%expect_test "Large multiplier with mixed radix" =
+  test config_3_stages_with_mixed_radixes;
   [%expect {||}]
 ;;

@@ -56,9 +56,8 @@ module Config = struct
 
   and karatsubsa_ofman_stage =
     { post_adder_stages : int
-    ; config_m0 : t
-    ; config_m1 : t
-    ; config_m2 : t
+    ; radix : Radix.t
+    ; child_config : t
     }
 
   (* TODO(fyquah): Consider making this configurable. *)
@@ -71,21 +70,16 @@ module Config = struct
     | Karatsubsa_ofman_stage karatsubsa_ofman_stage ->
       karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
 
-  and karatsubsa_ofman_stage_latency
-      { post_adder_stages; config_m0; config_m1; config_m2 }
-    =
-    pre_compare_stages
-    + Int.max (Int.max (latency config_m0) (latency config_m1)) (latency config_m2)
-    + post_adder_stages
+  and karatsubsa_ofman_stage_latency { post_adder_stages; child_config; radix = _ } =
+    pre_compare_stages + latency child_config + post_adder_stages
   ;;
 
-  let rec generate ~ground_multiplier ~depth =
-    match depth with
-    | 0 -> Ground_multiplier ground_multiplier
-    | _ ->
-      let child = generate ~ground_multiplier ~depth:(depth - 1) in
-      Karatsubsa_ofman_stage
-        { post_adder_stages = 1; config_m0 = child; config_m1 = child; config_m2 = child }
+  let rec generate ~ground_multiplier radixes =
+    match radixes with
+    | [] -> Ground_multiplier ground_multiplier
+    | hd :: tl ->
+      let child_config = generate ~ground_multiplier tl in
+      Karatsubsa_ofman_stage { post_adder_stages = 1; radix = hd; child_config }
   ;;
 end
 
@@ -161,6 +155,18 @@ let hybrid_dsp_and_luts_umul a b =
     result)
 ;;
 
+type abs_diff =
+  { sign : Signal.t
+  ; value : Signal.t
+  }
+
+let abs_diff_and_sign a b =
+  let sign = a <: b in
+  { sign; value = mux2 sign (b -: a) (a -: b) }
+;;
+
+let abs_diff a b = (abs_diff_and_sign a b).value
+
 let rec create_recursive
     ~scope
     ~clock
@@ -225,11 +231,23 @@ and create_karatsuba_ofman_stage
     ~scope
     ~clock
     ~enable
+    ~(config : Config.karatsubsa_ofman_stage)
+    x
+    y
+  =
+  match config.radix with
+  | Radix_2 -> create_karatsuba_ofman_stage_radix_2 ~scope ~clock ~enable ~config x y
+  | Radix_3 -> create_karatsuba_ofman_stage_radix_3 ~scope ~clock ~enable ~config x y
+
+and create_karatsuba_ofman_stage_radix_2
+    ~scope
+    ~clock
+    ~enable
     ~config
     (a : Signal.t)
     (b : Signal.t)
   =
-  let { Config.config_m0; config_m1; config_m2; post_adder_stages } = config in
+  let { Config.child_config; post_adder_stages; radix = _ } = config in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
   let reg x = if Signal.is_const x then x else reg spec ~enable x in
@@ -251,22 +269,18 @@ and create_karatsuba_ofman_stage
   in
   let { m0; m1; m2 } =
     let a0 =
-      mux2 (btm_half a >: top_half a) (btm_half a -: top_half a) (top_half a -: btm_half a)
-      |> reg
-      |> Fn.flip (Scope.naming scope) "a0"
+      abs_diff (btm_half a) (top_half a) |> reg |> Fn.flip (Scope.naming scope) "a0"
     in
     let a1 =
-      mux2 (top_half b >: btm_half b) (top_half b -: btm_half b) (btm_half b -: top_half b)
-      |> reg
-      |> Fn.flip (Scope.naming scope) "a1"
+      abs_diff (top_half b) (btm_half b) |> reg |> Fn.flip (Scope.naming scope) "a1"
     in
-    let recurse config subscope x y =
+    let recurse subscope x y =
       let scope = Scope.sub_scope scope subscope in
-      create_recursive ~scope ~enable ~clock ~config x y
+      create_recursive ~scope ~enable ~clock ~config:child_config x y
     in
-    let m0 = recurse config_m0 "m0" (top_half a') (top_half b') in
-    let m2 = recurse config_m2 "m2" (btm_half a') (btm_half b') in
-    let m1 = recurse config_m1 "m1" a0 a1 in
+    let m0 = recurse "m0" (top_half a') (top_half b') in
+    let m2 = recurse "m2" (btm_half a') (btm_half b') in
+    let m1 = recurse "m1" a0 a1 in
     { m0; m1; m2 }
   in
   let m0 = uresize m0 (w * 2) in
@@ -274,6 +288,52 @@ and create_karatsuba_ofman_stage
   let m2 = uresize m2 (w * 2) in
   (m0 << w) +: (m0 +: m2 +: mux2 sign (negate m1) m1 << hw) +: m2
   |> Fn.flip uresize (2 * wa)
+  |> reg
+  |> Fn.flip ( -- ) "out"
+
+and create_karatsuba_ofman_stage_radix_3
+    ~scope
+    ~clock
+    ~enable
+    ~config:{ Config.child_config; post_adder_stages = _; radix = _ }
+    (x : Signal.t)
+    (y : Signal.t)
+  =
+  let wx = Signal.width x in
+  let spec = Reg_spec.create ~clock () in
+  let reg x = if Signal.is_const x then x else reg spec ~enable x in
+  let pipeline ~n x = if Signal.is_const x then x else pipeline ~enable spec x ~n in
+  let part_width = (width x + 2) / 3 in
+  let split3 xs =
+    match split_msb ~exact:false ~part_width xs with
+    | [ a; b; c ] -> uresize a part_width, uresize b part_width, uresize c part_width
+    | _ -> assert false
+  in
+  let x2, x1, x0 = split3 x in
+  let y2, y1, y0 = split3 y in
+  let recurse subscope x y =
+    let scope = Scope.sub_scope scope subscope in
+    create_recursive ~scope ~enable ~clock ~config:child_config x y
+    |> Fn.flip uresize (2 * wx)
+  in
+  let recurse_abs_diff subscope (x1, x0) (y1, y0) =
+    let { sign = signx; value = dx } = abs_diff_and_sign x1 x0 in
+    let { sign = signy; value = dy } = abs_diff_and_sign y1 y0 in
+    let sign = pipeline ~n:(Config.latency child_config + 1) (signx ^: signy) in
+    let value = recurse subscope (reg dx) (reg dy) in
+    mux2 sign (negate value) value
+  in
+  let d21 = recurse_abs_diff "d21" (x2, x1) (y2, y1) in
+  let d10 = recurse_abs_diff "d10" (x1, x0) (y1, y0) in
+  let d20 = recurse_abs_diff "d20" (x2, x0) (y2, y0) in
+  let p22 = recurse "p22" (reg x2) (reg y2) in
+  let p11 = recurse "p11" (reg x1) (reg y1) in
+  let p00 = recurse "p00" (reg x0) (reg y0) in
+  sll p22 (4 * part_width)
+  +: sll (p22 +: p11 -: d21) (3 * part_width)
+  +: sll (p22 +: p11 +: p00 -: d20) (2 * part_width)
+  +: sll (p11 +: p00 -: d10) part_width
+  +: p00
   |> reg
   |> Fn.flip ( -- ) "out"
 ;;
