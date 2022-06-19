@@ -9,8 +9,17 @@ end)
 
 let fp_multiply : Config.fn =
   let multiplier_config = Test_karatsuba_ofman_mult.config_four_stages in
+  let half_multiplier_config =
+    { Half_width_multiplier.Config.depth = 4
+    ; ground_multiplier = Verilog_multiply { latency = 1 }
+    }
+  in
   let montgomery_mult_config =
-    { Montgomery_mult.Config.multiplier_config; adder_depth = 3; subtractor_depth = 3 }
+    { Montgomery_mult.Config.multiplier_config
+    ; half_multiplier_config
+    ; adder_depth = 3
+    ; subtractor_depth = 3
+    }
   in
   let impl ~scope ~clock ~enable x y =
     assert (Signal.width x = Signal.width y);
@@ -32,7 +41,7 @@ let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =
   Stdio.printf "latency = %d\n" latency;
-  [%expect {| latency = 141 |}]
+  [%expect {| latency = 137 |}]
 ;;
 
 let%expect_test "Test on some test cases" =

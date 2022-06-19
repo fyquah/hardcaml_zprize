@@ -41,18 +41,29 @@ let flag_multiplier_config =
       no_arg
       ~doc:" Use vanila verilog multplication, rather than optimized hybrid"
   in
-  Karatsuba_ofman_mult.Config.generate
-    ~ground_multiplier:
-      (if use_vanila_multiply
-      then Verilog_multiply { latency = multiplier_latency }
-      else Hybrid_dsp_and_luts { latency = multiplier_latency })
-    ~depth
+  let full =
+    Karatsuba_ofman_mult.Config.generate
+      ~ground_multiplier:
+        (if use_vanila_multiply
+        then Verilog_multiply { latency = multiplier_latency }
+        else Hybrid_dsp_and_luts { latency = multiplier_latency })
+      ~depth
+  in
+  let half =
+    { Half_width_multiplier.Config.depth
+    ; ground_multiplier =
+        (if use_vanila_multiply
+        then Verilog_multiply { latency = multiplier_latency }
+        else Hybrid_dsp_and_luts { latency = multiplier_latency })
+    }
+  in
+  half, full
 ;;
 
 let command_karatsuba_ofman_mult =
   Command.basic
     ~summary:"karatsuba-ofman-mult"
-    (let%map_open.Command config = flag_multiplier_config
+    (let%map_open.Command _, config = flag_multiplier_config
      and filename = flag_filename in
      fun () ->
        let module K = Karatsuba_ofman_mult377 in
@@ -66,7 +77,8 @@ let command_karatsuba_ofman_mult =
 let command_montgomery_mult =
   Command.basic
     ~summary:"montgomery-mult"
-    (let%map_open.Command multiplier_config = flag_multiplier_config
+    (let%map_open.Command half_multiplier_config, multiplier_config =
+       flag_multiplier_config
      and adder_depth =
        flag
          "adder-depth"
@@ -85,7 +97,8 @@ let command_montgomery_mult =
        let database = Scope.circuit_database scope in
        let circuit =
          M.create
-           ~config:{ multiplier_config; adder_depth; subtractor_depth }
+           ~config:
+             { half_multiplier_config; multiplier_config; adder_depth; subtractor_depth }
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
          |> C.create_exn ~name:"montgomery_mult"
@@ -96,9 +109,8 @@ let command_montgomery_mult =
 let command_point_double =
   Command.basic
     ~summary:"point double"
-    (let%map_open.Command latency =
-       flag "latency" (optional_with_default 1 int) ~doc:" Latency"
-     and multiplier_config = flag_multiplier_config
+    (let%map_open.Command half_multiplier_config, multiplier_config =
+       flag_multiplier_config
      and adder_depth =
        flag
          "adder-depth"
@@ -116,11 +128,18 @@ let command_point_double =
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
        let p = Ark_bls12_377_g1.modulus () in
+       let montgomery_mult_config =
+         { Montgomery_mult.Config.half_multiplier_config
+         ; multiplier_config
+         ; adder_depth
+         ; subtractor_depth
+         }
+       in
        let multiplier ~scope ~clock ~enable x y =
          let module M = Montgometry_mult377 in
          let o =
            M.create
-             ~config:{ multiplier_config; adder_depth; subtractor_depth }
+             ~config:montgomery_mult_config
              ~p
              scope
              { clock; enable; x; y; valid = Signal.vdd }
@@ -128,6 +147,7 @@ let command_point_double =
          o.z
        in
        let circuit =
+         let latency = Montgomery_mult.Config.latency montgomery_mult_config in
          M.create ~config:{ fp_multiply = { latency; impl = multiplier }; p } scope
          |> C.create_exn ~name:"point_double"
        in
