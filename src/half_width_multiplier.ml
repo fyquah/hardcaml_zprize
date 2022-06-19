@@ -32,6 +32,7 @@ let rec create_recursive ~scope ~clock ~enable ~(config : Config.t) (input : Inp
   | 0 ->
     let a, b =
       match input with
+      | Multiply_by_constant _ -> assert false
       | Multiply (a, b) -> a, b
       | Square a -> a, a
     in
@@ -65,6 +66,9 @@ let rec create_recursive ~scope ~clock ~enable ~(config : Config.t) (input : Inp
     in
     let w =
       match input with
+      | Multiply_by_constant _ ->
+        (* The input is sanitize to either Multiply or Square. *)
+        assert false
       | Multiply (a, b) ->
         if width a <> width b
         then
@@ -92,6 +96,7 @@ let rec create_recursive ~scope ~clock ~enable ~(config : Config.t) (input : Inp
      * only 2 mults rather than 3.
      *)
     (match input with
+    | Multiply_by_constant _ -> assert false
     | Multiply (a, b) ->
       let ua, la = top_and_btm_half a in
       let ub, lb = top_and_btm_half b in
@@ -110,10 +115,11 @@ let rec create_recursive ~scope ~clock ~enable ~(config : Config.t) (input : Inp
 
 let create = create_recursive
 
-module With_interface_multiply (M : sig
+module type Width = sig
   val bits : int
-end) =
-struct
+end
+
+module With_interface_multiply (M : Width) = struct
   include M
 
   module I = struct
@@ -142,4 +148,98 @@ struct
     assert (width z = bits);
     { O.z; out_valid }
   ;;
+
+  let hierarchical ~name ~config scope i =
+    let module H = Hierarchy.In_scope (I) (O) in
+    let { O.z; out_valid = _ } = H.hierarchical ~scope ~name (create ~config) i in
+    z
+  ;;
 end
+
+module Interface_1arg (M : Width) = struct
+  include M
+
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; enable : 'a
+      ; x : 'a [@bits bits]
+      ; in_valid : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { y : 'a [@bits bits]
+      ; out_valid : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+end
+
+module With_interface_multiply_by_constant (M : Width) = struct
+  include Interface_1arg (M)
+
+  let create ~(config : Config.t) ~multiply_by scope { I.clock; enable; x; in_valid } =
+    let spec = Reg_spec.create ~clock () in
+    let y =
+      Multiply (x, Signal.of_constant (Bits.to_constant multiply_by))
+      |> create_recursive ~scope ~clock ~enable ~config
+    in
+    let out_valid = pipeline spec ~enable ~n:(Config.latency config) in_valid in
+    assert (width y = bits);
+    { O.y; out_valid }
+  ;;
+
+  let hierarchical ~name ~config ~multiply_by scope i =
+    let module H = Hierarchy.In_scope (I) (O) in
+    let { O.y; out_valid = _ } =
+      H.hierarchical ~scope ~name (create ~multiply_by ~config) i
+    in
+    y
+  ;;
+end
+
+module With_interface_square (M : Width) = struct
+  include Interface_1arg (M)
+
+  let create ~(config : Config.t) scope { I.clock; enable; x; in_valid } =
+    let spec = Reg_spec.create ~clock () in
+    let y = create_recursive ~scope ~clock ~enable ~config (Square x) in
+    let out_valid = pipeline spec ~enable ~n:(Config.latency config) in_valid in
+    assert (width y = bits);
+    { O.y; out_valid }
+  ;;
+
+  let hierarchical ~name ~config scope i =
+    let module H = Hierarchy.In_scope (I) (O) in
+    let { O.y; out_valid = _ } = H.hierarchical ~scope ~name (create ~config) i in
+    y
+  ;;
+end
+
+let hierarchical ?name ~config ~clock ~enable ~scope (input : Multiplier_input.t) =
+  let bits = Multiplier_input.width input in
+  let module Width = struct
+    let bits = bits
+  end
+  in
+  match input with
+  | Multiply (x, y) ->
+    let module M = With_interface_multiply (Width) in
+    let name =
+      Option.value ~default:(Printf.sprintf "half_width_multiply_%d" bits) name
+    in
+    M.hierarchical ~name ~config scope { clock; enable; x; y; in_valid = vdd }
+  | Multiply_by_constant (x, multiply_by) ->
+    let module M = With_interface_multiply_by_constant (Width) in
+    let name =
+      Option.value ~default:(Printf.sprintf "half_width_multiply_by_cst_%d" bits) name
+    in
+    M.hierarchical ~name ~config ~multiply_by scope { clock; enable; x; in_valid = vdd }
+  | Square x ->
+    let module M = With_interface_square (Width) in
+    let name = Option.value ~default:(Printf.sprintf "half_width_square_%d" bits) name in
+    M.hierarchical ~name ~config scope { clock; enable; x; in_valid = vdd }
+;;

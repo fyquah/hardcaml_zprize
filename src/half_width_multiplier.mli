@@ -13,11 +13,21 @@ end
 
 module Input : sig
   type t =
+    | Multiply_by_constant of (Signal.t * Bits.t)
     | Multiply of (Signal.t * Signal.t)
     | Square of Signal.t
 end
 
 val create : scope:Scope.t -> clock:t -> enable:t -> config:Config.t -> Input.t -> t
+
+val hierarchical
+  :  ?name:string
+  -> config:Config.t
+  -> clock:Signal.t
+  -> enable:Signal.t
+  -> scope:Scope.t
+  -> Multiplier_input.t
+  -> Signal.t
 
 module With_interface_multiply (M : sig
   val bits : int
