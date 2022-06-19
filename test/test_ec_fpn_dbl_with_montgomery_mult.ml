@@ -13,7 +13,7 @@ let create_fn what_to_create : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
         (match what_to_create with
         | `Squarer ->
           `Squarer
-            { Squarer.Config.depth = 4
+            { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
             ; ground_multiplier = Verilog_multiply { latency = 1 }
             }
         | `Multiplier -> `Multiplier Test_karatsuba_ofman_mult.config_four_stages)

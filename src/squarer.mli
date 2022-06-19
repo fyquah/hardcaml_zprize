@@ -3,7 +3,7 @@ open Hardcaml
 
 module Config : sig
   type t =
-    { depth : int
+    { level_radices : Radix.t list
     ; ground_multiplier : Ground_multiplier.Config.t
     }
 

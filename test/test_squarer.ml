@@ -21,10 +21,7 @@ let rand () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((of_int 2 ** 377) - one
 let bits_of_z = Bits.of_z ~width:377
 let max_value = Z.((one lsl 377) - one)
 
-let%expect_test "" =
-  let config =
-    { Config.depth = 4; ground_multiplier = Verilog_multiply { latency = 1 } }
-  in
+let test config =
   let sim = create_sim ~config in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
@@ -57,4 +54,21 @@ let%expect_test "" =
         raise_s
           [%message
             "Test case failed!" (x : Utils.z) (obtained : Utils.z) (expected : Utils.z)])
+;;
+
+let%expect_test "Squarer with single radix-3 level" =
+  test
+    { level_radices = [ Radix_2 ]; ground_multiplier = Verilog_multiply { latency = 1 } }
+;;
+
+let%expect_test "Squarer with single radix-3 level" =
+  test
+    { level_radices = [ Radix_3 ]; ground_multiplier = Verilog_multiply { latency = 1 } }
+;;
+
+let%expect_test "Squarer with single mixed radix levels" =
+  test
+    { level_radices = [ Radix_2; Radix_3; Radix_3 ]
+    ; ground_multiplier = Verilog_multiply { latency = 1 }
+    }
 ;;

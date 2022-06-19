@@ -102,7 +102,12 @@ let command_montgomery_mult =
            ~config:
              { multiplier_config =
                  (if squarer
-                 then `Squarer { Squarer.Config.depth; ground_multiplier }
+                 then
+                   `Squarer
+                     { Squarer.Config.level_radices =
+                         List.init depth ~f:(Fn.const Radix.Radix_2)
+                     ; ground_multiplier
+                     }
                  else
                    `Multiplier
                      (Karatsuba_ofman_mult.Config.generate
@@ -156,7 +161,12 @@ let command_point_double =
                    (Karatsuba_ofman_mult.Config.generate
                       ~ground_multiplier
                       (List.init depth ~f:(Fn.const Radix.Radix_2)))
-               | `Squarer -> `Squarer { Squarer.Config.depth; ground_multiplier })
+               | `Squarer ->
+                 `Squarer
+                   { Squarer.Config.level_radices =
+                       List.init depth ~f:(Fn.const Radix.Radix_2)
+                   ; ground_multiplier
+                   })
            ; montgomery_reduction_config =
                { half_multiplier_config = { depth; ground_multiplier }
                ; multiplier_config =

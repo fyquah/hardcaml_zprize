@@ -6,6 +6,7 @@ module Config = struct
   type t =
     | Verilog_multiply of { latency : int }
     | Hybrid_dsp_and_luts of { latency : int }
+  [@@deriving sexp_of]
 
   let latency = function
     | Verilog_multiply { latency } -> latency
