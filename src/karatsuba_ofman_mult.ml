@@ -51,7 +51,7 @@ open Reg_with_enable
 
 module Config = struct
   type t =
-    | Ground_multiplier of ground_multiplier
+    | Ground_multiplier of Ground_multiplier.Config.t
     | Karatsubsa_ofman_stage of karatsubsa_ofman_stage
 
   and karatsubsa_ofman_stage =
@@ -61,16 +61,13 @@ module Config = struct
     ; config_m2 : t
     }
 
-  and ground_multiplier =
-    | Verilog_multiply of { latency : int }
-    | Hybrid_dsp_and_luts of { latency : int }
-
   (* TODO(fyquah): Consider making this configurable. *)
   let pre_compare_stages = 1
 
   let rec latency (t : t) =
     match t with
-    | Ground_multiplier ground_multiplier -> ground_multiplier_latency ground_multiplier
+    | Ground_multiplier ground_multiplier ->
+      Ground_multiplier.Config.latency ground_multiplier
     | Karatsubsa_ofman_stage karatsubsa_ofman_stage ->
       karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
 
@@ -80,10 +77,6 @@ module Config = struct
     pre_compare_stages
     + Int.max (Int.max (latency config_m0) (latency config_m1)) (latency config_m2)
     + post_adder_stages
-
-  and ground_multiplier_latency = function
-    | Verilog_multiply { latency } -> latency
-    | Hybrid_dsp_and_luts { latency } -> latency
   ;;
 
   let rec generate ~ground_multiplier ~depth =
@@ -198,7 +191,7 @@ and create_ground_multiplier ~clock ~enable ~config a b =
     let spec = Reg_spec.create ~clock () in
     pipeline ~n spec ~enable x
   in
-  let latency = Config.ground_multiplier_latency config in
+  let latency = Ground_multiplier.Config.latency config in
   match b with
   | Signal.Const { signal_id = _; constant = constant_b } ->
     let w = width a in
@@ -221,8 +214,8 @@ and create_ground_multiplier_non_constant ~clock ~enable ~config a b =
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = pipeline ~n spec ~enable x in
   match config with
-  | Config.Verilog_multiply { latency } -> pipeline ~n:latency (a *: b)
-  | Config.Hybrid_dsp_and_luts { latency } ->
+  | Ground_multiplier.Config.Verilog_multiply { latency } -> pipeline ~n:latency (a *: b)
+  | Ground_multiplier.Config.Hybrid_dsp_and_luts { latency } ->
     (* TODO(fyquah): either annotate this with backwards retiming, or
      * balance the register stages better.
      *)
