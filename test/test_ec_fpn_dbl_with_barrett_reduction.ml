@@ -3,17 +3,18 @@ open Hardcaml
 open Snarks_r_fun
 open Test_ec_fpn_dbl
 
-let fp_multiply : Config.fn =
-  let multiplier_config = Test_karatsuba_ofman_mult.config_four_stages in
-  let barrett_reduction_config =
-    { Barrett_reduction.Config.multiplier_config; subtracter_stages = 3 }
-  in
+let multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
+
+let barrett_reduction_config =
+  { Barrett_reduction.Config.multiplier_config; subtracter_stages = 3 }
+;;
+
+let multiply_or_squarer_fn : Config.fn =
   let latency =
     Karatsuba_ofman_mult.Config.latency barrett_reduction_config.multiplier_config
     + Barrett_reduction.Config.latency barrett_reduction_config
   in
   let impl ~scope ~clock ~enable a b =
-    assert (Signal.width a = Signal.width b);
     let mult_value =
       Karatsuba_ofman_mult.hierarchical
         ~enable
@@ -21,7 +22,7 @@ let fp_multiply : Config.fn =
         ~config:multiplier_config
         ~clock
         a
-        (`Signal b)
+        (`Signal (Option.value ~default:a b))
     in
     let { With_valid.valid = _; value } =
       Barrett_reduction.hierarchical
@@ -38,7 +39,10 @@ let fp_multiply : Config.fn =
   { impl; latency }
 ;;
 
-let config = { Config.fp_multiply; p }
+let config =
+  { Config.fp_multiply = multiply_or_squarer_fn; fp_square = multiply_or_squarer_fn; p }
+;;
+
 let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =

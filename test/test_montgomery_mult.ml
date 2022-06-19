@@ -70,7 +70,7 @@ let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one)
 let%expect_test _ =
   let config =
     { Montgomery_mult.Config.multiplier_config =
-        Test_karatsuba_ofman_mult.config_four_stages
+        `Multiplier Test_karatsuba_ofman_mult.config_four_stages
     ; montgomery_reduction_config =
         { multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
         ; half_multiplier_config =

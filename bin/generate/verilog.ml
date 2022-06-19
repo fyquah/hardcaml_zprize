@@ -27,10 +27,8 @@ let flag_filename =
       ~doc:" Output filename (Defaults to stdout)")
 ;;
 
-let flag_multiplier_config =
-  let%map_open.Command depth =
-    flag "depth" (optional_with_default 4 int) ~doc:" Depth karatsuba ofman splitting"
-  and multiplier_latency =
+let flag_ground_multiplier =
+  let%map_open.Command multiplier_latency =
     flag
       "multiplier-latency"
       (optional_with_default 1 int)
@@ -41,22 +39,21 @@ let flag_multiplier_config =
       no_arg
       ~doc:" Use vanila verilog multplication, rather than optimized hybrid"
   in
-  let full =
-    Karatsuba_ofman_mult.Config.generate
-      ~ground_multiplier:
-        (if use_vanila_multiply
-        then Verilog_multiply { latency = multiplier_latency }
-        else Hybrid_dsp_and_luts { latency = multiplier_latency })
-      ~depth
-  in
-  let half =
-    { Half_width_multiplier.Config.depth
-    ; ground_multiplier =
-        (if use_vanila_multiply
-        then Verilog_multiply { latency = multiplier_latency }
-        else Hybrid_dsp_and_luts { latency = multiplier_latency })
-    }
-  in
+  if use_vanila_multiply
+  then Ground_multiplier.Config.Verilog_multiply { latency = multiplier_latency }
+  else Ground_multiplier.Config.Hybrid_dsp_and_luts { latency = multiplier_latency }
+;;
+
+let flag_depth =
+  let open Command.Param in
+  flag "depth" (optional_with_default 4 int) ~doc:" Depth karatsuba ofman splitting"
+;;
+
+let flag_multiplier_config =
+  let%map_open.Command depth = flag_depth
+  and ground_multiplier = flag_ground_multiplier in
+  let full = Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth in
+  let half = { Half_width_multiplier.Config.depth; ground_multiplier } in
   half, full
 ;;
 
@@ -77,8 +74,8 @@ let command_karatsuba_ofman_mult =
 let command_montgomery_mult =
   Command.basic
     ~summary:"montgomery-mult"
-    (let%map_open.Command half_multiplier_config, multiplier_config =
-       flag_multiplier_config
+    (let%map_open.Command ground_multiplier = flag_ground_multiplier
+     and depth = flag_depth
      and adder_depth =
        flag
          "adder-depth"
@@ -89,6 +86,7 @@ let command_montgomery_mult =
          "subtractor-depth"
          (optional_with_default 3 int)
          ~doc:" Depth of subtractor in montgomery mult. Defaults to 3"
+     and squarer = flag "squarer" no_arg ~doc:" Generate RTL for squarer instead"
      and filename = flag_filename in
      fun () ->
        let module M = Montgometry_mult377 in
@@ -98,10 +96,16 @@ let command_montgomery_mult =
        let circuit =
          M.create
            ~config:
-             { multiplier_config
+             { multiplier_config =
+                 (if squarer
+                 then `Squarer { Squarer.Config.depth; ground_multiplier }
+                 else
+                   `Multiplier
+                     (Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth))
              ; montgomery_reduction_config =
-                 { half_multiplier_config
-                 ; multiplier_config
+                 { half_multiplier_config = { depth; ground_multiplier }
+                 ; multiplier_config =
+                     Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth
                  ; adder_depth
                  ; subtractor_depth
                  }
@@ -116,8 +120,8 @@ let command_montgomery_mult =
 let command_point_double =
   Command.basic
     ~summary:"point double"
-    (let%map_open.Command half_multiplier_config, multiplier_config =
-       flag_multiplier_config
+    (let%map_open.Command depth = flag_depth
+     and ground_multiplier = flag_ground_multiplier
      and adder_depth =
        flag
          "adder-depth"
@@ -135,26 +139,42 @@ let command_point_double =
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
        let p = Ark_bls12_377_g1.modulus () in
-       let montgomery_mult_config =
-         { Montgomery_mult.Config.multiplier_config
-         ; montgomery_reduction_config =
-             { half_multiplier_config; multiplier_config; adder_depth; subtractor_depth }
-         }
-       in
-       let multiplier ~scope ~clock ~enable x y =
-         let module M = Montgometry_mult377 in
-         let o =
-           M.create
-             ~config:montgomery_mult_config
-             ~p
-             scope
-             { clock; enable; x; y; valid = Signal.vdd }
+       let create_fn what =
+         let montgomery_mult_config =
+           { Montgomery_mult.Config.multiplier_config =
+               (match what with
+               | `Multiplier ->
+                 `Multiplier
+                   (Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth)
+               | `Squarer -> `Squarer { Squarer.Config.depth; ground_multiplier })
+           ; montgomery_reduction_config =
+               { half_multiplier_config = { depth; ground_multiplier }
+               ; multiplier_config =
+                   Karatsuba_ofman_mult.Config.generate ~ground_multiplier ~depth
+               ; adder_depth
+               ; subtractor_depth
+               }
+           }
          in
-         o.z
+         let impl ~scope ~clock ~enable x y =
+           let module M = Montgometry_mult377 in
+           let o =
+             M.create
+               ~config:montgomery_mult_config
+               ~p
+               scope
+               { clock; enable; x; y = Option.value ~default:x y; valid = Signal.vdd }
+           in
+           o.z
+         in
+         let latency = Montgomery_mult.Config.latency montgomery_mult_config in
+         { Snarks_r_fun.Ec_fpn_dbl.Config.latency; impl }
        in
        let circuit =
-         let latency = Montgomery_mult.Config.latency montgomery_mult_config in
-         M.create ~config:{ fp_multiply = { latency; impl = multiplier }; p } scope
+         M.create
+           ~config:
+             { fp_multiply = create_fn `Multiplier; fp_square = create_fn `Squarer; p }
+           scope
          |> C.create_exn ~name:"point_double"
        in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
