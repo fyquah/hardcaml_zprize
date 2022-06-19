@@ -205,7 +205,7 @@ let command_point_double =
 let () =
   [ "karatsuba-ofman-mult", command_karatsuba_ofman_mult
   ; "montgomery-mult", command_montgomery_mult
-  ; "point-dbl", command_point_double
+  ; "point-double", command_point_double
   ]
   |> Command.group ~summary:"generate verilog"
   |> Command_unix.run

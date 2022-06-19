@@ -11,5 +11,5 @@ add_files ${application}.xdc
 set_property top ${application} [current_fileset]
 
 synth_design -mode out_of_context
-
 report_utilization -hierarchical -file post_synth_utilization.rpt
+report_timing_summary -file post_synth_timing.rpt 

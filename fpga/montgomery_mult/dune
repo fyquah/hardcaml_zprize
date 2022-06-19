@@ -8,7 +8,7 @@
 
 (rule
  (alias build-fpga)
- (targets post_synth_utilization.rpt)
- (deps montgomery_mult.v ../../scripts/run_vivado.tcl)
+ (targets post_synth_utilization.rpt post_synth_timing.rpt)
+ (deps montgomery_mult.v montgomery_mult.xdc ../../scripts/run_vivado.tcl)
  (action
   (run vivado -mode batch -source ../../scripts/run_vivado.tcl -tclargs montgomery_mult)))
