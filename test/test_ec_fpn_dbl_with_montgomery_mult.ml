@@ -16,9 +16,12 @@ let fp_multiply : Config.fn =
   in
   let montgomery_mult_config =
     { Montgomery_mult.Config.multiplier_config
-    ; half_multiplier_config
-    ; adder_depth = 3
-    ; subtractor_depth = 3
+    ; montgomery_reduction_config =
+        { multiplier_config
+        ; half_multiplier_config
+        ; adder_depth = 3
+        ; subtractor_depth = 3
+        }
     }
   in
   let impl ~scope ~clock ~enable x y =

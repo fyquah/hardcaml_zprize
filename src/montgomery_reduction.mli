@@ -7,11 +7,22 @@ open! Hardcaml
 module Config : sig
   type t =
     { multiplier_config : Karatsuba_ofman_mult.Config.t
-    ; montgomery_reduction_config : Montgomery_reduction.Config.t
+    ; half_multiplier_config : Half_width_multiplier.Config.t
+    ; adder_depth : int
+    ; subtractor_depth : int
     }
 
   val latency : t -> int
 end
+
+val hierarchical
+  :  config:Config.t
+  -> clock:Signal.t
+  -> enable:Signal.t
+  -> scope:Scope.t
+  -> p:Z.t
+  -> Signal.t
+  -> Signal.t
 
 module With_interface (M : sig
   val bits : int
@@ -24,8 +35,7 @@ end) : sig
     type 'a t =
       { clock : 'a
       ; enable : 'a
-      ; x : 'a
-      ; y : 'a
+      ; xy : 'a
       ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]

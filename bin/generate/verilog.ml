@@ -98,7 +98,14 @@ let command_montgomery_mult =
        let circuit =
          M.create
            ~config:
-             { half_multiplier_config; multiplier_config; adder_depth; subtractor_depth }
+             { multiplier_config
+             ; montgomery_reduction_config =
+                 { half_multiplier_config
+                 ; multiplier_config
+                 ; adder_depth
+                 ; subtractor_depth
+                 }
+             }
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
          |> C.create_exn ~name:"montgomery_mult"
@@ -129,10 +136,9 @@ let command_point_double =
        let database = Scope.circuit_database scope in
        let p = Ark_bls12_377_g1.modulus () in
        let montgomery_mult_config =
-         { Montgomery_mult.Config.half_multiplier_config
-         ; multiplier_config
-         ; adder_depth
-         ; subtractor_depth
+         { Montgomery_mult.Config.multiplier_config
+         ; montgomery_reduction_config =
+             { half_multiplier_config; multiplier_config; adder_depth; subtractor_depth }
          }
        in
        let multiplier ~scope ~clock ~enable x y =
