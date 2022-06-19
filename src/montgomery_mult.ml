@@ -34,29 +34,6 @@ let create
     (y : Signal.t)
   =
   assert (Signal.width x = Signal.width y);
-  let logr = Signal.width x in
-  let r = Z.(one lsl logr) in
-  let p' =
-    (* We want to find p' such that pp' = −1 mod r
-     *
-     * First we find
-     * ar + bp = 1 using euclidean extended algorithm
-     * <-> -ar - bp = -1
-     * -> -bp = -1 mod r
-     *
-     * if b is negative, we're done, if it's not, we can do a little trick:
-     *
-     * -bp = (-b+r)p mod r
-     *
-     *)
-    let { Extended_euclidean.coef_x = _; coef_y; gcd } =
-      Extended_euclidean.extended_euclidean ~x:r ~y:p
-    in
-    assert (Z.equal gcd Z.one);
-    let p' = Z.neg coef_y in
-    if Z.lt p' Z.zero then Z.(p' + r) else p'
-  in
-  assert (Z.(equal (p * p' mod r) (r - one)));
   let xy =
     Karatsuba_ofman_mult.hierarchical
       ~enable
