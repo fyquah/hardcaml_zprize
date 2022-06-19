@@ -145,6 +145,7 @@ module Stage2 = struct
 
   let latency (config : Config.t) =
     config.fp_multiply.latency
+    |> Int.max config.fp_square.latency
     |> Int.max (Modulo_triple_pipe.latency ~stages:adder_stages)
   ;;
 
@@ -185,6 +186,7 @@ module Stage3 = struct
 
   let latency (config : Config.t) =
     config.fp_multiply.latency
+    |> Int.max config.fp_square.latency
     |> Int.max (Modulo_double_pipe.latency ~stages:adder_stages)
   ;;
 
