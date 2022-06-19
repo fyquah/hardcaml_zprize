@@ -2,7 +2,7 @@
  (targets point_dbl.v)
  (deps ../../bin/generate/verilog.exe)
  (action
-  (run %{deps} point-bdl -o point_dbl.v)))
+  (run %{deps} point-dbl -o point_dbl.v)))
 
 ; Runs vivado to generate output reports.
 
