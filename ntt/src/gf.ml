@@ -141,11 +141,11 @@ module Make (Bits : Comb.S) = struct
 
   let mul left right =
     let res = left *: right in
-    let t0 = Uop.(res.:[31, 0] -: res.:[63, 48]) in
+    let t0 = Uop.(res.:[63, 0] -: res.:[127, 96]) in
     let t0 = underflow t0 in
-    let t1 = res.:[47, 32] *: epsilon in
-    let final = Uop.(t0 +: t1) in
-    overflow final |> lsbs
+    let t1 = res.:[95, 64] *: epsilon.:[32, 0] in
+    let final = t0 +: t1 in
+    mux2 (final >=: ue modulus) (final -: ue modulus) final |> lsbs
   ;;
 
   let is_normalized x = Uop.(x <: modulus)

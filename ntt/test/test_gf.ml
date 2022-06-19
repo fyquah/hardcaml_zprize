@@ -92,9 +92,16 @@ let%expect_test "mul" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
           let actual = Gf.(of_z left *: of_z right |> Gf.to_z) in
+          let actual_normalized = Gfz.of_z actual in
           let expected = Gfz.(of_z left * of_z right |> Gfz.to_z) in
           if not (Z.equal actual expected)
           then
             raise_s
-              [%message "mul failed" (left : z) (right : z) (actual : z) (expected : z)]))
+              [%message
+                "mul failed"
+                  (left : z)
+                  (right : z)
+                  (actual : z)
+                  (actual_normalized : Gfz.t)
+                  (expected : z)]))
 ;;
