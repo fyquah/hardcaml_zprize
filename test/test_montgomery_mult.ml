@@ -67,6 +67,19 @@ let compute_expected ~logr ~p x y =
 let p = Ark_bls12_377_g1.modulus ()
 let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one)
 
+let%expect_test "Display constants" =
+  let { Montgomery_mult.Constants.logr; p' } = Montgomery_mult.Constants.create ~p in
+  let ceillog2_p' = Z.log2up p' in
+  Stdio.print_s [%message (p : Utils.z) (p' : Utils.z) (logr : int) (ceillog2_p' : int)];
+  [%expect
+    {|
+    ((p
+      0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001)
+     (p'
+      0x1a5205feec82e3d22f80141806a3cec5b245b86cced7a1335ed1347970debffd1e94577a00000008508bfffffffffff)
+     (logr 377) (ceillog2_p' 377)) |}]
+;;
+
 let%expect_test _ =
   let config =
     { Montgomery_mult.Config.m0_config = Test_karatsuba_ofman_mult.config_four_stages

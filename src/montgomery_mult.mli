@@ -16,6 +16,15 @@ module Config : sig
   val latency : t -> int
 end
 
+module Constants : sig
+  type t =
+    { logr : int
+    ; p' : Z.t
+    }
+
+  val create : p:Z.t -> t
+end
+
 module With_interface (M : sig
   val bits : int
 end) : sig

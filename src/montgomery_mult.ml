@@ -177,6 +177,40 @@ module Config = struct
   ;;
 end
 
+module Constants = struct
+  type t =
+    { logr : int
+    ; p' : Z.t
+    }
+
+  let create ~p =
+    let logr = Z.log2up p in
+    let r = Z.(one lsl logr) in
+    let p' =
+      (* We want to find p' such that pp' = −1 mod r
+       *
+       * First we find
+       * ar + bp = 1 using euclidean extended algorithm
+       * <-> -ar - bp = -1
+       * -> -bp = -1 mod r
+       *
+       * if b is negative, we're done, if it's not, we can do a little trick:
+       *
+       * -bp = (-b+r)p mod r
+       *
+       *)
+      let { Extended_euclidean.coef_x = _; coef_y; gcd } =
+        Extended_euclidean.extended_euclidean ~x:r ~y:p
+      in
+      assert (Z.equal gcd Z.one);
+      let p' = Z.neg coef_y in
+      if Z.lt p' Z.zero then Z.(p' + r) else p'
+    in
+    assert (Z.(equal (p * p' mod r) (r - one)));
+    { p'; logr }
+  ;;
+end
+
 let create
     ~(config : Config.t)
     ~scope
@@ -188,30 +222,8 @@ let create
     (y : Signal.t)
   =
   assert (Signal.width x = Signal.width y);
-  let logr = Signal.width x in
-  let r = Z.(one lsl logr) in
-  let p' =
-    (* We want to find p' such that pp' = −1 mod r
-     *
-     * First we find
-     * ar + bp = 1 using euclidean extended algorithm
-     * <-> -ar - bp = -1
-     * -> -bp = -1 mod r
-     *
-     * if b is negative, we're done, if it's not, we can do a little trick:
-     *
-     * -bp = (-b+r)p mod r
-     *
-     *)
-    let { Extended_euclidean.coef_x = _; coef_y; gcd } =
-      Extended_euclidean.extended_euclidean ~x:r ~y:p
-    in
-    assert (Z.equal gcd Z.one);
-    let p' = Z.neg coef_y in
-    if Z.lt p' Z.zero then Z.(p' + r) else p'
-  in
+  let { Constants.p'; logr } = Constants.create ~p in
   let ( -- ) = Scope.naming scope in
-  assert (Z.(equal (p * p' mod r) (r - one)));
   { x; y; valid }
   |> Stage1.create ~scope ~multiplier_config:config.m0_config ~clock ~enable
   |> Stage1.map2 Stage1.port_names ~f:(fun port_name x -> x -- ("stage1$" ^ port_name))

@@ -21,11 +21,7 @@ module Config = struct
   ;;
 end
 
-module Input = struct
-  type nonrec t =
-    | Multiply of (t * t)
-    | Square of t
-end
+module Input = Multiplier_input
 
 let rec create_recursive ~scope ~clock ~enable ~(config : Config.t) (input : Input.t) =
   let spec = Reg_spec.create ~clock () in
