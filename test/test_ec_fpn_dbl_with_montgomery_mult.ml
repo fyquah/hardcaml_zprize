@@ -1,5 +1,4 @@
 open Core
-open Hardcaml
 open Snarks_r_fun
 open Test_ec_fpn_dbl
 
@@ -7,43 +6,54 @@ module Montgomery_mult = Montgomery_mult.With_interface (struct
   let bits = 377
 end)
 
-let create_fn what_to_create : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
-  let montgomery_mult_config =
-    { Montgomery_mult.Config.multiplier_config =
-        (match what_to_create with
-        | `Squarer ->
-          `Squarer
-            { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
-            ; ground_multiplier = Verilog_multiply { latency = 1 }
-            }
-        | `Multiplier -> `Multiplier Test_karatsuba_ofman_mult.config_four_stages)
-    ; montgomery_reduction_config =
-        { multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
-        ; half_multiplier_config =
-            { depth = 4; ground_multiplier = Verilog_multiply { latency = 1 } }
-        ; adder_depth = 3
-        ; subtractor_depth = 3
-        }
+let reduce : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
+  let config =
+    { Montgomery_reduction.Config.multiplier_config =
+        Test_karatsuba_ofman_mult.config_four_stages
+    ; half_multiplier_config =
+        { depth = 4; ground_multiplier = Verilog_multiply { latency = 1 } }
+    ; adder_depth = 3
+    ; subtractor_depth = 3
     }
   in
+  let latency = Montgomery_reduction.Config.latency config in
   let impl ~scope ~clock ~enable x y =
-    let o =
-      Montgomery_mult.create
-        ~config:montgomery_mult_config
-        ~p
-        scope
-        { clock; enable; valid = Signal.vdd; x; y = Option.value ~default:x y }
-    in
-    o.z
+    assert (Option.is_none y);
+    Montgomery_reduction.hierarchical ~config ~p ~scope ~clock ~enable x
   in
-  let latency = Montgomery_mult.Config.latency montgomery_mult_config in
   { impl; latency }
 ;;
 
-let config =
-  { Config.fp_multiply = create_fn `Multiplier; fp_square = create_fn `Squarer; p }
+let square : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
+  let config =
+    { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
+    ; ground_multiplier = Verilog_multiply { latency = 1 }
+    }
+  in
+  let latency = Squarer.Config.latency config in
+  let impl ~scope ~clock ~enable x y =
+    assert (Option.is_none y);
+    Squarer.hierarchical ~config ~clock ~enable ~scope x
+  in
+  { impl; latency }
 ;;
 
+let multiply : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
+  let config = Test_karatsuba_ofman_mult.config_four_stages in
+  let latency = Karatsuba_ofman_mult.Config.latency config in
+  let impl ~scope ~clock ~enable x y =
+    Karatsuba_ofman_mult.hierarchical
+      ~enable
+      ~config
+      ~scope
+      ~clock
+      x
+      (`Signal (Option.value_exn y))
+  in
+  { latency; impl }
+;;
+
+let config = { Config.multiply; square; reduce; p }
 let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =
