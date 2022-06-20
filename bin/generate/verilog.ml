@@ -133,8 +133,7 @@ let command_montgomery_mult =
 let command_point_double =
   Command.basic
     ~summary:"point double"
-    (let%map_open.Command depth = flag_depth
-     and ground_multiplier = flag_ground_multiplier
+    (let%map_open.Command ground_multiplier = flag_ground_multiplier
      and adder_depth =
        flag
          "adder-depth"
@@ -152,51 +151,57 @@ let command_point_double =
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
        let p = Ark_bls12_377_g1.modulus () in
-       let create_fn what =
-         let montgomery_mult_config =
-           { Montgomery_mult.Config.multiplier_config =
-               (match what with
-               | `Multiplier ->
-                 `Multiplier
-                   (Karatsuba_ofman_mult.Config.generate
-                      ~ground_multiplier
-                      (List.init depth ~f:(Fn.const Radix.Radix_2)))
-               | `Squarer ->
-                 `Squarer
-                   { Squarer.Config.level_radices =
-                       List.init depth ~f:(Fn.const Radix.Radix_2)
-                   ; ground_multiplier
-                   })
-           ; montgomery_reduction_config =
-               { half_multiplier_config = { depth; ground_multiplier }
-               ; multiplier_config =
-                   Karatsuba_ofman_mult.Config.generate
-                     ~ground_multiplier
-                     (List.init depth ~f:(Fn.const Radix.Radix_2))
-               ; adder_depth
-               ; subtractor_depth
-               }
+       let reduce : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
+         let config =
+           { Montgomery_reduction.Config.multiplier_config =
+               Karatsuba_ofman_mult.Config.generate
+                 ~ground_multiplier
+                 [ Radix_2; Radix_3; Radix_3 ]
+           ; half_multiplier_config = { depth = 4; ground_multiplier }
+           ; adder_depth
+           ; subtractor_depth
            }
          in
+         let latency = Montgomery_reduction.Config.latency config in
          let impl ~scope ~clock ~enable x y =
-           let module M = Montgometry_mult377 in
-           let o =
-             M.create
-               ~config:montgomery_mult_config
-               ~p
-               scope
-               { clock; enable; x; y = Option.value ~default:x y; valid = Signal.vdd }
-           in
-           o.z
+           assert (Option.is_none y);
+           Montgomery_reduction.hierarchical ~config ~p ~scope ~clock ~enable x
          in
-         let latency = Montgomery_mult.Config.latency montgomery_mult_config in
-         { Snarks_r_fun.Ec_fpn_dbl.Config.latency; impl }
+         { impl; latency }
+       in
+       let square : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
+         let config =
+           { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
+           ; ground_multiplier
+           }
+         in
+         let latency = Squarer.Config.latency config in
+         let impl ~scope ~clock ~enable x y =
+           assert (Option.is_none y);
+           Squarer.hierarchical ~config ~clock ~enable ~scope x
+         in
+         { impl; latency }
+       in
+       let multiply : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
+         let config =
+           Karatsuba_ofman_mult.Config.generate
+             ~ground_multiplier
+             [ Radix_2; Radix_3; Radix_3 ]
+         in
+         let latency = Karatsuba_ofman_mult.Config.latency config in
+         let impl ~scope ~clock ~enable x y =
+           Karatsuba_ofman_mult.hierarchical
+             ~enable
+             ~config
+             ~scope
+             ~clock
+             x
+             (`Signal (Option.value_exn y))
+         in
+         { latency; impl }
        in
        let circuit =
-         M.create
-           ~config:
-             { fp_multiply = create_fn `Multiplier; fp_square = create_fn `Squarer; p }
-           scope
+         M.create ~config:{ multiply; square; reduce; p } scope
          |> C.create_exn ~name:"point_double"
        in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)

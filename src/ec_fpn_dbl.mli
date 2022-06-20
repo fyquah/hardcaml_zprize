@@ -11,12 +11,10 @@ module Config : sig
     }
 
   type t =
-    { fp_multiply : fn
-          (** [fp_multiply] is the implementation of a finite-field multiplication.
-     * The output of has to be between 0 and p-1 inclusive.
-    *)
-    ; fp_square : fn
-    ; p : Z.t (** [p] is the modulus prime. *)
+    { multiply : fn
+    ; square : fn
+    ; reduce : fn
+    ; p : Z.t
     }
 end
 
