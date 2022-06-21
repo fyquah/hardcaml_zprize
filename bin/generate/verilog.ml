@@ -129,7 +129,8 @@ let command_montgomery_mult =
              }
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
-         |> C.create_exn ~name:"montgomery_mult"
+         |> C.create_exn
+              ~name:(if squarer then "montgomery_square" else "montgomery_mult")
        in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
 ;;
