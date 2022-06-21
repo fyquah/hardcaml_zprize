@@ -1,10 +1,9 @@
 open Base
 open Hardcaml
-open Signal
 
 module Config : sig
   type t =
-    { depth : int
+    { level_radices : Radix.t list
     ; ground_multiplier : Ground_multiplier.Config.t
     }
 
@@ -17,8 +16,6 @@ module Input : sig
     | Multiply of (Signal.t * Signal.t)
     | Square of Signal.t
 end
-
-val create : scope:Scope.t -> clock:t -> enable:t -> config:Config.t -> Input.t -> t
 
 val hierarchical
   :  ?name:string

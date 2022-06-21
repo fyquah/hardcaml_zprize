@@ -3,84 +3,114 @@ open Hardcaml
 open Signal
 open Reg_with_enable
 
-let post_adder_stages ~depth:_ = 1
+let post_adder_stages = 1
 
 module Config = struct
   type t =
-    { depth : int
+    { level_radices : Radix.t list
     ; ground_multiplier : Ground_multiplier.Config.t
     }
 
-  let latency { depth; ground_multiplier } =
-    match depth with
-    | 0 -> Ground_multiplier.Config.latency ground_multiplier
+  let latency { level_radices; ground_multiplier } =
+    match level_radices with
+    | [] -> Ground_multiplier.Config.latency ground_multiplier
     | _ ->
       let slowest_multiplier =
-        List.init (depth - 1) ~f:(fun _ -> Radix.Radix_2)
+        List.tl_exn level_radices
         |> Karatsuba_ofman_mult.Config.generate ~ground_multiplier
         |> Karatsuba_ofman_mult.Config.latency
       in
-      slowest_multiplier + post_adder_stages ~depth
+      slowest_multiplier + post_adder_stages
   ;;
 end
 
 module Input = Multiplier_input
 
-let rec create_recursive ~scope ~clock ~enable ~(config : Config.t) (input : Input.t) =
-  let spec = Reg_spec.create ~clock () in
-  let pipeline ~n x = if is_const x then x else pipeline ~enable spec x ~n in
-  match config.depth with
-  | 0 ->
+let rec create_recursive
+    ~scope
+    ~clock
+    ~enable
+    ~ground_multiplier
+    ~(level_radices : Radix.t list)
+    (input : Input.t)
+  =
+  match level_radices with
+  | [] ->
     let a, b =
       match input with
       | Multiply_by_constant _ -> assert false
       | Multiply (a, b) -> a, b
       | Square a -> a, a
     in
-    Ground_multiplier.create ~clock ~enable ~config:config.ground_multiplier a b
-  | _ ->
-    let post_adder_stages = post_adder_stages ~depth:config.depth in
-    let child_karatsuba_config =
-      Karatsuba_ofman_mult.Config.generate
-        ~ground_multiplier:config.ground_multiplier
-        (List.init (config.depth - 1) ~f:(fun _ -> Radix.Radix_2))
-    in
-    let child_halfwidth_config = { config with depth = config.depth - 1 } in
-    let create_recursive input =
-      create_recursive ~scope ~clock ~enable ~config:child_halfwidth_config input
-      |> pipeline
-           ~n:
-             (Karatsuba_ofman_mult.Config.latency child_karatsuba_config
-             - Config.latency child_halfwidth_config)
-    in
-    let create_full_multiplier a b =
-      Karatsuba_ofman_mult.hierarchical
-        ~scope
-        ~config:child_karatsuba_config
-        ~enable
-        ~clock
-        a
-        (match b with
-        | Const { signal_id = _; constant } ->
-          `Constant (Bits.to_z ~signedness:Unsigned constant)
-        | _ -> `Signal b)
-    in
-    let w =
-      match input with
-      | Multiply_by_constant _ ->
-        (* The input is sanitize to either Multiply or Square. *)
-        assert false
-      | Multiply (a, b) ->
-        if width a <> width b
-        then
-          raise_s
-            [%message
-              "Width of [a] and [b] argument of karatsuba ofman multiplier mismatch"
-                (width a : int)
-                (width b : int)];
-        width a
-      | Square s -> width s
-    in
+    Ground_multiplier.create ~clock ~enable ~config:ground_multiplier a b
+  | radix :: remaining_level_radices ->
+    create_level
+      ~scope
+      ~clock
+      ~enable
+      ~ground_multiplier
+      ~remaining_level_radices
+      ~radix
+      (input : Input.t)
+
+and create_level
+    ~scope
+    ~clock
+    ~enable
+    ~ground_multiplier
+    ~remaining_level_radices
+    ~radix
+    (input : Input.t)
+  =
+  let spec = Reg_spec.create ~clock () in
+  let pipeline ~n x = if is_const x then x else pipeline ~enable spec x ~n in
+  let child_karatsuba_config =
+    Karatsuba_ofman_mult.Config.generate ~ground_multiplier remaining_level_radices
+  in
+  let create_recursive input =
+    create_recursive
+      ~scope
+      ~clock
+      ~enable
+      ~level_radices:remaining_level_radices
+      ~ground_multiplier
+      input
+    |> pipeline
+         ~n:
+           (Karatsuba_ofman_mult.Config.latency child_karatsuba_config
+           - Config.latency { level_radices = remaining_level_radices; ground_multiplier }
+           )
+  in
+  let create_full_multiplier a b =
+    Karatsuba_ofman_mult.hierarchical
+      ~scope
+      ~config:child_karatsuba_config
+      ~enable
+      ~clock
+      a
+      (match b with
+      | Const { signal_id = _; constant } ->
+        `Constant (Bits.to_z ~signedness:Unsigned constant)
+      | _ -> `Signal b)
+  in
+  let w =
+    match input with
+    | Multiply_by_constant _ ->
+      (* The input is sanitize to either Multiply or Square. *)
+      assert false
+    | Multiply (a, b) ->
+      if width a <> width b
+      then
+        raise_s
+          [%message
+            "Width of [a] and [b] argument of karatsuba ofman multiplier mismatch"
+              (width a : int)
+              (width b : int)];
+      width a
+    | Square s -> width s
+  in
+  match radix with
+  | Radix.Radix_2 ->
     let hw = (w + 1) / 2 in
     let top_half x = uresize (drop_bottom x hw) hw in
     let btm_half x = sel_bottom x hw in
@@ -112,9 +142,57 @@ let rec create_recursive ~scope ~clock ~enable ~(config : Config.t) (input : Inp
       in
       let la_mult_la = uresize (create_full_multiplier la la) w in
       pipeline ~n:post_adder_stages (ua_mult_la_times_2 +: la_mult_la))
+  | Radix_3 ->
+    let k = Int.round_up ~to_multiple_of:3 w / 3 in
+    let split3 x =
+      match split_msb ~exact:true ~part_width:k (uresize x (3 * k)) with
+      | [ a; b; c ] -> a, b, c
+      | _ -> assert false
+    in
+    (match input with
+    | Multiply_by_constant _ -> assert false
+    | Square _ -> raise_s [%message "Half width radix-3 squarer unimplemented..."]
+    | Multiply (x, y) ->
+      (* ((x2 * 2^(2k)) + (x1 * 2^k) + x0)((y2 * 2^(2k)) + (y1 * 2^k) + y0)
+       *  = x2y2 * 2^4k
+       *    + x2y1 * 2^3k
+       *    + x2y0 * 2^2k
+       *    + x1y2 * 2^3k
+       *    + x1y1 * 2^2k
+       *    + x1y0 * 2^k
+       *    + x0y2 * 2^2k
+       *    + x0y1 * 2^k
+       *    + x0y0
+       *  = x2y2 * 2^4k
+       *    + (x2y1 + x1y2) * 2^3k
+       *    + (x2y0 + x1y1 + x0y2) * 2^2k
+       *    + (x1y0 + x0y1) * 2^k
+       *    + x0y0
+       *
+       * The width of every partial product is 2k, and we only need the bottom
+       * 3k bits. So the above expression can be reduced to the following:
+       *
+       *  = (x2y0 + x1y1 + x0y2) * 2^2k <-- only half width mult in this row
+       *    + (x1y0 + x0y1) * 2^k
+       *    + x0y0
+       *
+       *)
+      let x2, x1, x0 = split3 x in
+      let y2, y1, y0 = split3 y in
+      let x2y0 = uresize (create_recursive (Multiply (x2, y0))) w in
+      let x1y1 = uresize (create_recursive (Multiply (x1, y1))) w in
+      let x0y2 = uresize (create_recursive (Multiply (x0, y2))) w in
+      let x1y0 = uresize (create_full_multiplier x1 y0) w in
+      let x0y1 = uresize (create_full_multiplier x0 y1) w in
+      let x0y0 = uresize (create_full_multiplier x0 y0) w in
+      pipeline
+        ~n:post_adder_stages
+        (sll (x2y0 +: x1y1 +: x0y2) (2 * k) +: sll (x1y0 +: x0y1) k +: x0y0))
 ;;
 
-let create = create_recursive
+let create_with_config ~config:{ Config.level_radices; ground_multiplier } =
+  create_recursive ~level_radices ~ground_multiplier
+;;
 
 module type Width = sig
   val bits : int
@@ -142,9 +220,9 @@ module With_interface_multiply (M : Width) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~(config : Config.t) scope { I.clock; enable; x; y; in_valid } =
+  let create ~config scope { I.clock; enable; x; y; in_valid } =
     let spec = Reg_spec.create ~clock () in
-    let z = create_recursive ~scope ~clock ~enable ~config (Multiply (x, y)) in
+    let z = create_with_config ~config ~scope ~clock ~enable (Multiply (x, y)) in
     let out_valid = pipeline spec ~enable ~n:(Config.latency config) in_valid in
     assert (width z = bits);
     { O.z; out_valid }
@@ -182,11 +260,11 @@ end
 module With_interface_multiply_by_constant (M : Width) = struct
   include Interface_1arg (M)
 
-  let create ~(config : Config.t) ~multiply_by scope { I.clock; enable; x; in_valid } =
+  let create ~config ~multiply_by scope { I.clock; enable; x; in_valid } =
     let spec = Reg_spec.create ~clock () in
     let y =
       Multiply (x, Signal.of_constant (Bits.to_constant multiply_by))
-      |> create_recursive ~scope ~clock ~enable ~config
+      |> create_with_config ~scope ~clock ~enable ~config
     in
     let out_valid = pipeline spec ~enable ~n:(Config.latency config) in_valid in
     assert (width y = bits);
@@ -205,10 +283,22 @@ end
 module With_interface_square (M : Width) = struct
   include Interface_1arg (M)
 
-  let create ~(config : Config.t) scope { I.clock; enable; x; in_valid } =
+  let create
+      ~config:{ Config.level_radices; ground_multiplier }
+      scope
+      { I.clock; enable; x; in_valid }
+    =
     let spec = Reg_spec.create ~clock () in
-    let y = create_recursive ~scope ~clock ~enable ~config (Square x) in
-    let out_valid = pipeline spec ~enable ~n:(Config.latency config) in_valid in
+    let y =
+      create_recursive ~scope ~clock ~enable ~level_radices ~ground_multiplier (Square x)
+    in
+    let out_valid =
+      pipeline
+        spec
+        ~enable
+        ~n:(Config.latency { level_radices; ground_multiplier })
+        in_valid
+    in
     assert (width y = bits);
     { O.y; out_valid }
   ;;

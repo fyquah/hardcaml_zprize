@@ -74,7 +74,9 @@ let%expect_test _ =
     ; montgomery_reduction_config =
         { multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
         ; half_multiplier_config =
-            { depth = 4; ground_multiplier = Verilog_multiply { latency = 1 } }
+            { level_radices = [ Radix_2; Radix_2; Radix_2; Radix_2 ]
+            ; ground_multiplier = Verilog_multiply { latency = 1 }
+            }
         ; adder_depth = 1
         ; subtractor_depth = 1
         }

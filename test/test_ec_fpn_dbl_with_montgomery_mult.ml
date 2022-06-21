@@ -11,7 +11,9 @@ let reduce : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
     { Montgomery_reduction.Config.multiplier_config =
         Test_karatsuba_ofman_mult.config_four_stages
     ; half_multiplier_config =
-        { depth = 4; ground_multiplier = Verilog_multiply { latency = 1 } }
+        { level_radices = [ Radix_2; Radix_3; Radix_3 ]
+        ; ground_multiplier = Verilog_multiply { latency = 1 }
+        }
     ; adder_depth = 3
     ; subtractor_depth = 3
     }
@@ -58,7 +60,7 @@ let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =
   Stdio.printf "latency = %d\n" latency;
-  [%expect {| latency = 137 |}]
+  [%expect {| latency = 129 |}]
 ;;
 
 let%expect_test "Test on some test cases" =

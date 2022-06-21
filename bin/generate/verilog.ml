@@ -57,7 +57,12 @@ let flag_multiplier_config =
       ~ground_multiplier
       (List.init depth ~f:(Fn.const Radix.Radix_2))
   in
-  let half = { Half_width_multiplier.Config.depth; ground_multiplier } in
+  let half =
+    { Half_width_multiplier.Config.level_radices =
+        List.init depth ~f:(Fn.const Radix.Radix_2)
+    ; ground_multiplier
+    }
+  in
   half, full
 ;;
 
@@ -79,7 +84,6 @@ let command_montgomery_mult =
   Command.basic
     ~summary:"montgomery-mult"
     (let%map_open.Command ground_multiplier = flag_ground_multiplier
-     and depth = flag_depth
      and adder_depth =
        flag
          "adder-depth"
@@ -104,21 +108,21 @@ let command_montgomery_mult =
                  (if squarer
                  then
                    `Squarer
-                     { Squarer.Config.level_radices =
-                         List.init depth ~f:(Fn.const Radix.Radix_2)
+                     { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
                      ; ground_multiplier
                      }
                  else
                    `Multiplier
                      (Karatsuba_ofman_mult.Config.generate
                         ~ground_multiplier
-                        (List.init depth ~f:(Fn.const Radix.Radix_2))))
+                        [ Radix_2; Radix_3; Radix_3 ]))
              ; montgomery_reduction_config =
-                 { half_multiplier_config = { depth; ground_multiplier }
+                 { half_multiplier_config =
+                     { level_radices = [ Radix_2; Radix_3; Radix_3 ]; ground_multiplier }
                  ; multiplier_config =
                      Karatsuba_ofman_mult.Config.generate
                        ~ground_multiplier
-                       (List.init depth ~f:(Fn.const Radix.Radix_2))
+                       [ Radix_2; Radix_3; Radix_3 ]
                  ; adder_depth
                  ; subtractor_depth
                  }
@@ -157,7 +161,8 @@ let command_point_double =
                Karatsuba_ofman_mult.Config.generate
                  ~ground_multiplier
                  [ Radix_2; Radix_3; Radix_3 ]
-           ; half_multiplier_config = { depth = 4; ground_multiplier }
+           ; half_multiplier_config =
+               { level_radices = [ Radix_2; Radix_3; Radix_3 ]; ground_multiplier }
            ; adder_depth
            ; subtractor_depth
            }
