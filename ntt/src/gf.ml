@@ -7,6 +7,9 @@ module Make (Bits : Comb.S) = struct
 
   type nonrec t = t
 
+  let compare a b = if equal (a <: b) vdd then -1 else if equal (a >: b) vdd then 1 else 0
+  let equal a b = equal (a ==: b) vdd
+
   let sexp_of_t t =
     Bits.to_z ~signedness:Unsigned t |> Z.to_string |> [%sexp_of: String.t]
   ;;
@@ -18,7 +21,9 @@ module Make (Bits : Comb.S) = struct
   let epsilon = of_int ~width:num_bits ((1 lsl 32) - 1)
   let modulus = of_int64 ~width:num_bits 0xFFFF_FFFF_0000_0001L
   let mult_mask = of_int64 ~width:num_bits 0xFFFF_FFFF_FFFF_FFFFL
-  let of_int x = Bits.of_int ~width:num_bits x
+  let is_normalized x = Uop.(x <: modulus)
+  let to_canonical x = mux2 (is_normalized x) x (x -: modulus)
+  let of_int64 x = Bits.of_int64 ~width:num_bits x |> to_canonical
 
   let of_z num_bits z =
     let b = Bits.of_z ~width:num_bits z in
@@ -148,9 +153,7 @@ module Make (Bits : Comb.S) = struct
     mux2 (final >=: ue modulus) (final -: ue modulus) final |> lsbs
   ;;
 
-  let is_normalized x = Uop.(x <: modulus)
   let to_bits t = t
-  let to_canonical x = mux2 (is_normalized x) x (x -: modulus)
   let negate x = mux2 (x ==:. 0) x (modulus -: to_canonical x)
   let ( +: ) = add
   let ( -: ) = sub
