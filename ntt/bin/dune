@@ -1,0 +1,5 @@
+(executable
+ (name ntt)
+ (libraries core core_unix core_unix.command_unix ntts_r_fun)
+ (preprocess (pps ppx_jane))
+)

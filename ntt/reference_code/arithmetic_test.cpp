@@ -26,21 +26,37 @@ vector<GF> get_test_vector() {
 		// add the test cases 0..10
 		test_vector.push_back(GF(i));
 
+    /* XXX aray: Fixed the constants below (need to bracket the [1 << p] and use 64 bit arithmetic). */
+
 		// add the (1 << 31) - 10..(1 << 31) + 10
-		test_vector.push_back(GF(1 << 31 - 10 + i));
-		test_vector.push_back(GF(1 << 31 + i));
+		test_vector.push_back(GF((1ull << 31) - 10 + i));
+		test_vector.push_back(GF((1ull << 31) + i));
 
 		// add the (1 << 32) - 10..(1 << 32) + 10
-		test_vector.push_back(GF(1 << 32 - 10 + i));
-		test_vector.push_back(GF(1 << 32 + i));
+		test_vector.push_back(GF((1ull << 32) - 10 + i));
+		test_vector.push_back(GF((1ull << 32) + i));
 
 		// add the (1 << 63) - 10..(1 << 63) + 10
-		test_vector.push_back(GF(1 << 63 - 10 + i));
-		test_vector.push_back(GF(1 << 63 + i));
+    test_vector.push_back(GF((1ull << 63) - 10 + i));
+    test_vector.push_back(GF((1ull << 63) + i));
 
 		// add the MODULUS - 10..MODULUS
 		test_vector.push_back(MODULUS - GF(10 - i));
 	}
+
+  /*
+  using Iter = std::vector<GF>::const_iterator;
+  for (Iter it=test_vector.begin(); it != test_vector.end(); it++) {
+    cout << (*it).to_string(10)<< endl;
+  }
+
+  cout << ZERO.to_string(10) << endl;
+  cout << ONE.to_string(10) << endl;
+  cout << TWO.to_string(10) << endl;
+  cout << MODULUS.to_string(10) << endl;
+  cout << EPSILON.to_string(10) << endl;
+  cout << MASK.to_string(10) << endl;
+  */
 
 	return test_vector;
 }
