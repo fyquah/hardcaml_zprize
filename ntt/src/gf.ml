@@ -19,33 +19,13 @@ module Make (Bits : Comb.S) = struct
   let one = of_int ~width:num_bits 1
   let two = of_int ~width:num_bits 2
   let epsilon = of_int ~width:num_bits ((1 lsl 32) - 1)
-  let modulus = of_int64 ~width:num_bits 0xFFFF_FFFF_0000_0001L
+  let modulus_z = Z.of_string "0xFFFF_FFFF_0000_0001"
+  let modulus = of_z ~width:num_bits modulus_z
   let mult_mask = of_int64 ~width:num_bits 0xFFFF_FFFF_FFFF_FFFFL
   let is_normalized x = Uop.(x <: modulus)
   let to_canonical x = mux2 (is_normalized x) x (x -: modulus)
   let of_int64 x = Bits.of_int64 ~width:num_bits x |> to_canonical
-
-  let of_z num_bits z =
-    let b = Bits.of_z ~width:num_bits z in
-    if Z.compare z Z.zero < 0
-    then if Z.equal (Bits.to_z ~signedness:Signed b) z then Some b else None
-    else if Z.equal (Bits.to_z ~signedness:Unsigned b) z
-    then Some b
-    else None
-  ;;
-
-  let of_z ?(allow_65_bits = false) z =
-    match of_z 64 z with
-    | Some z -> z
-    | None ->
-      if not allow_65_bits
-      then raise_s [%message "GF element out of range"]
-      else (
-        match of_z 65 z with
-        | Some z -> z
-        | None -> raise_s [%message "GF element out of range"])
-  ;;
-
+  let of_z z = Z.erem z modulus_z |> Bits.of_z ~width:64
   let to_z = Bits.to_z ~signedness:Unsigned
 
   let omega =
