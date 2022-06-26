@@ -1,5 +1,5 @@
 open! Core
-module Ntt = Ntts_r_fun.Ntt
+module Ntt = Ntts_r_fun.Ntt.Reference
 module Gf = Ntt.Gf
 
 let%expect_test "bit reversed addressing" =

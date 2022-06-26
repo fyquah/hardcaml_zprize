@@ -134,6 +134,7 @@ module Make (Bits : Comb.S) = struct
   ;;
 
   let to_bits t = t
+  let of_bits t = t
   let negate x = mux2 (x ==:. 0) x (modulus -: to_canonical x)
   let ( +: ) = add
   let ( -: ) = sub

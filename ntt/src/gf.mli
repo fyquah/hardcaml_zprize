@@ -25,6 +25,7 @@ module Make (Bits : Comb.S) : sig
 
   val is_normalized : t -> Bits.t
   val to_bits : t -> Bits.t
+  val of_bits : Bits.t -> t
   val of_int64 : Int64.t -> t
   val of_z : Z.t -> t
   val to_z : t -> Z.t
