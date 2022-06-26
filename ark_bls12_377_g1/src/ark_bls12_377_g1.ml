@@ -2,6 +2,8 @@ open Core
 open Ctypes
 open Foreign
 
+let sexp_of_z z = Sexp.Atom ("0x" ^ Z.format "x" z)
+
 module External = struct
   let potential_dl_filenames =
     (* The more principled thing to do is to figure out the build-target and
@@ -147,7 +149,7 @@ let sexp_of_affine affine =
   let x = x affine in
   let y = y affine in
   let infinity = infinity affine in
-  [%message (x : Utils.z) (y : Utils.z) (infinity : bool)]
+  [%message (x : z) (y : z) (infinity : bool)]
 ;;
 
 let create_coeff f =
@@ -163,3 +165,7 @@ let create_coeff f =
 let coeff_a = create_coeff External.coeff_a
 let coeff_b = create_coeff External.coeff_b
 let modulus = create_coeff External.modulus
+
+module For_testing = struct
+  let sexp_of_z = sexp_of_z
+end

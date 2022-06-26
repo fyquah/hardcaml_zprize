@@ -1,6 +1,6 @@
 open Core
 
-let sexp_of_z = Utils.sexp_of_z
+let sexp_of_z = Ark_bls12_377_g1.For_testing.sexp_of_z
 
 let print_is_on_curve a =
   if Ark_bls12_377_g1.is_on_curve a
@@ -46,7 +46,7 @@ let%expect_test "Display subgroup generator" =
   let a = Ark_bls12_377_g1.subgroup_generator () in
   let x = Ark_bls12_377_g1.x a in
   let y = Ark_bls12_377_g1.y a in
-  Stdio.print_s [%message (x : Utils.z) (y : Utils.z)];
+  Stdio.print_s [%message (x : z) (y : z)];
   print_is_on_curve a;
   [%expect
     {|

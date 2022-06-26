@@ -6,6 +6,8 @@
  *  space, this is hidden by this module altogether.
  **)
 
+open Core
+
 type affine [@@deriving sexp_of, equal]
 
 (** Constructs an arbitrary value in the finite field. Note that an arbitrarily
@@ -56,3 +58,7 @@ val modulus : unit -> Z.t
 
 (** Returns the bls12-377 subgroup generator. *)
 val subgroup_generator : unit -> affine
+
+module For_testing : sig
+  val sexp_of_z : Z.t -> Sexp.t
+end

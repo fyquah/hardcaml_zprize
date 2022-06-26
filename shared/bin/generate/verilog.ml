@@ -2,11 +2,6 @@ open Core
 open Hardcaml
 open Snarks_r_fun
 
-include struct
-  open Snarks_r_fun_test
-  module Ark_bls12_377_g1 = Ark_bls12_377_g1
-end
-
 module Karatsuba_ofman_mult377 = Karatsuba_ofman_mult.With_interface (struct
   let bits = 377
 end)
