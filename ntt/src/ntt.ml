@@ -29,6 +29,7 @@ module Controller = struct
       ; addr2 : 'a [@bits logn]
       ; omega : 'a [@bits Gf.num_bits]
       ; start_twiddles : 'a
+      ; first_stage : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -59,6 +60,7 @@ module Controller = struct
     let addr2 = Var.reg spec ~width:logn in
     let omega = List.init logn ~f:(fun i -> Gf.to_bits Gf.omega.(i + 1)) |> mux i.value in
     let start_twiddles = Var.reg spec ~width:1 in
+    let first_stage = Var.reg spec ~width:1 in
     Always.(
       compile
         [ start_twiddles <--. 0
@@ -74,6 +76,7 @@ module Controller = struct
                     ; addr2 <--. 1
                     ; done_ <--. 0
                     ; start_twiddles <--. 1
+                    ; first_stage <--. 1
                     ; sm.set_next Looping
                     ]
                 ] )
@@ -92,6 +95,7 @@ module Controller = struct
                     ; when_
                         (k_next ==:. 0)
                         [ i <-- i_next
+                        ; first_stage <--. 0
                         ; m <-- m_next
                         ; addr2 <-- k_next +: m_next
                         ; when_ (i_next ==:. logn) [ done_ <--. 1; sm.set_next Idle ]
@@ -109,6 +113,7 @@ module Controller = struct
     ; addr2 = addr2.value
     ; omega
     ; start_twiddles = start_twiddles.value
+    ; first_stage = first_stage.value
     }
   ;;
 end
@@ -125,7 +130,7 @@ module Datapath = struct
       ; d1 : 'a [@bits Gf.num_bits]
       ; d2 : 'a [@bits Gf.num_bits]
       ; omega : 'a [@bits Gf.num_bits]
-      ; start_twiddle : 'a [@bits Gf.num_bits]
+      ; start_twiddles : 'a [@bits Gf.num_bits]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -141,19 +146,22 @@ module Datapath = struct
   let ( *: ) a b = Gf.( *: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
   let ( +: ) a b = Gf.( +: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
   let ( -: ) a b = Gf.( -: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-  let twiddle_factor (i : _ I.t) w = mux2 i.start_twiddle Gf.(to_bits one) (w *: i.omega)
+  let twiddle_factor (i : _ I.t) w = mux2 i.start_twiddles Gf.(to_bits one) (w *: i.omega)
 
   let create _scope (i : _ I.t) =
+    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
-    let w = wire Gf.num_bits in
-    w <== twiddle_factor i w;
+    (* XXX aray: Need to up the latency for a practical version *)
+    (* XXX aray: THe pipeline below is timed for 1 cycle ram latency, and 0 cycles twiddle latency *)
+    let w = wire Gf.num_bits -- "twiddle" in
+    w <== reg spec (twiddle_factor i w);
     let t = i.d2 *: w in
     { O.q1 = i.d1 +: t; q2 = i.d1 -: t }
   ;;
 end
 
 module Hardware = struct
-  open Signal
+  open! Signal
   module Gf = Gf.Make (Hardcaml.Signal)
 
   module I = struct
@@ -164,15 +172,53 @@ module Hardware = struct
       ; d1 : 'a [@bits Gf.num_bits]
       ; d2 : 'a [@bits Gf.num_bits]
       }
+    [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
     type 'a t =
       { q1 : 'a [@bits Gf.num_bits]
       ; q2 : 'a [@bits Gf.num_bits]
+      ; addr1_in : 'a [@bits logn]
+      ; addr2_in : 'a [@bits logn]
+      ; read_enable_in : 'a
+      ; addr1_out : 'a [@bits logn]
+      ; addr2_out : 'a [@bits logn]
+      ; write_enable_out : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
+
+  let create scope (i : _ I.t) =
+    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+    let controller =
+      Controller.create
+        scope
+        { Controller.I.clock = i.clock; clear = i.clear; start = i.start }
+    in
+    let datapath =
+      Datapath.create
+        scope
+        { Datapath.I.clock = i.clock
+        ; clear = i.clear
+        ; d1 = i.d1
+        ; d2 = i.d2
+        ; omega = controller.omega
+        ; start_twiddles = controller.start_twiddles
+        }
+    in
+    let out_pipe = pipeline spec ~n:1 in
+    let reverse addr = mux2 controller.first_stage (reverse addr) addr in
+    { O.q1 = datapath.q1
+    ; q2 = datapath.q2
+    ; addr1_in = reverse controller.addr1
+    ; addr2_in = reverse controller.addr2
+    ; read_enable_in = ~:(controller.done_)
+    ; addr1_out = controller.addr1 |> out_pipe
+    ; addr2_out = controller.addr2 |> out_pipe
+    ; write_enable_out = ~:(controller.done_) |> out_pipe
+    }
+  ;;
 end
 
 module Reference = struct
