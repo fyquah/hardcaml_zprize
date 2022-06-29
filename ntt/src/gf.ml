@@ -24,7 +24,6 @@ module Make (Bits : Comb.S) = struct
   let mult_mask = of_int64 ~width:num_bits 0xFFFF_FFFF_FFFF_FFFFL
   let is_normalized x = Uop.(x <: modulus)
   let to_canonical x = mux2 (is_normalized x) x (x -: modulus)
-  let of_int64 x = Bits.of_int64 ~width:num_bits x |> to_canonical
   let of_z z = Z.erem z modulus_z |> Bits.of_z ~width:64
   let to_z = Bits.to_z ~signedness:Unsigned
 
