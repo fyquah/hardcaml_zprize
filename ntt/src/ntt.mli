@@ -1,8 +1,9 @@
 open! Base
 open! Hardcaml
-module Gfhw : module type of Gf.Make (Hardcaml.Signal)
 
-module Address_controller : sig
+module Controller : sig
+  module Gf : module type of Gf.Make (Hardcaml.Signal)
+
   module I : sig
     type 'a t =
       { clock : 'a
@@ -21,6 +22,34 @@ module Address_controller : sig
       ; m : 'a
       ; addr1 : 'a
       ; addr2 : 'a
+      ; omega : 'a
+      ; start_twiddles : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+end
+
+module Datapath : sig
+  module Gf : module type of Gf.Make (Hardcaml.Signal)
+
+  module I : sig
+    type 'a t =
+      { clock : 'a
+      ; clear : 'a
+      ; d1 : 'a
+      ; d2 : 'a
+      ; omega : 'a
+      ; start_twiddle : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O : sig
+    type 'a t =
+      { q1 : 'a
+      ; q2 : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

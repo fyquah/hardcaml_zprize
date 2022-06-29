@@ -21,6 +21,7 @@ module Make (Bits : Comb.S) : sig
   val ( +: ) : t -> t -> t
   val ( -: ) : t -> t -> t
   val negate : t -> t
+  val mul : ?pipe:(t -> t) -> t -> t -> t
   val ( *: ) : t -> t -> t
 
   (** {2 Misc} *)

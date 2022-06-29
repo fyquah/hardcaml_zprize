@@ -1,7 +1,7 @@
 open! Base
 open Hardcaml
 open Hardcaml_waveterm
-module Ntt = Ntts_r_fun.Ntt.Address_controller
+module Ntt = Ntts_r_fun.Ntt.Controller
 module Sim = Cyclesim.With_interface (Ntt.I) (Ntt.O)
 
 let%expect_test "addressing" =
@@ -17,7 +17,7 @@ let%expect_test "addressing" =
   for _ = 0 to 14 do
     Cyclesim.cycle sim
   done;
-  Waveform.print ~display_height:30 ~wave_width:1 ~display_width:90 waves;
+  Waveform.print ~display_height:34 ~wave_width:1 ~display_width:90 waves;
   [%expect
     {|
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────┐
@@ -47,7 +47,11 @@ let%expect_test "addressing" =
     │                  ││────────┬───────────────┬───────────────┬───────────────┬───────────│
     │m                 ││ 0      │1              │2              │4              │0          │
     │                  ││────────┴───────────────┴───────────────┴───────────────┴───────────│
-    │                  ││                                                                    │
+    │                  ││────────────────────────┬───────────────┬───────────────────────────│
+    │omega             ││ FFFFFFFF00000000       │00010000000000.│FFFFFFFEFF000001           │
+    │                  ││────────────────────────┴───────────────┴───────────────────────────│
+    │start_twiddles    ││        ┌───────────────────┐   ┌───┐   ┌───┐           ┌───┐       │
+    │                  ││────────┘                   └───┘   └───┘   └───────────┘   └───────│
     │                  ││                                                                    │
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;

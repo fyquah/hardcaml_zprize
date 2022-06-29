@@ -6,9 +6,9 @@ open! Hardcaml
 let n = 8
 let logn = Int.ceil_log2 n
 
-module Gfhw = Gf.Make (Hardcaml.Signal)
+module Controller = struct
+  module Gf = Gf.Make (Hardcaml.Signal)
 
-module Address_controller = struct
   module I = struct
     type 'a t =
       { clock : 'a
@@ -27,6 +27,8 @@ module Address_controller = struct
       ; m : 'a [@bits logn]
       ; addr1 : 'a [@bits logn]
       ; addr2 : 'a [@bits logn]
+      ; omega : 'a [@bits Gf.num_bits]
+      ; start_twiddles : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -42,7 +44,6 @@ module Address_controller = struct
 
   let create _scope (inputs : _ I.t) =
     let open Signal in
-    let module Gf = Gf.Make (Signal) in
     let spec = Reg_spec.create ~clock:inputs.clock ~clear:inputs.clear () in
     let sm = Always.State_machine.create (module State) spec in
     let done_ = Var.reg (Reg_spec.override spec ~clear_to:vdd) ~width:1 in
@@ -56,14 +57,12 @@ module Address_controller = struct
     let k_next = k.value +: m_next in
     let addr1 = Var.reg spec ~width:logn in
     let addr2 = Var.reg spec ~width:logn in
-    let _omega =
-      List.init logn ~f:(fun i -> Gf.to_bits Gf.omega.(i + 1))
-      |> mux i.value
-      |> Gf.of_bits
-    in
+    let omega = List.init logn ~f:(fun i -> Gf.to_bits Gf.omega.(i + 1)) |> mux i.value in
+    let start_twiddles = Var.reg spec ~width:1 in
     Always.(
       compile
-        [ sm.switch
+        [ start_twiddles <--. 0
+        ; sm.switch
             [ ( Idle
               , [ when_
                     inputs.start
@@ -74,6 +73,7 @@ module Address_controller = struct
                     ; addr1 <--. 0
                     ; addr2 <--. 1
                     ; done_ <--. 0
+                    ; start_twiddles <--. 1
                     ; sm.set_next Looping
                     ]
                 ] )
@@ -85,6 +85,7 @@ module Address_controller = struct
                   when_
                     (j_next ==: m.value)
                     [ j <--. 0
+                    ; start_twiddles <--. 1
                     ; k <-- k_next
                     ; addr1 <-- k_next
                     ; addr2 <-- k_next +: m.value
@@ -106,8 +107,72 @@ module Address_controller = struct
     ; m = m.value
     ; addr1 = addr1.value
     ; addr2 = addr2.value
+    ; omega
+    ; start_twiddles = start_twiddles.value
     }
   ;;
+end
+
+(* Butterly and twiddle factor calculation *)
+module Datapath = struct
+  open Signal
+  module Gf = Gf.Make (Hardcaml.Signal)
+
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; clear : 'a
+      ; d1 : 'a [@bits Gf.num_bits]
+      ; d2 : 'a [@bits Gf.num_bits]
+      ; omega : 'a [@bits Gf.num_bits]
+      ; start_twiddle : 'a [@bits Gf.num_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { q1 : 'a [@bits Gf.num_bits]
+      ; q2 : 'a [@bits Gf.num_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  let ( *: ) a b = Gf.( *: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let ( +: ) a b = Gf.( +: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let ( -: ) a b = Gf.( -: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let twiddle_factor (i : _ I.t) w = mux2 i.start_twiddle Gf.(to_bits one) (w *: i.omega)
+
+  let create _scope (i : _ I.t) =
+    (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
+    let w = wire Gf.num_bits in
+    w <== twiddle_factor i w;
+    let t = i.d2 *: w in
+    { O.q1 = i.d1 +: t; q2 = i.d1 -: t }
+  ;;
+end
+
+module Hardware = struct
+  open Signal
+  module Gf = Gf.Make (Hardcaml.Signal)
+
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; clear : 'a
+      ; start : 'a
+      ; d1 : 'a [@bits Gf.num_bits]
+      ; d2 : 'a [@bits Gf.num_bits]
+      }
+  end
+
+  module O = struct
+    type 'a t =
+      { q1 : 'a [@bits Gf.num_bits]
+      ; q2 : 'a [@bits Gf.num_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
 end
 
 module Reference = struct
@@ -135,13 +200,17 @@ module Reference = struct
     else (
       (* XXX aray: Remove. For debugging the address controller. *)
       (* Stdio.printf "%i %i %i %i\n" i j k m; *)
-      (* Stdio.printf "%i %i\n" (k + j) (j + k + m); *)
-      let t = input.(k + j + m) in
-      let t = Gf.(t *: w) in
-      let tmp = input.(k + j) in
-      let tmp = Gf.(tmp -: t) in
-      input.(k + j + m) <- tmp;
-      input.(k + j) <- Gf.(input.(k + j) +: t);
+      (* Stdio.printf *)
+      (*   "%i %i [%s / %s]\n" *)
+      (*   (k + j) *)
+      (*   (j + k + m) *)
+      (*   (Gf.to_z w_m |> Z.to_string) *)
+      (*   (Gf.to_z w |> Z.to_string); *)
+      let t1 = input.(k + j) in
+      let t2 = input.(k + j + m) in
+      let t = Gf.(t2 *: w) in
+      input.(k + j) <- Gf.(t1 +: t);
+      input.(k + j + m) <- Gf.(t1 -: t);
       loop3 ~input ~i ~j:(j + 1) ~k ~m ~w:Gf.(w *: w_m) ~w_m)
   ;;
 
