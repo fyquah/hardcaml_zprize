@@ -1,0 +1,28 @@
+(rule
+ (targets specialized_45x45_multiplier.v)
+ (deps ../../bin/generate/verilog.exe)
+ (action
+  (run
+   %{deps}
+   specialized-45x45-multiplier
+   -o
+   specialized_45x45_multiplier.v)))
+
+; Runs vivado to generate output reports.
+
+(rule
+ (alias build-fpga)
+ (targets post_synth_utilization.rpt post_synth_timing.rpt)
+ (deps
+  specialized_45x45_multiplier.v
+  specialized_45x45_multiplier.xdc
+  ../../../scripts/run_vivado.tcl)
+ (action
+  (run
+   vivado
+   -mode
+   batch
+   -source
+   ../../../scripts/run_vivado.tcl
+   -tclargs
+   specialized_45x45_multiplier)))

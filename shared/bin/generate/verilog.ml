@@ -61,6 +61,41 @@ let flag_multiplier_config =
   half, full
 ;;
 
+let command_specialized_45x45_multiplier =
+  let module I = struct
+    type 'a t =
+      { clock : 'a
+      ; x : 'a [@bits 45]
+      ; y : 'a [@bits 45]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+  in
+  let module O = struct
+    type 'a t = { z : 'a [@bits 45] } [@@deriving sexp_of, hardcaml]
+  end
+  in
+  Command.basic
+    ~summary:"specialized 45x45 bit multiplier"
+    (let%map_open.Command filename = flag_filename in
+     fun () ->
+       let create { I.clock; x; y } =
+         { O.z =
+             Ground_multiplier.create
+               ~clock
+               ~enable:Signal.vdd
+               ~config:Specialized_45_bit_multiply
+               x
+               y
+         }
+       in
+       let scope = Scope.create () in
+       let module C = Circuit.With_interface (I) (O) in
+       let database = Scope.circuit_database scope in
+       let circuit = C.create_exn ~name:"specialized_45x45_multiplier" create in
+       Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
+;;
+
 let command_karatsuba_ofman_mult =
   Command.basic
     ~summary:"karatsuba-ofman-mult"
@@ -209,7 +244,8 @@ let command_point_double =
 ;;
 
 let () =
-  [ "karatsuba-ofman-mult", command_karatsuba_ofman_mult
+  [ "specialized-45x45-multiplier", command_specialized_45x45_multiplier
+  ; "karatsuba-ofman-mult", command_karatsuba_ofman_mult
   ; "montgomery-mult", command_montgomery_mult
   ; "point-double", command_point_double
   ]
