@@ -1,12 +1,13 @@
 (rule
- (targets specialized_45x45_multiplier.v)
+ (targets verilog_43x43_multiplier.v)
  (deps ../../bin/generate/verilog.exe)
  (action
   (run
    %{deps}
-   specialized-45x45-multiplier
+   verilog-43x43-multiplier
+   -latency 3
    -o
-   specialized_45x45_multiplier.v)))
+   verilog_43x43_multiplier.v)))
 
 ; Runs vivado to generate output reports.
 
@@ -14,8 +15,8 @@
  (alias build-fpga)
  (targets post_synth_utilization.rpt post_synth_timing.rpt)
  (deps
-  specialized_45x45_multiplier.v
-  specialized_45x45_multiplier.xdc
+  verilog_43x43_multiplier.v
+  verilog_43x43_multiplier.xdc
   ../../../scripts/run_vivado.tcl)
  (action
   (run
@@ -25,4 +26,4 @@
    -source
    ../../../scripts/run_vivado.tcl
    -tclargs
-   specialized_45x45_multiplier)))
+   verilog_43x43_multiplier)))

@@ -52,21 +52,21 @@ let%expect_test "" =
   [%expect {| 101 * 0 = 0 |}]
 ;;
 
-let test_45x45 f =
+let test_43x43 f =
   let generate =
-    let%map.Quickcheck.Generator a = generate_z ~width:45
-    and b = generate_z ~width:45 in
+    let%map.Quickcheck.Generator a = generate_z ~width:43
+    and b = generate_z ~width:43 in
     a, b
   in
-  let i45 = Bits.of_int ~width:45 in
+  let i43 = Bits.of_int ~width:43 in
   let test_and_print a b =
-    let result = Bits.to_int (f (i45 a) (i45 b)) in
+    let result = Bits.to_int (f (i43 a) (i43 b)) in
     Stdio.printf "%d * %d = %d\n\n" a b result
   in
   test_and_print 101 0;
   Quickcheck.test ~trials:100_000 generate ~f:(fun (a, b) ->
-      let a = Bits.of_z ~width:45 a in
-      let b = Bits.of_z ~width:45 b in
+      let a = Bits.of_z ~width:43 a in
+      let b = Bits.of_z ~width:43 b in
       let result = f a b in
       let expected = Bits.( *: ) a b in
       if not (Bits.equal result expected)
@@ -82,6 +82,6 @@ let test_45x45 f =
 
 let%expect_test "" =
   let open Snarks_r_fun.Ground_multiplier.For_testing in
-  test_45x45 (fun a b -> specialized_45_bit_multiply (module Bits) a b);
+  test_43x43 (fun a b -> specialized_43_bit_multiply (module Bits) a b);
   [%expect {| 101 * 0 = 0 |}]
 ;;

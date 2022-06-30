@@ -1,0 +1,28 @@
+(rule
+ (targets specialized_43x43_multiplier.v)
+ (deps ../../bin/generate/verilog.exe)
+ (action
+  (run
+   %{deps}
+   specialized-43x43-multiplier
+   -o
+   specialized_43x43_multiplier.v)))
+
+; Runs vivado to generate output reports.
+
+(rule
+ (alias build-fpga)
+ (targets post_synth_utilization.rpt post_synth_timing.rpt)
+ (deps
+  specialized_43x43_multiplier.v
+  specialized_43x43_multiplier.xdc
+  ../../../scripts/run_vivado.tcl)
+ (action
+  (run
+   vivado
+   -mode
+   batch
+   -source
+   ../../../scripts/run_vivado.tcl
+   -tclargs
+   specialized_43x43_multiplier)))

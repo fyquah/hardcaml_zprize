@@ -14,6 +14,21 @@ module Ec_fpn_dbl = Ec_fpn_dbl.With_interface (struct
   let bits = 377
 end)
 
+module Multiply_43x43 = struct
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; x : 'a [@bits 43]
+      ; y : 'a [@bits 43]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t = { z : 'a [@bits 86] } [@@deriving sexp_of, hardcaml]
+  end
+end
+
 let flag_filename =
   Command.Param.(
     flag
@@ -61,30 +76,18 @@ let flag_multiplier_config =
   half, full
 ;;
 
-let command_specialized_45x45_multiplier =
-  let module I = struct
-    type 'a t =
-      { clock : 'a
-      ; x : 'a [@bits 45]
-      ; y : 'a [@bits 45]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-  in
-  let module O = struct
-    type 'a t = { z : 'a [@bits 45] } [@@deriving sexp_of, hardcaml]
-  end
-  in
+let command_specialized_43x43_multiplier =
   Command.basic
-    ~summary:"specialized 45x45 bit multiplier"
+    ~summary:"specialized 43x43 bit multiplier"
     (let%map_open.Command filename = flag_filename in
      fun () ->
+       let open Multiply_43x43 in
        let create { I.clock; x; y } =
          { O.z =
              Ground_multiplier.create
                ~clock
                ~enable:Signal.vdd
-               ~config:Specialized_45_bit_multiply
+               ~config:Specialized_43_bit_multiply
                x
                y
          }
@@ -92,7 +95,31 @@ let command_specialized_45x45_multiplier =
        let scope = Scope.create () in
        let module C = Circuit.With_interface (I) (O) in
        let database = Scope.circuit_database scope in
-       let circuit = C.create_exn ~name:"specialized_45x45_multiplier" create in
+       let circuit = C.create_exn ~name:"specialized_43x43_multiplier" create in
+       Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
+;;
+
+let command_verilog_43x43_multiplier =
+  Command.basic
+    ~summary:"Verilog 43x43 bit multiplier"
+    (let%map_open.Command filename = flag_filename
+     and latency = flag "latency" (required int) ~doc:"" in
+     fun () ->
+       let open Multiply_43x43 in
+       let create { I.clock; x; y } =
+         { O.z =
+             Ground_multiplier.create
+               ~clock
+               ~enable:Signal.vdd
+               ~config:(Verilog_multiply { latency })
+               x
+               y
+         }
+       in
+       let scope = Scope.create () in
+       let module C = Circuit.With_interface (I) (O) in
+       let database = Scope.circuit_database scope in
+       let circuit = C.create_exn ~name:"verilog_43x43_multiplier" create in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
 ;;
 
@@ -244,7 +271,8 @@ let command_point_double =
 ;;
 
 let () =
-  [ "specialized-45x45-multiplier", command_specialized_45x45_multiplier
+  [ "specialized-43x43-multiplier", command_specialized_43x43_multiplier
+  ; "verilog-43x43-multiplier", command_verilog_43x43_multiplier
   ; "karatsuba-ofman-mult", command_karatsuba_ofman_mult
   ; "montgomery-mult", command_montgomery_mult
   ; "point-double", command_point_double
