@@ -13,7 +13,7 @@ type test_case =
   ; pivot : Bits.t
   }
 
-let test_multiplier_implementation f =
+let test_24x7 f =
   let generate =
     let%map.Quickcheck.Generator big = generate_z ~width:24
     and pivot = generate_z ~width:7 in
@@ -41,13 +41,47 @@ let test_multiplier_implementation f =
 ;;
 
 let%expect_test "" =
-  test_multiplier_implementation (fun { big; pivot } ->
+  test_24x7 (fun { big; pivot } ->
       long_multiplication_with_addition (module Bits) ~pivot big);
   [%expect {| 101 * 0 = 0 |}]
 ;;
 
 let%expect_test "" =
-  test_multiplier_implementation (fun { big; pivot } ->
+  test_24x7 (fun { big; pivot } ->
       long_multiplication_with_subtraction (module Bits) ~pivot big);
+  [%expect {| 101 * 0 = 0 |}]
+;;
+
+let test_45x45 f =
+  let generate =
+    let%map.Quickcheck.Generator a = generate_z ~width:45
+    and b = generate_z ~width:45 in
+    a, b
+  in
+  let i45 = Bits.of_int ~width:45 in
+  let test_and_print a b =
+    let result = Bits.to_int (f (i45 a) (i45 b)) in
+    Stdio.printf "%d * %d = %d\n\n" a b result
+  in
+  test_and_print 101 0;
+  Quickcheck.test ~trials:100_000 generate ~f:(fun (a, b) ->
+      let a = Bits.of_z ~width:45 a in
+      let b = Bits.of_z ~width:45 b in
+      let result = f a b in
+      let expected = Bits.( *: ) a b in
+      if not (Bits.equal result expected)
+      then
+        raise_s
+          [%message
+            "Multiplication result mismatch!"
+              (a : Bits.t)
+              (b : Bits.t)
+              (result : Bits.t)
+              (expected : Bits.t)])
+;;
+
+let%expect_test "" =
+  let open Snarks_r_fun.Ground_multiplier.For_testing in
+  test_45x45 (fun a b -> specialized_45_bit_multiply (module Bits) a b);
   [%expect {| 101 * 0 = 0 |}]
 ;;

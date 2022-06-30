@@ -140,21 +140,6 @@ let long_multiplication_with_subtraction
     (uresize big output_width :: subtraction_terms)
 ;;
 
-let hybrid_dsp_and_luts_umul a b =
-  assert (Signal.width a = Signal.width b);
-  let w = Signal.width a in
-  if w <= 17
-  then a *: b
-  else (
-    let smaller = a *: b.:[16, 0] in
-    let bigger =
-      long_multiplication_with_addition (module Signal) ~pivot:(drop_bottom b 17) a
-    in
-    let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
-    assert (width result = width a + width b);
-    result)
-;;
-
 type abs_diff =
   { sign : Signal.t
   ; value : Signal.t
@@ -217,15 +202,7 @@ and create_ground_multiplier ~clock ~enable ~config a b =
   | _ -> create_ground_multiplier_non_constant ~clock ~enable ~config a b
 
 and create_ground_multiplier_non_constant ~clock ~enable ~config a b =
-  let spec = Reg_spec.create ~clock () in
-  let pipeline ~n x = pipeline ~n spec ~enable x in
-  match config with
-  | Ground_multiplier.Config.Verilog_multiply { latency } -> pipeline ~n:latency (a *: b)
-  | Ground_multiplier.Config.Hybrid_dsp_and_luts { latency } ->
-    (* TODO(fyquah): either annotate this with backwards retiming, or
-     * balance the register stages better.
-     *)
-    pipeline ~n:latency (hybrid_dsp_and_luts_umul a b)
+  Ground_multiplier.create ~clock ~enable ~config a b
 
 and create_karatsuba_ofman_stage
     ~scope
@@ -334,6 +311,7 @@ and create_karatsuba_ofman_stage_radix_3
   +: sll (p22 +: p11 +: p00 -: d20) (2 * part_width)
   +: sll (p11 +: p00 -: d10) part_width
   +: p00
+  |> Fn.flip uresize (2 * wx)
   |> reg
   |> Fn.flip ( -- ) "out"
 ;;
