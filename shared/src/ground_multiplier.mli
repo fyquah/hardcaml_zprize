@@ -19,5 +19,11 @@ val create
   -> Signal.t
 
 module For_testing : sig
+  val long_multiplication_with_addition
+    :  (module Comb.S with type t = 'a)
+    -> pivot:'a
+    -> 'a
+    -> 'a
+
   val specialized_43_bit_multiply : (module Comb.S with type t = 'a) -> 'a -> 'a -> 'a
 end

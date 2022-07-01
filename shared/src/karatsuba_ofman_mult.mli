@@ -48,17 +48,3 @@ end) : sig
 
   val create : config:Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end
-
-module For_testing : sig
-  val long_multiplication_with_addition
-    :  (module Comb.S with type t = 'a)
-    -> pivot:'a
-    -> 'a
-    -> 'a
-
-  val long_multiplication_with_subtraction
-    :  (module Comb.S with type t = 'a)
-    -> pivot:'a
-    -> 'a
-    -> 'a
-end

@@ -1,6 +1,6 @@
 open Core
 open Hardcaml
-open Snarks_r_fun.Karatsuba_ofman_mult.For_testing
+open Snarks_r_fun.Ground_multiplier.For_testing
 
 let generate_z ~width =
   Quickcheck.Generator.map
@@ -46,12 +46,6 @@ let%expect_test "" =
   [%expect {| 101 * 0 = 0 |}]
 ;;
 
-let%expect_test "" =
-  test_24x7 (fun { big; pivot } ->
-      long_multiplication_with_subtraction (module Bits) ~pivot big);
-  [%expect {| 101 * 0 = 0 |}]
-;;
-
 let test_43x43 f =
   let generate =
     let%map.Quickcheck.Generator a = generate_z ~width:43
@@ -60,10 +54,18 @@ let test_43x43 f =
   in
   let i43 = Bits.of_int ~width:43 in
   let test_and_print a b =
-    let result = Bits.to_int (f (i43 a) (i43 b)) in
-    Stdio.printf "%d * %d = %d\n\n" a b result
+    let result = Bits.to_z ~signedness:Unsigned (f (i43 a) (i43 b)) in
+    Stdio.printf
+      "%d * %d = 0x%s %s\n\n"
+      a
+      b
+      (Z.format "x" result)
+      (if Z.equal result (Z.( * ) (Z.of_int a) (Z.of_int b))
+      then "CORRECT"
+      else "INCORRECT")
   in
   test_and_print 101 0;
+  test_and_print ((1 lsl 43) - 1) ((1 lsl 43) - 1);
   Quickcheck.test ~trials:100_000 generate ~f:(fun (a, b) ->
       let a = Bits.of_z ~width:43 a in
       let b = Bits.of_z ~width:43 b in
@@ -81,7 +83,9 @@ let test_43x43 f =
 ;;
 
 let%expect_test "" =
-  let open Snarks_r_fun.Ground_multiplier.For_testing in
   test_43x43 (fun a b -> specialized_43_bit_multiply (module Bits) a b);
-  [%expect {| 101 * 0 = 0 |}]
+  [%expect {|
+    101 * 0 = 0x0 CORRECT
+
+    8796093022207 * 8796093022207 = 0x3ffffffffff00000000001 CORRECT |}]
 ;;
