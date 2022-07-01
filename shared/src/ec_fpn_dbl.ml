@@ -36,10 +36,6 @@ module Config = struct
   let square_latency ~reduce (t : t) =
     t.square.latency + if reduce then t.reduce.latency else 0
   ;;
-
-  let subtract_and_reduce_latency (t : t) =
-    Modulo_subtractor_pipe.latency ~stages:subtractor_stages + t.reduce.latency
-  ;;
 end
 
 let double_pipe ~twice_width ~scope ~latency ~(config : Config.t) ~clock ~enable a =
@@ -62,14 +58,6 @@ let triple_pipe ~scope ~latency ~(config : Config.t) ~clock ~enable a =
   a
   |> Modulo_triple_pipe.hierarchical ~scope ~stages ~p:config.p ~clock ~enable
   |> pipeline spec ~enable ~n:(latency config - Modulo_triple_pipe.latency ~stages)
-;;
-
-let fourfold_pipe ~scope ~latency ~(config : Config.t) ~clock ~enable a =
-  let stages = adder_stages in
-  let spec = Reg_spec.create ~clock () in
-  a
-  |> Modulo_fourfold_pipe.hierarchical ~scope ~stages ~p:config.p ~clock ~enable
-  |> pipeline spec ~enable ~n:(latency config - Modulo_fourfold_pipe.latency ~stages)
 ;;
 
 let sub_pipe ~latency ~(config : Config.t) ~clock ~enable a b =
@@ -101,22 +89,6 @@ let square ~reduce ~latency ~(config : Config.t) ~scope ~clock ~enable subscope 
   |> pipeline spec ~enable ~n:(latency config - Config.square_latency ~reduce config)
 ;;
 
-let subtract_and_reduce ~latency ~(config : Config.t) ~scope ~clock ~enable subscope a b =
-  let logr = Z.log2up config.p in
-  let scope = Scope.sub_scope scope subscope in
-  let spec = Reg_spec.create ~clock () in
-  let this_latency = Config.subtract_and_reduce_latency config in
-  Modulo_subtractor_pipe.create
-    ~clock
-    ~enable
-    ~stages:subtractor_stages
-    ~p:Z.(config.p lsl logr)
-    a
-    b
-  |> Fn.flip (config.reduce.impl ~scope ~clock ~enable) None
-  |> pipeline spec ~n:(latency config - this_latency) ~enable
-;;
-
 module Jacobian = struct
   type 'a t =
     { x : 'a
@@ -142,17 +114,14 @@ module Stage1 = struct
   type 'a t =
     { y_squared : 'a
     ; x_squared : 'a
-    ; y_times_z : 'a
-    ; x_times_4 : 'a
+    ; x : 'a
+    ; y : 'a
+    ; z : 'a
     ; valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
 
-  let latency (config : Config.t) =
-    Config.multiply_latency ~reduce:true config
-    |> Int.max (Modulo_fourfold_pipe.latency ~stages:adder_stages)
-    |> Int.max (Config.square_latency ~reduce:true config)
-  ;;
+  let latency (config : Config.t) = Config.square_latency ~reduce:true config
 
   let create
       ~scope
@@ -164,13 +133,12 @@ module Stage1 = struct
     let scope = Scope.sub_scope scope "stage1" in
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline spec ~n:(latency config) ~enable in
-    let multiply = multiply ~latency ~config ~scope ~clock ~enable in
     let square = square ~latency ~config ~scope ~clock ~enable in
-    let fourfold_pipe = fourfold_pipe ~scope ~latency ~config ~clock ~enable in
     { y_squared = square ~reduce:true "y_squared" y
     ; x_squared = square ~reduce:true "x_squared" x
-    ; y_times_z = multiply ~reduce:true "y_times_z" y z
-    ; x_times_4 = fourfold_pipe x
+    ; x = pipe x
+    ; y = pipe y
+    ; z = pipe z
     ; valid = pipe valid_in
     }
     |> map2 port_names ~f:(Fn.flip (Scope.naming scope))
@@ -179,97 +147,55 @@ end
 
 module Stage2 = struct
   type 'a t =
-    { y_pow_4 : 'a
+    { y_squared_times_2 : 'a
     ; m : 'a
-    ; s : 'a
-    ; z' : 'a
+    ; x_times_2 : 'a
+    ; y : 'a
+    ; z : 'a
     ; valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
 
-  let latency (config : Config.t) =
-    Config.multiply_latency ~reduce:true config
-    |> Int.max (Config.square_latency ~reduce:true config)
-    |> Int.max (Modulo_triple_pipe.latency ~stages:adder_stages)
-  ;;
+  let latency _ = Modulo_triple_pipe.latency ~stages:adder_stages
 
   let create
       ~scope
       ~clock
       ~enable
       (config : Config.t)
-      { Stage1.y_squared; x_squared; x_times_4; y_times_z; valid }
+      { Stage1.y_squared; x_squared; x; y; z; valid }
     =
+    let scope = Scope.sub_scope scope "stage2" in
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline spec ~n:(latency config) ~enable in
-    let multiply = multiply ~latency ~config ~scope ~clock ~enable in
-    let square = square ~latency ~config ~scope ~clock ~enable in
-    let triple_pipe = triple_pipe ~scope ~latency ~config ~clock ~enable in
     let double_pipe = double_pipe ~scope ~latency ~config ~clock ~enable in
-    { y_pow_4 =
-        (* Delay running montgomery reduction on y^4 to a later stage.
-         *)
-        square ~reduce:false "y_pow_4" y_squared
+    let triple_pipe = triple_pipe ~scope ~latency ~config ~clock ~enable in
+    { y_squared_times_2 = double_pipe ~twice_width:false y_squared
+    ; x_times_2 = double_pipe ~twice_width:false x
     ; m = triple_pipe x_squared
-    ; s = multiply ~reduce:true "s" x_times_4 y_squared
-    ; z' = double_pipe ~twice_width:false y_times_z
+    ; y = pipe y
+    ; z = pipe z
     ; valid = pipe valid
     }
-    |> map2 port_names ~f:(Fn.flip (Scope.naming (Scope.sub_scope scope "stage2")))
+    |> map2 port_names ~f:(Fn.flip (Scope.naming scope))
   ;;
 end
 
 module Stage3 = struct
   type 'a t =
-    { y_pow_4_times_2 : 'a
-    ; s_times_2 : 'a
-    ; m_pow_2 : 'a
+    { y_pow_4_times_4 : 'a
     ; m : 'a
+    ; m_squared : 'a
+    ; y_times_z : 'a
     ; s : 'a
-    ; z' : 'a
     ; valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
 
   let latency (config : Config.t) =
-    Config.multiply_latency ~reduce:true config
-    |> Int.max (Config.square_latency ~reduce:true config)
-    |> Int.max (Modulo_double_pipe.latency ~stages:adder_stages)
-  ;;
-
-  let create ~scope ~clock ~enable (config : Config.t) { Stage2.y_pow_4; m; s; z'; valid }
-    =
-    let spec = Reg_spec.create ~clock () in
-    let pipe = pipeline ~n:(latency config) ~enable spec in
-    let square = square ~latency ~config ~scope ~clock ~enable in
-    let double_pipe = double_pipe ~scope ~latency ~config ~clock ~enable in
-    { y_pow_4_times_2 = double_pipe ~twice_width:true y_pow_4
-    ; s_times_2 = double_pipe ~twice_width:false s
-    ; m_pow_2 = square ~reduce:true "m_pow_2" m
-    ; m = pipe m
-    ; s = pipe s
-    ; z' = pipe z'
-    ; valid = pipe valid
-    }
-    |> map2 port_names ~f:(Fn.flip (Scope.naming (Scope.sub_scope scope "stage3")))
-  ;;
-end
-
-module Stage4 = struct
-  type 'a t =
-    { x' : 'a
-    ; z' : 'a
-    ; m : 'a
-    ; y_pow_4_times_4 : 'a
-    ; s : 'a
-    ; valid : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-
-  let latency (_ : Config.t) =
     Int.max
-      (Modulo_subtractor_pipe.latency ~stages:subtractor_stages)
-      (Modulo_double_pipe.latency ~stages:adder_stages)
+      (Config.multiply_latency ~reduce:true config)
+      (Config.square_latency ~reduce:true config)
   ;;
 
   let create
@@ -277,17 +203,54 @@ module Stage4 = struct
       ~clock
       ~enable
       (config : Config.t)
-      { Stage3.y_pow_4_times_2; s_times_2; m_pow_2; s; z'; m; valid }
+      { Stage2.y_squared_times_2; m; x_times_2; y; z; valid }
+    =
+    let scope = Scope.sub_scope scope "stage3" in
+    let spec = Reg_spec.create ~clock () in
+    let pipe = pipeline spec ~n:(latency config) ~enable in
+    let square = square ~latency ~config ~scope ~clock ~enable in
+    let multiply = multiply ~latency ~config ~scope ~clock ~enable in
+    { y_pow_4_times_4 = square ~reduce:true "y_pow_4_times_4" y_squared_times_2
+    ; m_squared = square ~reduce:true "m_squared" m
+    ; y_times_z = multiply ~reduce:true "y_times_z" y z
+    ; s = multiply ~reduce:true "s" y_squared_times_2 x_times_2
+    ; m = pipe m
+    ; valid = pipe valid
+    }
+    |> map2 port_names ~f:(Fn.flip (Scope.naming scope))
+  ;;
+end
+
+module Stage4 = struct
+  type 'a t =
+    { m_squared : 'a
+    ; m : 'a
+    ; s_times_2 : 'a
+    ; z' : 'a
+    ; s : 'a
+    ; y_pow_4_times_8 : 'a
+    ; valid : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+
+  let latency _ = Modulo_double_pipe.latency ~stages:adder_stages
+
+  let create
+      ~scope
+      ~clock
+      ~enable
+      (config : Config.t)
+      { Stage3.y_pow_4_times_4; m_squared; y_times_z; s; m; valid }
     =
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline ~n:(latency config) ~enable spec in
-    let sub_pipe = sub_pipe ~latency ~config ~enable ~clock in
     let double_pipe = double_pipe ~scope ~latency ~config ~clock ~enable in
-    { x' = sub_pipe m_pow_2 s_times_2
+    { m_squared = pipe m_squared
     ; m = pipe m
+    ; s_times_2 = double_pipe ~twice_width:false s
+    ; z' = double_pipe ~twice_width:false y_times_z
+    ; y_pow_4_times_8 = double_pipe ~twice_width:false y_pow_4_times_4
     ; s = pipe s
-    ; z' = pipe z'
-    ; y_pow_4_times_4 = double_pipe ~twice_width:true y_pow_4_times_2
     ; valid = pipe valid
     }
     |> map2 port_names ~f:(Fn.flip (Scope.naming (Scope.sub_scope scope "stage4")))
@@ -296,37 +259,32 @@ end
 
 module Stage5 = struct
   type 'a t =
-    { m : 'a
-    ; s_minus_x' : 'a
-    ; y_pow_4_times_8 : 'a
-    ; x' : 'a
+    { x' : 'a
     ; z' : 'a
+    ; s : 'a
+    ; m : 'a
+    ; y_pow_4_times_8 : 'a
     ; valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
 
-  let latency (_ : Config.t) =
-    Int.max
-      (Modulo_subtractor_pipe.latency ~stages:subtractor_stages)
-      (Modulo_double_pipe.latency ~stages:adder_stages)
-  ;;
+  let latency _ = Modulo_subtractor_pipe.latency ~stages:subtractor_stages
 
   let create
       ~scope
       ~clock
       ~enable
       (config : Config.t)
-      { Stage4.s; x'; z'; m; y_pow_4_times_4; valid }
+      { Stage4.m_squared; s_times_2; z'; y_pow_4_times_8; valid; s; m }
     =
     let spec = Reg_spec.create ~clock () in
-    let pipe = pipeline spec ~n:(latency config) ~enable in
-    let sub_pipe = sub_pipe ~latency ~config ~clock ~enable in
-    let double_pipe = double_pipe ~scope ~latency ~config ~clock ~enable in
-    { s_minus_x' = sub_pipe s x'
-    ; m = pipe m
-    ; y_pow_4_times_8 = double_pipe ~twice_width:true y_pow_4_times_4
-    ; x' = pipe x'
+    let pipe = pipeline ~n:(latency config) ~enable spec in
+    let sub_pipe = sub_pipe ~latency ~config ~enable ~clock in
+    { x' = sub_pipe m_squared s_times_2
     ; z' = pipe z'
+    ; s = pipe s
+    ; m = pipe m
+    ; y_pow_4_times_8 = pipe y_pow_4_times_8
     ; valid = pipe valid
     }
     |> map2 port_names ~f:(Fn.flip (Scope.naming (Scope.sub_scope scope "stage5")))
@@ -335,77 +293,90 @@ end
 
 module Stage6 = struct
   type 'a t =
-    { m_times_s_minus_x' : 'a
-    ; y_pow_4_times_8 : 'a
-    ; x' : 'a
+    { x' : 'a
     ; z' : 'a
+    ; m : 'a
+    ; s_minus_x' : 'a
+    ; y_pow_4_times_8 : 'a
     ; valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
 
-  let latency (config : Config.t) = Config.multiply_latency ~reduce:false config
+  let latency _ = Modulo_subtractor_pipe.latency ~stages:subtractor_stages
 
   let create
       ~scope
       ~clock
       ~enable
       (config : Config.t)
-      { Stage5.s_minus_x'; m; y_pow_4_times_8; x'; z'; valid }
+      { Stage5.x'; z'; s; m; valid; y_pow_4_times_8 }
     =
-    let scope = Scope.sub_scope scope "stage6" in
     let spec = Reg_spec.create ~clock () in
-    let pipe = pipeline spec ~n:(latency config) ~enable in
-    let multiply = multiply ~latency ~config ~scope ~clock ~enable in
-    { m_times_s_minus_x' =
-        (* Delay running montgomery reduction on [m * (s - x')] to a later
-         * stage.
-         *)
-        multiply ~reduce:false "m_times_s_minus_x'" m s_minus_x'
-    ; y_pow_4_times_8 = pipe y_pow_4_times_8
-    ; x' = pipe x'
+    let pipe = pipeline ~n:(latency config) ~enable spec in
+    let sub_pipe = sub_pipe ~latency ~config ~enable ~clock in
+    { x' = pipe x'
     ; z' = pipe z'
+    ; s_minus_x' = sub_pipe s x'
+    ; m = pipe m
+    ; y_pow_4_times_8 = pipe y_pow_4_times_8
     ; valid = pipe valid
     }
-    |> map2 port_names ~f:(Fn.flip (Scope.naming scope))
+    |> map2 port_names ~f:(Fn.flip (Scope.naming (Scope.sub_scope scope "stage6")))
   ;;
 end
 
 module Stage7 = struct
   type 'a t =
-    { valid_out : 'a [@rtlname "valid"]
-    ; data_out : 'a Jacobian.t
+    { x' : 'a
+    ; z' : 'a
+    ; m_times_s_minus_x' : 'a
+    ; y_pow_4_times_8 : 'a
+    ; valid : 'a
     }
-  [@@deriving sexp_of, hardcaml]
 
-  let latency (config : Config.t) = Config.subtract_and_reduce_latency config
+  let latency (config : Config.t) = Config.multiply_latency ~reduce:true config
 
   let create
       ~scope
       ~clock
       ~enable
       (config : Config.t)
-      { Stage6.m_times_s_minus_x'; y_pow_4_times_8; x'; z'; valid }
-      : _ t
+      { Stage6.x'; z'; m; s_minus_x'; y_pow_4_times_8; valid }
     =
     let spec = Reg_spec.create ~clock () in
-    let pipe = pipeline spec ~n:(latency config) ~enable in
+    let pipe = pipeline ~n:(latency config) ~enable spec in
+    let multiply = multiply ~latency ~config ~scope ~clock ~enable in
+    { x' = pipe x'
+    ; z' = pipe z'
+    ; m_times_s_minus_x' = multiply ~reduce:true "m_times_s_minus_x'" m s_minus_x'
+    ; y_pow_4_times_8 = pipe y_pow_4_times_8
+    ; valid = pipe valid
+    }
+  ;;
+end
+
+module Stage8 = struct
+  type 'a t =
+    { data_out : 'a Jacobian.t
+    ; valid_out : 'a
+    }
+
+  let latency _ = Modulo_subtractor_pipe.latency ~stages:subtractor_stages
+
+  let create
+      ~scope:_
+      ~clock
+      ~enable
+      (config : Config.t)
+      { Stage7.x'; z'; m_times_s_minus_x'; y_pow_4_times_8; valid }
+    =
+    let spec = Reg_spec.create ~clock () in
+    let pipe = pipeline ~n:(latency config) ~enable spec in
+    let sub_pipe = sub_pipe ~latency ~config ~enable ~clock in
     { data_out =
-        { x = pipe x'
-        ; y =
-            subtract_and_reduce
-              ~latency
-              ~config
-              ~clock
-              ~enable
-              ~scope
-              "y"
-              m_times_s_minus_x'
-              y_pow_4_times_8
-        ; z = pipe z'
-        }
+        { x = pipe x'; y = sub_pipe m_times_s_minus_x' y_pow_4_times_8; z = pipe z' }
     ; valid_out = pipe valid
     }
-    |> map2 port_names ~f:(Fn.flip (Scope.naming (Scope.sub_scope scope "stage7")))
   ;;
 end
 
@@ -417,6 +388,7 @@ let latency config =
   + Stage5.latency config
   + Stage6.latency config
   + Stage7.latency config
+  + Stage8.latency config
 ;;
 
 module With_interface (M : sig
@@ -456,7 +428,7 @@ struct
 
   let create ~(config : Config.t) (scope : Scope.t) { I.clock; enable; valid_in; data_in }
     =
-    let { Stage7.valid_out; data_out } =
+    let { Stage8.valid_out; data_out } =
       Stage0.name scope { valid_in; data_in }
       |> Stage1.create ~clock ~enable ~scope config
       |> Stage2.create ~clock ~enable ~scope config
@@ -465,6 +437,7 @@ struct
       |> Stage5.create ~clock ~enable ~scope config
       |> Stage6.create ~clock ~enable ~scope config
       |> Stage7.create ~clock ~enable ~scope config
+      |> Stage8.create ~clock ~enable ~scope config
     in
     { O.data_out; valid_out }
   ;;
