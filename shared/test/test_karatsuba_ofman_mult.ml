@@ -159,7 +159,7 @@ let test config =
           ();
       if not (Z.equal expected obtained)
       then (
-        let sexp_of_z z = Sexp.Atom (Z.to_string z) in
+        let sexp_of_z = Utils.sexp_of_z in
         raise_s
           [%message
             "Result mismatch"
@@ -190,5 +190,16 @@ let config_3_stages_with_mixed_radixes =
 
 let%expect_test "Large multiplier with mixed radix" =
   test config_3_stages_with_mixed_radixes;
+  [%expect {||}]
+;;
+
+let config_2_stages_with_radix_3 =
+  Karatsuba_ofman_mult.Config.generate
+    ~ground_multiplier:(Verilog_multiply { latency = 1 })
+    [ Radix_3; Radix_3 ]
+;;
+
+let%expect_test "Large multiplier with only radix 3" =
+  test config_2_stages_with_radix_3;
   [%expect {||}]
 ;;

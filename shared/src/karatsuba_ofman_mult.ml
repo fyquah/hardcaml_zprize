@@ -206,7 +206,7 @@ and create_karatsuba_ofman_stage_radix_3
   let pipeline ~n x = if Signal.is_const x then x else pipeline ~enable spec x ~n in
   let part_width = Int.round_up ~to_multiple_of:3 (width x) / 3 in
   let split3 xs =
-    match split_msb ~exact:false ~part_width xs with
+    match List.rev (split_lsb ~exact:false ~part_width xs) with
     | [ a; b; c ] -> uresize a part_width, uresize b part_width, uresize c part_width
     | _ -> assert false
   in
