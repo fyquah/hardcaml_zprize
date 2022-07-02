@@ -1,5 +1,5 @@
 (library
  (name snarks_r_fun)
- (libraries base hardcaml)
+ (libraries base hardcaml ark_bls12_377_g1)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))

@@ -141,16 +141,6 @@ let command_montgomery_mult =
   Command.basic
     ~summary:"montgomery-mult"
     (let%map_open.Command ground_multiplier = flag_ground_multiplier
-     and adder_depth =
-       flag
-         "adder-depth"
-         (optional_with_default 3 int)
-         ~doc:" Depth of adder stage in montgomery mult. Defaults to 3"
-     and subtractor_depth =
-       flag
-         "subtractor-depth"
-         (optional_with_default 3 int)
-         ~doc:" Depth of subtractor in montgomery mult. Defaults to 3"
      and squarer = flag "squarer" no_arg ~doc:" Generate RTL for squarer instead"
      and filename = flag_filename in
      fun () ->
@@ -174,15 +164,7 @@ let command_montgomery_mult =
                         ~ground_multiplier
                         [ Radix_2; Radix_3; Radix_3 ]))
              ; montgomery_reduction_config =
-                 { half_multiplier_config =
-                     { level_radices = [ Radix_2; Radix_3; Radix_3 ]; ground_multiplier }
-                 ; multiplier_config =
-                     Karatsuba_ofman_mult.Config.generate
-                       ~ground_multiplier
-                       [ Radix_2; Radix_3; Radix_3 ]
-                 ; adder_depth
-                 ; subtractor_depth
-                 }
+                 Config_presets.For_bls12_377.montgomery_reduction_config
              }
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
@@ -195,78 +177,17 @@ let command_montgomery_mult =
 let command_point_double =
   Command.basic
     ~summary:"point double"
-    (let%map_open.Command adder_depth =
-       flag
-         "adder-depth"
-         (optional_with_default 3 int)
-         ~doc:" Depth of adder stage in montgomery mult. Defaults to 3"
-     and subtractor_depth =
-       flag
-         "subtractor-depth"
-         (optional_with_default 3 int)
-         ~doc:" Depth of subtractor in montgomery mult. Defaults to 3"
-     and filename = flag_filename in
+    (let%map_open.Command filename = flag_filename in
      fun () ->
        let module M = Ec_fpn_dbl in
        let module C = Circuit.With_interface (M.I) (M.O) in
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
-       let p = Ark_bls12_377_g1.modulus () in
-       let reduce : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
-         let config =
-           { Montgomery_reduction.Config.multiplier_config =
-               Karatsuba_ofman_mult.Config.generate
-                 ~ground_multiplier:(Verilog_multiply { latency = 3 })
-                 [ Radix_3; Radix_3 ]
-           ; half_multiplier_config =
-               { level_radices = [ Radix_3; Radix_3; Radix_2 ]
-               ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
-               }
-           ; adder_depth
-           ; subtractor_depth
-           }
-         in
-         let latency = Montgomery_reduction.Config.latency config in
-         let impl ~scope ~clock ~enable x y =
-           assert (Option.is_none y);
-           Montgomery_reduction.hierarchical ~config ~p ~scope ~clock ~enable x
-         in
-         { impl; latency }
-       in
-       let square : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
-         let config =
-           { Squarer.Config.level_radices = [ Radix_3; Radix_3; Radix_2 ]
-           ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
-           }
-         in
-         let latency = Squarer.Config.latency config in
-         let impl ~scope ~clock ~enable x y =
-           assert (Option.is_none y);
-           Squarer.hierarchical ~config ~clock ~enable ~scope x
-         in
-         { impl; latency }
-       in
-       let multiply : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
-         let config =
-           Karatsuba_ofman_mult.Config.generate
-             [ Radix_3; Radix_3 ]
-             ~ground_multiplier:Specialized_43_bit_multiply
-         in
-         let latency = Karatsuba_ofman_mult.Config.latency config in
-         let impl ~scope ~clock ~enable x y =
-           Karatsuba_ofman_mult.hierarchical
-             ~enable
-             ~config
-             ~scope
-             ~clock
-             x
-             (`Signal (Option.value_exn y))
-         in
-         { latency; impl }
-       in
        let circuit =
-         M.create ~config:{ multiply; square; reduce; p } scope
-         |> C.create_exn ~name:"point_double"
+         let config =
+           Config_presets.For_bls12_377.point_double_with_montgomery_reduction
+         in
+         M.create ~config scope |> C.create_exn ~name:"point_double"
        in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
 ;;

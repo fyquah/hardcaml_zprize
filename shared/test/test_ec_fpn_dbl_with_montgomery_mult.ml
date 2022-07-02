@@ -6,61 +6,11 @@ module Montgomery_mult = Montgomery_mult.With_interface (struct
   let bits = 377
 end)
 
-let reduce : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
-  let config =
-    { Montgomery_reduction.Config.multiplier_config =
-        Test_karatsuba_ofman_mult.config_four_stages
-    ; half_multiplier_config =
-        { level_radices = [ Radix_3; Radix_3 ]
-        ; ground_multiplier = Specialized_43_bit_multiply
-        }
-    ; adder_depth = 3
-    ; subtractor_depth = 3
-    }
-  in
-  let latency = Montgomery_reduction.Config.latency config in
-  let impl ~scope ~clock ~enable x y =
-    assert (Option.is_none y);
-    Montgomery_reduction.hierarchical ~config ~p ~scope ~clock ~enable x
-  in
-  { impl; latency }
-;;
-
-let square : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
-  let config =
-    { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
-    ; ground_multiplier = Verilog_multiply { latency = 1 }
-    }
-  in
-  let latency = Squarer.Config.latency config in
-  let impl ~scope ~clock ~enable x y =
-    assert (Option.is_none y);
-    Squarer.hierarchical ~config ~clock ~enable ~scope x
-  in
-  { impl; latency }
-;;
-
-let multiply : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
-  let config = Test_karatsuba_ofman_mult.config_four_stages in
-  let latency = Karatsuba_ofman_mult.Config.latency config in
-  let impl ~scope ~clock ~enable x y =
-    Karatsuba_ofman_mult.hierarchical
-      ~enable
-      ~config
-      ~scope
-      ~clock
-      x
-      (`Signal (Option.value_exn y))
-  in
-  { latency; impl }
-;;
-
-let config = { Config.multiply; square; reduce; p }
-let latency = Ec_fpn_dbl.latency config
+let config = Config_presets.For_bls12_377.point_double_with_montgomery_reduction
 
 let%expect_test "latency" =
-  Stdio.printf "latency = %d\n" latency;
-  [%expect {| latency = 113 |}]
+  Stdio.printf "latency = %d\n" (Ec_fpn_dbl.latency config);
+  [%expect {| latency = 109 |}]
 ;;
 
 let with_waves = false

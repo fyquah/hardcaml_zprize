@@ -35,11 +35,7 @@ let compute_software_model ~p ~a =
 ;;
 
 let%expect_test _ =
-  let config =
-    { Config.multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
-    ; subtracter_stages = 3
-    }
-  in
+  let config = Config_presets.For_bls12_377.barrett_reduction_config in
   let p = Ark_bls12_377_g1.modulus () in
   let random_bigint () =
     Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((p - one) * (p - one))

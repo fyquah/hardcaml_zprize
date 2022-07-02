@@ -1,56 +1,13 @@
 open Core
-open Hardcaml
 open Snarks_r_fun
 open Test_ec_fpn_dbl
 
-let reduce : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
-  let config =
-    { Barrett_reduction.Config.multiplier_config =
-        Test_karatsuba_ofman_mult.config_four_stages
-    ; subtracter_stages = 3
-    }
-  in
-  let impl ~scope ~clock ~enable mult_value y =
-    assert (Option.is_none y);
-    let { With_valid.valid = _; value } =
-      Barrett_reduction.hierarchical
-        ~scope
-        ~p
-        ~clock
-        ~enable
-        ~config
-        { valid = Signal.vdd; value = mult_value }
-    in
-    value
-  in
-  let latency = Barrett_reduction.Config.latency config in
-  { impl; latency }
-;;
-
-let multiply_or_square : Config.fn =
-  let config = Test_karatsuba_ofman_mult.config_four_stages in
-  let latency = Karatsuba_ofman_mult.Config.latency config in
-  let impl ~scope ~clock ~enable a b =
-    Karatsuba_ofman_mult.hierarchical
-      ~enable
-      ~scope
-      ~config
-      ~clock
-      a
-      (`Signal (Option.value ~default:a b))
-  in
-  { impl; latency }
-;;
-
-let config =
-  { Config.multiply = multiply_or_square; square = multiply_or_square; reduce; p }
-;;
-
+let config = Config_presets.For_bls12_377.point_double_with_barrett_reduction
 let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =
   Stdio.printf "latency = %d\n" latency;
-  [%expect {| latency = 119 |}]
+  [%expect {| latency = 106 |}]
 ;;
 
 let%expect_test "Test on random test cases" =

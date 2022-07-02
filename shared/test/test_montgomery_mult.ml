@@ -72,14 +72,7 @@ let%expect_test _ =
     { Montgomery_mult.Config.multiplier_config =
         `Multiplier Test_karatsuba_ofman_mult.config_four_stages
     ; montgomery_reduction_config =
-        { multiplier_config = Test_karatsuba_ofman_mult.config_four_stages
-        ; half_multiplier_config =
-            { level_radices = [ Radix_2; Radix_2; Radix_2; Radix_2 ]
-            ; ground_multiplier = Verilog_multiply { latency = 1 }
-            }
-        ; adder_depth = 1
-        ; subtractor_depth = 1
-        }
+        Config_presets.For_bls12_377.montgomery_reduction_config
     }
   in
   let test_cases =
