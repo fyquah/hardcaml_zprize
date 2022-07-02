@@ -60,14 +60,24 @@ let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =
   Stdio.printf "latency = %d\n" latency;
-  [%expect {| latency = 111 |}]
+  [%expect {| latency = 113 |}]
 ;;
+
+let with_waves = false
 
 let%expect_test "Test on some test cases" =
   Random.init 123;
+  let waves, sim =
+    let sim = create_sim config in
+    if with_waves
+    then (
+      let waves, sim = Hardcaml_waveterm.Waveform.create sim in
+      Some waves, sim)
+    else None, sim
+  in
   test
     ~config
-    ~sim:(create_sim config)
+    ~sim
     ~montgomery:true
     (List.concat
        [ (* Handcrafted test cases. *)
@@ -82,5 +92,7 @@ let%expect_test "Test on some test cases" =
              Ark_bls12_377_g1.mul gen ~by)
        ]
     |> List.map ~f:affine_to_jacobian);
-  [%expect {| (Ok ()) |}]
+  [%expect {| (Ok ()) |}];
+  Option.iter waves ~f:(fun waves ->
+      Hardcaml_waveterm.Waveform.Serialize.marshall waves "a.hardcamlwaveform.Z")
 ;;
