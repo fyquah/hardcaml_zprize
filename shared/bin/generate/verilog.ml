@@ -195,8 +195,7 @@ let command_montgomery_mult =
 let command_point_double =
   Command.basic
     ~summary:"point double"
-    (let%map_open.Command ground_multiplier = flag_ground_multiplier
-     and adder_depth =
+    (let%map_open.Command adder_depth =
        flag
          "adder-depth"
          (optional_with_default 3 int)
@@ -217,10 +216,12 @@ let command_point_double =
          let config =
            { Montgomery_reduction.Config.multiplier_config =
                Karatsuba_ofman_mult.Config.generate
-                 ~ground_multiplier
-                 [ Radix_2; Radix_3; Radix_3 ]
+                 ~ground_multiplier:(Verilog_multiply { latency = 3 })
+                 [ Radix_3; Radix_3 ]
            ; half_multiplier_config =
-               { level_radices = [ Radix_2; Radix_3; Radix_3 ]; ground_multiplier }
+               { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+               ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
+               }
            ; adder_depth
            ; subtractor_depth
            }
@@ -234,8 +235,8 @@ let command_point_double =
        in
        let square : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
          let config =
-           { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
-           ; ground_multiplier
+           { Squarer.Config.level_radices = [ Radix_3; Radix_3; Radix_2 ]
+           ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
            }
          in
          let latency = Squarer.Config.latency config in
@@ -248,8 +249,8 @@ let command_point_double =
        let multiply : Snarks_r_fun.Ec_fpn_dbl.Config.fn =
          let config =
            Karatsuba_ofman_mult.Config.generate
-             ~ground_multiplier
-             [ Radix_2; Radix_3; Radix_3 ]
+             [ Radix_3; Radix_3 ]
+             ~ground_multiplier:Specialized_43_bit_multiply
          in
          let latency = Karatsuba_ofman_mult.Config.latency config in
          let impl ~scope ~clock ~enable x y =
