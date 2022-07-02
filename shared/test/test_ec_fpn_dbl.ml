@@ -50,6 +50,7 @@ let jacobian_to_affine ({ Jacobian.x; y; z } : Z.t Jacobian.t) =
   Ark_bls12_377_g1.create ~x ~y ~infinity:false
 ;;
 
+let ( <--. ) dst src = dst := Bits.of_int ~width:(Bits.width !dst) src
 let compute_expected jacobian = Ark_bls12_377_g1.mul (jacobian_to_affine jacobian) ~by:2
 
 let affine_to_jacobian point =
@@ -108,11 +109,22 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
       let of_z a =
         Bits.of_z ~width:377 (if montgomery then transform_to_montgomery a else a)
       in
+      let rec cycle_until_ready () =
+        if Bits.is_gnd !(outputs.ready_in)
+        then (
+          cycle ();
+          cycle_until_ready ())
+      in
+      cycle_until_ready ();
       inputs.valid_in := Bits.vdd;
       inputs.data_in.x := of_z x;
       inputs.data_in.y := of_z y;
       inputs.data_in.z := of_z z;
-      cycle ());
+      cycle ();
+      inputs.valid_in <--. 0;
+      inputs.data_in.x <--. 0;
+      inputs.data_in.y <--. 0;
+      inputs.data_in.z <--. 0);
   inputs.valid_in := Bits.gnd;
   inputs.data_in.x := Bits.zero 377;
   inputs.data_in.y := Bits.zero 377;

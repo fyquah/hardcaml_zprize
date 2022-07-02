@@ -49,7 +49,8 @@ end) : sig
 
   module O : sig
     type 'a t =
-      { valid_out : 'a
+      { ready_in : 'a
+      ; valid_out : 'a
       ; data_out : 'a Jacobian.t
       }
     [@@deriving sexp_of, hardcaml]

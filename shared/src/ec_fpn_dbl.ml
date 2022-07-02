@@ -78,17 +78,6 @@ let multiply ~reduce ~latency ~(config : Config.t) ~scope ~clock ~enable subscop
   |> pipeline spec ~enable ~n:(latency config - Config.multiply_latency ~reduce config)
 ;;
 
-let square ~reduce ~latency ~(config : Config.t) ~scope ~clock ~enable subscope a =
-  let spec = Reg_spec.create ~clock () in
-  let scope = Scope.sub_scope scope subscope in
-  let maybe_reduce x =
-    if reduce then config.reduce.impl ~scope ~clock ~enable x None else x
-  in
-  config.square.impl ~scope ~clock ~enable a None
-  |> maybe_reduce
-  |> pipeline spec ~enable ~n:(latency config - Config.square_latency ~reduce config)
-;;
-
 module Jacobian = struct
   type 'a t =
     { x : 'a
@@ -110,6 +99,67 @@ module Stage0 = struct
   ;;
 end
 
+let create_beat ~clock ~enable valid_in =
+  reg_fb (Reg_spec.create ~clock ()) ~width:1 ~enable ~f:(fun fb ->
+      mux2 (fb ==:. 1) gnd valid_in)
+;;
+
+let arbitrate_square
+    ~(config : Config.t)
+    ~scope
+    ~enable
+    ~clock
+    ~beat
+    ~latency_without_arbitration
+    x1
+    x2
+  =
+  let spec = Reg_spec.create ~clock () in
+  let reg = reg ~enable spec in
+  let square_input = mux2 (beat ==:. 0) x1 (reg x2) in
+  let scope = Scope.sub_scope scope "square" in
+  let reduce x = config.reduce.impl ~scope ~clock ~enable x None in
+  let squarer_output =
+    config.square.impl ~scope ~clock ~enable square_input None
+    |> reduce
+    |> pipeline
+         spec
+         ~enable
+         ~n:
+           (latency_without_arbitration config - Config.square_latency ~reduce:true config)
+  in
+  reg squarer_output, squarer_output
+;;
+
+let arbitrate_multiply
+    ~(config : Config.t)
+    ~scope
+    ~enable
+    ~clock
+    ~beat
+    ~latency_without_arbitration
+    (x1, y1)
+    (x2, y2)
+  =
+  let spec = Reg_spec.create ~clock () in
+  let reg = reg ~enable spec in
+  let x = mux2 (beat ==:. 0) x1 (reg x2) in
+  let y = mux2 (beat ==:. 0) y1 (reg y2) in
+  let scope = Scope.sub_scope scope "multiply" in
+  let reduce x = config.reduce.impl ~scope ~clock ~enable x None in
+  let multiply_output =
+    config.multiply.impl ~scope ~clock ~enable x (Some y)
+    |> reduce
+    |> pipeline
+         spec
+         ~enable
+         ~n:
+           (latency_without_arbitration config
+           - Config.multiply_latency ~reduce:true config)
+  in
+  reg multiply_output, multiply_output
+;;
+
 module Stage1 = struct
   type 'a t =
     { y_squared : 'a
@@ -121,7 +171,11 @@ module Stage1 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let latency (config : Config.t) = Config.square_latency ~reduce:true config
+  let latency_without_arbitration (config : Config.t) =
+    Config.square_latency ~reduce:true config
+  ;;
+
+  let latency (config : Config.t) = latency_without_arbitration config + 1
 
   let create
       ~scope
@@ -132,15 +186,20 @@ module Stage1 = struct
     =
     let scope = Scope.sub_scope scope "stage1" in
     let spec = Reg_spec.create ~clock () in
+    let beat = create_beat ~clock ~enable valid_in in
     let pipe = pipeline spec ~n:(latency config) ~enable in
-    let square = square ~latency ~config ~scope ~clock ~enable in
-    { y_squared = square ~reduce:true "y_squared" y
-    ; x_squared = square ~reduce:true "x_squared" x
-    ; x = pipe x
-    ; y = pipe y
-    ; z = pipe z
-    ; valid = pipe valid_in
-    }
+    let y_squared, x_squared =
+      arbitrate_square
+        ~config
+        ~scope
+        ~clock
+        ~enable
+        ~beat
+        ~latency_without_arbitration
+        y
+        x
+    in
+    { y_squared; x_squared; x = pipe x; y = pipe y; z = pipe z; valid = pipe valid_in }
     |> map2 port_names ~f:(Fn.flip (Scope.naming scope))
   ;;
 end
@@ -192,11 +251,13 @@ module Stage3 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let latency (config : Config.t) =
+  let latency_without_arbitration (config : Config.t) =
     Int.max
       (Config.multiply_latency ~reduce:true config)
       (Config.square_latency ~reduce:true config)
   ;;
+
+  let latency (config : Config.t) = latency_without_arbitration config + 1
 
   let create
       ~scope
@@ -207,16 +268,31 @@ module Stage3 = struct
     =
     let scope = Scope.sub_scope scope "stage3" in
     let spec = Reg_spec.create ~clock () in
+    let beat = create_beat ~clock ~enable valid in
     let pipe = pipeline spec ~n:(latency config) ~enable in
-    let square = square ~latency ~config ~scope ~clock ~enable in
-    let multiply = multiply ~latency ~config ~scope ~clock ~enable in
-    { y_pow_4_times_4 = square ~reduce:true "y_pow_4_times_4" y_squared_times_2
-    ; m_squared = square ~reduce:true "m_squared" m
-    ; y_times_z = multiply ~reduce:true "y_times_z" y z
-    ; s = multiply ~reduce:true "s" y_squared_times_2 x_times_2
-    ; m = pipe m
-    ; valid = pipe valid
-    }
+    let y_pow_4_times_4, m_squared =
+      arbitrate_square
+        ~config
+        ~scope
+        ~clock
+        ~enable
+        ~beat
+        ~latency_without_arbitration
+        y_squared_times_2
+        m
+    in
+    let y_times_z, s =
+      arbitrate_multiply
+        ~config
+        ~scope
+        ~clock
+        ~enable
+        ~beat
+        ~latency_without_arbitration
+        (y, z)
+        (y_squared_times_2, x_times_2)
+    in
+    { y_pow_4_times_4; m_squared; y_times_z; s; m = pipe m; valid = pipe valid }
     |> map2 port_names ~f:(Fn.flip (Scope.naming scope))
   ;;
 end
@@ -420,7 +496,8 @@ struct
 
   module O = struct
     type 'a t =
-      { valid_out : 'a [@rtlprefix "out_"]
+      { ready_in : 'a
+      ; valid_out : 'a [@rtlprefix "out_"]
       ; data_out : 'a Jacobian.t [@rtlprefix "out_"]
       }
     [@@deriving sexp_of, hardcaml]
@@ -428,8 +505,12 @@ struct
 
   let create ~(config : Config.t) (scope : Scope.t) { I.clock; enable; valid_in; data_in }
     =
+    let ready_in =
+      Signal.reg_fb (Reg_spec.create ~clock ()) ~width:1 ~f:(fun fb ->
+          mux2 (fb ==:. 0) vdd ~:valid_in)
+    in
     let { Stage8.valid_out; data_out } =
-      Stage0.name scope { valid_in; data_in }
+      Stage0.name scope { valid_in = valid_in &: ready_in; data_in }
       |> Stage1.create ~clock ~enable ~scope config
       |> Stage2.create ~clock ~enable ~scope config
       |> Stage3.create ~clock ~enable ~scope config
@@ -439,6 +520,6 @@ struct
       |> Stage7.create ~clock ~enable ~scope config
       |> Stage8.create ~clock ~enable ~scope config
     in
-    { O.data_out; valid_out }
+    { O.data_out; valid_out; ready_in }
   ;;
 end
