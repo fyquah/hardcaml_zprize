@@ -1,0 +1,5 @@
+(library
+ (name hardcaml_axi)
+ (libraries base hardcaml)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

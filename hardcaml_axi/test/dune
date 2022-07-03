@@ -1,0 +1,6 @@
+(library
+ (name hardcaml_axi_test)
+ (libraries core hardcaml hardcaml_axi hardcaml_waveterm)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))
