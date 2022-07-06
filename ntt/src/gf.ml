@@ -24,7 +24,6 @@ module Make (Bits : Comb.S) = struct
   let mult_mask = of_int64 ~width:num_bits 0xFFFF_FFFF_FFFF_FFFFL
   let is_normalized x = Uop.(x <: modulus)
   let to_canonical x = mux2 (is_normalized x) x (x -: modulus)
-  let of_int64 x = Bits.of_int64 ~width:num_bits x |> to_canonical
   let of_z z = Z.erem z modulus_z |> Bits.of_z ~width:64
   let to_z = Bits.to_z ~signedness:Unsigned
 
@@ -124,20 +123,24 @@ module Make (Bits : Comb.S) = struct
     mux2 (msb res) (res +: ue modulus) res |> lsbs
   ;;
 
-  let mul left right =
-    let res = left *: right in
+  let mul ?(pipe = Fn.id) left right =
+    let res = left *: right |> pipe in
     let t0 = Uop.(res.:[63, 0] -: res.:[127, 96]) in
-    let t0 = underflow t0 in
-    let t1 = res.:[95, 64] *: epsilon.:[32, 0] in
+    let t0 = underflow t0 |> pipe in
+    let t1 =
+      let r = res.:[95, 64] in
+      Uop.((r @: Bits.zero 32) -: r) |> pipe
+    in
     let final = t0 +: t1 in
-    mux2 (final >=: ue modulus) (final -: ue modulus) final |> lsbs
+    mux2 (final >=: ue modulus) (final -: ue modulus) final |> lsbs |> pipe
   ;;
 
   let to_bits t = t
+  let of_bits t = t
   let negate x = mux2 (x ==:. 0) x (modulus -: to_canonical x)
   let ( +: ) = add
   let ( -: ) = sub
-  let ( *: ) = mul
+  let ( *: ) a b = mul a b
 end
 
 module Z = struct
