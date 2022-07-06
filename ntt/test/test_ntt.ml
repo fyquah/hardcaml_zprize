@@ -73,16 +73,16 @@ let%expect_test "8pt random" =
   [%expect {| |}]
 ;;
 
-(* let%expect_test "4096pt linear" = *)
-(*   test *)
-(*     (linear 4096) *)
-(*     [| "0x0000000000000003" *)
-(*      ; "0xe586a3342b3bf96c" *)
-(*      ; "0x0ca769003b43919f" *)
-(*      ; "0x28b1a9691a680e3c" *)
-(*      ; "0x3b1e55b017fdb2e4" *)
-(*      ; "0x309d8a339a00ae6a" *)
-(*      ; "0xdc13ebf6fd47c483" *)
-(*      ; "0xc12decfb84bb920e" *)
-(*     |] *)
-(* ;; *)
+let%expect_test "4096pt linear" =
+  test
+    (linear 4096)
+    [| "0x0000000000000003"
+     ; "0xe586a3342b3bf96c"
+     ; "0x0ca769003b43919f"
+     ; "0x28b1a9691a680e3c"
+     ; "0x3b1e55b017fdb2e4"
+     ; "0x309d8a339a00ae6a"
+     ; "0xdc13ebf6fd47c483"
+     ; "0xc12decfb84bb920e"
+    |]
+;;

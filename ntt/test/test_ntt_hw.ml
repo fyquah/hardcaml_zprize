@@ -1,11 +1,12 @@
 open! Base
 open Hardcaml
 open Hardcaml_waveterm
+open Expect_test_helpers_base
 
 let%expect_test "addressing" =
   let module Ntt = Ntts_r_fun.Ntt.Controller in
   let module Sim = Cyclesim.With_interface (Ntt.I) (Ntt.O) in
-  let sim = Sim.create (Ntt.create (Scope.create ())) in
+  let sim = Sim.create (Ntt.create (Scope.create ~flatten_design:true ())) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   inputs.clear := Bits.vdd;
@@ -60,108 +61,139 @@ let%expect_test "addressing" =
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
-let%expect_test "top" =
-  let module Ntt = Ntts_r_fun.Ntt.Hardware in
-  let module Gf = Ntts_r_fun.Gf.Make (Bits) in
+module Ntt = Ntts_r_fun.Ntt.With_rams
+module Gf = Ntts_r_fun.Gf.Make (Bits)
+
+let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+
+let inverse_ntt_test ~waves input_coefs =
   let module Sim = Cyclesim.With_interface (Ntt.I) (Ntt.O) in
-  let sim = Sim.create ~config:Cyclesim.Config.trace_all (Ntt.create (Scope.create ())) in
-  let waves, sim = Waveform.create sim in
+  let sim =
+    Sim.create
+      ~config:Cyclesim.Config.trace_all
+      (Ntt.create
+         (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
+  in
+  let waves, sim =
+    if waves
+    then (
+      let waves, sim = Waveform.create sim in
+      Some waves, sim)
+    else None, sim
+  in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   inputs.clear := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.clear := Bits.gnd;
-  inputs.start := Bits.vdd;
   Cyclesim.cycle sim;
-  inputs.start := Bits.gnd;
-  let linear n =
-    Array.init n ~f:(function
-        | 0 -> Gf.one
-        | 1 -> Gf.two
-        | _ -> Gf.zero)
-  in
-  let coefs = linear 8 |> Array.map ~f:Gf.to_bits in
-  let addr1_in = ref 0 in
-  let addr2_in = ref 0 in
-  for _ = 0 to 14 do
-    inputs.d1 := coefs.(!addr1_in);
-    inputs.d2 := coefs.(!addr2_in);
-    addr1_in := Bits.to_int !(outputs.addr1_in);
-    addr2_in := Bits.to_int !(outputs.addr2_in);
-    Cyclesim.cycle sim;
-    if Bits.to_bool !(outputs.write_enable_out)
-    then (
-      let addr1_out = Bits.to_int !(outputs.addr1_out) in
-      let addr2_out = Bits.to_int !(outputs.addr2_out) in
-      let q1 = !(outputs.q1) in
-      let q2 = !(outputs.q2) in
-      coefs.(addr1_out) <- q1;
-      coefs.(addr2_out) <- q2)
+  (* load the ram *)
+  inputs.wr_en <-- 1;
+  Array.iteri input_coefs ~f:(fun addr coef ->
+      inputs.wr_addr <-- addr;
+      inputs.wr_d := coef;
+      Cyclesim.cycle sim);
+  inputs.wr_en <-- 0;
+  (* start the core *)
+  inputs.start <-- 1;
+  Cyclesim.cycle sim;
+  inputs.start <-- 0;
+  (* poll for done *)
+  while not (Bits.to_bool !(outputs.done_)) do
+    Cyclesim.cycle sim
   done;
+  (* flush *)
+  for _ = 0 to 1 do
+    Cyclesim.cycle sim
+  done;
+  (* Read results *)
+  let result = Array.create ~len:8 Gf.zero in
+  inputs.rd_en <-- 1;
+  inputs.rd_addr <-- 0;
+  Cyclesim.cycle sim;
+  for i = 1 to 8 do
+    inputs.rd_addr <-- i;
+    result.(i - 1) <- Gf.of_bits !(outputs.rd_q);
+    Cyclesim.cycle sim
+  done;
+  inputs.rd_en <-- 0;
+  for _ = 0 to 11 do
+    Cyclesim.cycle sim
+  done;
+  waves, result
+;;
+
+let print_waves =
   Waveform.print
-    ~display_height:54
+    ~display_height:150
     ~wave_width:1
-    ~display_width:90
+    ~display_width:160
     ~display_rules:
       [ Display_rule.port_name_matches
           Re.Posix.(compile (re ".*"))
-          ~wave_format:Unsigned_int
+          ~wave_format:(Bit_or Unsigned_int)
       ]
-    waves;
+;;
+
+let%expect_test "8pt linear" =
+  let waves, result =
+    inverse_ntt_test
+      ~waves:false
+      (Array.init 8 ~f:(function
+           | 0 -> Gf.one
+           | 1 -> Gf.two
+           | _ -> Gf.zero)
+      |> Array.map ~f:Gf.to_bits)
+  in
+  let result =
+    Array.map result ~f:(fun b ->
+        Gf.to_bits b |> Bits.to_constant |> Constant.to_hex_string ~signedness:Unsigned)
+  in
+  print_s [%message (result : string array)];
+  Option.iter waves ~f:print_waves;
   [%expect
     {|
-    ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────┐
-    │                  ││────┬───────────────────────────────────────────────────────────────│
-    │clear             ││ 1  │0                                                              │
-    │                  ││────┴───────────────────────────────────────────────────────────────│
-    │clock             ││┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ │
-    │                  ││  └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─│
-    │                  ││────────┬───┬───────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────│
-    │d1                ││ 0      │1  │2      │0  │2  │0  │11.│0  │18.│0  │26.│18.│44.│0      │
-    │                  ││────────┴───┴───────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────│
-    │                  ││────────┬───┬───────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────│
-    │d2                ││ 0      │1  │0      │2  │18.│4  │18.│22.│8  │18.│18.│17.│18.│0      │
-    │                  ││────────┴───┴───────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────│
-    │                  ││────┬───┬───────────────────────────────────────────────────────────│
-    │start             ││ 0  │1  │0                                                          │
-    │                  ││────┴───┴───────────────────────────────────────────────────────────│
-    │                  ││────────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────────│
-    │addr1_in          ││ 0          │2  │1  │3  │0  │1  │4  │5  │0  │1  │2  │3  │0          │
-    │                  ││────────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────────│
-    │                  ││────────────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────│
-    │addr1_out         ││ 0              │2  │4  │6  │0  │1  │4  │5  │0  │1  │2  │3  │0      │
-    │                  ││────────────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────│
-    │                  ││────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────────│
-    │addr2_in          ││ 0      │4  │6  │5  │7  │2  │3  │6  │7  │4  │5  │6  │7  │0          │
-    │                  ││────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────────│
-    │                  ││────────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────│
-    │addr2_out         ││ 0          │1  │3  │5  │7  │2  │3  │6  │7  │4  │5  │6  │7  │0      │
-    │                  ││────────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────│
-    │                  ││────────┬───┬───────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────│
-    │q1                ││ 0      │1  │2          │0  │4  │11.│22.│22.│18.│45.│0  │32 │0      │
-    │                  ││────────┴───┴───────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────│
-    │                  ││────────┬───┬───────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────│
-    │q2                ││ 0      │1  │2      │18.│4  │18.│11.│18.│18.│16 │18.│18.│89.│0      │
-    │                  ││────────┴───┴───────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────│
-    │                  ││────┬───┬───────────────────────────────────────────────┬───────────│
-    │read_enable_in    ││ 1  │0  │1                                              │0          │
-    │                  ││────┴───┴───────────────────────────────────────────────┴───────────│
-    │                  ││────────────┬───────────────────────────────────────────────┬───────│
-    │write_enable_out  ││ 0          │1                                              │0      │
-    │                  ││────────────┴───────────────────────────────────────────────┴───────│
-    │                  ││────────────────────────────────────────────────────────────────────│
-    │gnd               ││ 0                                                                  │
-    │                  ││────────────────────────────────────────────────────────────────────│
-    │                  ││────────────┬───────────────────┬───┬───┬───┬───┬───┬───┬───┬───┬───│
-    │twiddle           ││ 0          │1                  │28.│1  │28.│1  │18.│28.│18.│1  │18.│
-    │                  ││────────────┴───────────────────┴───┴───┴───┴───┴───┴───┴───┴───┴───│
-    │                  ││────────────────────────────────────────────────────────────────────│
-    │vdd               ││ 1                                                                  │
-    │                  ││────────────────────────────────────────────────────────────────────│
-    │                  ││                                                                    │
-    │                  ││                                                                    │
-    │                  ││                                                                    │
-    │                  ││                                                                    │
-    │                  ││                                                                    │
-    └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
+    (result (
+      0000000000000003
+      fffffffefe000002
+      0002000000000001
+      fffffdff00000202
+      ffffffff00000000
+      0000000002000001
+      fffdffff00000002
+      000001fffffffe01)) |}]
+;;
+
+let%expect_test "8pt random" =
+  let waves, result =
+    inverse_ntt_test
+      ~waves:false
+      ([| "0xcef967e3e1d0860e"
+        ; "0x44be7570bcd4f9df"
+        ; "0xf4848ed283e858f2"
+        ; "0xa3a3a47eeb6f76f6"
+        ; "0xa12d1d0b69c4108b"
+        ; "0xeb285d19459ef6c3"
+        ; "0x10d812558ad9c103"
+        ; "0xd19d3e319d1b6b4a"
+       |]
+      |> Array.map ~f:(fun z -> Z.of_string z |> Gf.of_z |> Gf.to_bits))
+  in
+  let result =
+    Array.map result ~f:(fun b ->
+        Gf.to_bits b |> Bits.to_constant |> Constant.to_hex_string ~signedness:Unsigned)
+  in
+  print_s [%message (result : string array)];
+  Option.iter waves ~f:print_waves;
+  [%expect
+    {|
+    (result (
+      1aaadb56e555836b
+      975bcb9d395a282f
+      69055db04cf94815
+      963cdab11477cc1c
+      d05b70dbcf57ddad
+      ed14bc2fbdc30962
+      6c8e69de2cabb133
+      9c83c8e1d49cd861)) |}]
 ;;

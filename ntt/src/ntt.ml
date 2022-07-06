@@ -116,6 +116,11 @@ module Controller = struct
     ; first_stage = first_stage.value
     }
   ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"ctrl" ~scope create
+  ;;
 end
 
 (* Butterly and twiddle factor calculation *)
@@ -130,7 +135,7 @@ module Datapath = struct
       ; d1 : 'a [@bits Gf.num_bits]
       ; d2 : 'a [@bits Gf.num_bits]
       ; omega : 'a [@bits Gf.num_bits]
-      ; start_twiddles : 'a [@bits Gf.num_bits]
+      ; start_twiddles : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -158,9 +163,14 @@ module Datapath = struct
     let t = i.d2 *: w in
     { O.q1 = i.d1 +: t; q2 = i.d1 -: t }
   ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"dp" ~scope create
+  ;;
 end
 
-module Hardware = struct
+module Core = struct
   open! Signal
   module Gf = Gf.Make (Hardcaml.Signal)
 
@@ -185,6 +195,8 @@ module Hardware = struct
       ; addr1_out : 'a [@bits logn]
       ; addr2_out : 'a [@bits logn]
       ; write_enable_out : 'a
+      ; first_stage : 'a
+      ; done_ : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -192,12 +204,12 @@ module Hardware = struct
   let create scope (i : _ I.t) =
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let controller =
-      Controller.create
+      Controller.hierarchy
         scope
         { Controller.I.clock = i.clock; clear = i.clear; start = i.start }
     in
     let datapath =
-      Datapath.create
+      Datapath.hierarchy
         scope
         { Datapath.I.clock = i.clock
         ; clear = i.clear
@@ -207,17 +219,139 @@ module Hardware = struct
         ; start_twiddles = controller.start_twiddles
         }
     in
-    let out_pipe = pipeline spec ~n:1 in
-    let reverse addr = mux2 controller.first_stage (reverse addr) addr in
+    let pipe = pipeline spec ~n:1 in
     { O.q1 = datapath.q1
     ; q2 = datapath.q2
-    ; addr1_in = reverse controller.addr1
-    ; addr2_in = reverse controller.addr2
+    ; addr1_in = controller.addr1
+    ; addr2_in = controller.addr2
     ; read_enable_in = ~:(controller.done_)
-    ; addr1_out = controller.addr1 |> out_pipe
-    ; addr2_out = controller.addr2 |> out_pipe
-    ; write_enable_out = ~:(controller.done_) |> out_pipe
+    ; addr1_out = controller.addr1 |> pipe
+    ; addr2_out = controller.addr2 |> pipe
+    ; write_enable_out = ~:(controller.done_) |> pipe
+    ; first_stage = controller.first_stage
+    ; done_ = controller.done_
     }
+  ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"core" ~scope create
+  ;;
+end
+
+module With_rams = struct
+  open! Signal
+  module Gf = Core.Gf
+
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; clear : 'a
+      ; start : 'a
+      ; wr_d : 'a [@bits Gf.num_bits]
+      ; wr_en : 'a
+      ; wr_addr : 'a [@bits logn]
+      ; rd_en : 'a
+      ; rd_addr : 'a [@bits logn]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { done_ : 'a
+      ; rd_q : 'a [@bits Gf.num_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  let input_ram (i : _ I.t) (core : _ Core.O.t) =
+    let q =
+      Ram.create
+        ~name:"input_ram"
+        ~collision_mode:Write_before_read
+        ~size:n
+        ~write_ports:
+          [| { write_clock = i.clock
+             ; write_address = i.wr_addr
+             ; write_data = i.wr_d
+             ; write_enable = i.wr_en
+             }
+          |]
+        ~read_ports:
+          [| { read_clock = i.clock
+             ; read_address = reverse core.addr1_in
+             ; read_enable = core.read_enable_in
+             }
+           ; { read_clock = i.clock
+             ; read_address = reverse core.addr2_in
+             ; read_enable = core.read_enable_in
+             }
+          |]
+        ()
+    in
+    q
+  ;;
+
+  let output_ram (i : _ I.t) (core : _ Core.O.t) =
+    let q =
+      Ram.create
+        ~name:"output_ram"
+        ~collision_mode:Write_before_read
+        ~size:n
+        ~write_ports:
+          [| { write_clock = i.clock
+             ; write_address = core.addr1_out
+             ; write_data = core.q1
+             ; write_enable = core.write_enable_out
+             }
+           ; { write_clock = i.clock
+             ; write_address = core.addr2_out
+             ; write_data = core.q2
+             ; write_enable = core.write_enable_out
+             }
+          |]
+        ~read_ports:
+          [| { read_clock = i.clock
+             ; read_address = core.addr1_in
+             ; read_enable = core.read_enable_in
+             }
+           ; { read_clock = i.clock
+             ; read_address = core.addr2_in
+             ; read_enable = core.read_enable_in
+             }
+           ; { read_clock = i.clock; read_address = i.rd_addr; read_enable = i.rd_en }
+          |]
+        ()
+    in
+    q
+  ;;
+
+  let create scope (i : _ I.t) =
+    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+    let core = Core.O.Of_signal.wires () in
+    (* input and output rams *)
+    let d_in = input_ram i core in
+    let d_out = output_ram i core in
+    (* core *)
+    let piped_first_stage = pipeline spec ~n:1 core.first_stage in
+    Core.O.iter2
+      core
+      (Core.hierarchy
+         scope
+         { clock = i.clock
+         ; clear = i.clear
+         ; start = i.start
+         ; d1 = mux2 piped_first_stage d_in.(0) d_out.(0)
+         ; d2 = mux2 piped_first_stage d_in.(1) d_out.(1)
+         })
+      ~f:( <== );
+    { O.done_ = core.done_; rd_q = d_out.(2) }
+  ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"top" ~scope create
   ;;
 end
 
@@ -240,23 +374,27 @@ module Reference = struct
     loop (zero logn)
   ;;
 
+  let debugging = false
+
   let rec loop3 ~input ~i ~j ~k ~m ~w ~w_m =
     if j >= m
     then ()
     else (
-      (* XXX aray: Remove. For debugging the address controller. *)
-      (* Stdio.printf "%i %i %i %i\n" i j k m; *)
-      (* Stdio.printf *)
-      (*   "%i %i [%s / %s]\n" *)
-      (*   (k + j) *)
-      (*   (j + k + m) *)
-      (*   (Gf.to_z w_m |> Z.to_string) *)
-      (*   (Gf.to_z w |> Z.to_string); *)
       let t1 = input.(k + j) in
       let t2 = input.(k + j + m) in
       let t = Gf.(t2 *: w) in
       input.(k + j) <- Gf.(t1 +: t);
       input.(k + j + m) <- Gf.(t1 -: t);
+      if debugging
+      then
+        Stdio.printf
+          "%i %i %s %s %s %s\n"
+          (k + j)
+          (k + j + m)
+          (Gf.to_z t1 |> Z.to_string)
+          (Gf.to_z t2 |> Z.to_string)
+          (Gf.to_z input.(k + j) |> Z.to_string)
+          (Gf.to_z input.(k + j + m) |> Z.to_string);
       loop3 ~input ~i ~j:(j + 1) ~k ~m ~w:Gf.(w *: w_m) ~w_m)
   ;;
 
