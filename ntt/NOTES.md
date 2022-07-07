@@ -11,6 +11,15 @@ similar to what we want to consider.
 
 -----------------------------------------------
 
+https://eprint.iacr.org/2017/727.pdf
+
+Pseudo code for the Gentleman-Sande INTT, which has more sensible bit reversed
+addressing needs. Also the Cooley-turkey implementation stores and bit reverses
+the W coefs rather than the input from what I can see (though in a forward
+transform admitedly).
+
+-----------------------------------------------
+
 https://github.com/SRI-CSL/NTT
 https://github.com/IBM/optimized-number-theoretic-transform-implementations
 https://github.com/mhostetter/galois
@@ -18,3 +27,4 @@ https://github.com/shakes76/finite-transform-library
 https://github.com/loretanr/NTT-ASL
 
 Various references to be looked at more closely.
+
