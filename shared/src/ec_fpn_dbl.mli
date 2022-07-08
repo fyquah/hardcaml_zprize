@@ -48,10 +48,18 @@ end) : sig
   end
 
   module O : sig
+    module Data : sig
+      type 'a t =
+        { point : 'a Jacobian.t
+        ; z_squared : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
     type 'a t =
       { ready_in : 'a
       ; valid_out : 'a
-      ; data_out : 'a Jacobian.t
+      ; data_out : 'a Data.t
       }
     [@@deriving sexp_of, hardcaml]
   end

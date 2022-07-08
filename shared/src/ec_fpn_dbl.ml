@@ -71,17 +71,6 @@ let sub_pipe ~latency ~(config : Config.t) ~clock ~enable a b =
   |> pipeline spec ~n:(latency config - Modulo_subtractor_pipe.latency ~stages) ~enable
 ;;
 
-let multiply ~reduce ~latency ~(config : Config.t) ~scope ~clock ~enable subscope a b =
-  let spec = Reg_spec.create ~clock () in
-  let scope = Scope.sub_scope scope subscope in
-  let do_reduce x =
-    if reduce then config.reduce.impl ~scope ~clock ~enable x None else x
-  in
-  config.multiply.impl ~scope ~clock ~enable a (Some b)
-  |> do_reduce
-  |> pipeline spec ~enable ~n:(latency config - Config.multiply_latency ~reduce config)
-;;
-
 module Jacobian = struct
   type 'a t =
     { x : 'a
@@ -89,6 +78,13 @@ module Jacobian = struct
     ; z : 'a
     }
   [@@deriving sexp_of, hardcaml]
+end
+
+module O_data = struct
+  type 'a t =
+    { point : 'a Jacobian.t
+    ; z_squared : 'a
+    }
 end
 
 module Stage0 = struct
@@ -403,10 +399,15 @@ module Stage7 = struct
     ; z' : 'a
     ; m_times_s_minus_x' : 'a
     ; y_pow_4_times_8 : 'a
+    ; z'_squared : 'a
     ; valid : 'a
     }
 
-  let latency (config : Config.t) = Config.multiply_latency ~reduce:true config
+  let latency_without_arbitration (config : Config.t) =
+    Config.multiply_latency ~reduce:true config
+  ;;
+
+  let latency (config : Config.t) = latency_without_arbitration config + 1
 
   let create
       ~scope
@@ -417,10 +418,21 @@ module Stage7 = struct
     =
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline ~n:(latency config) ~enable spec in
-    let multiply = multiply ~latency ~config ~scope ~clock ~enable in
+    let m_times_s_minus_x', z'_squared =
+      arbitrate_multiply
+        ~config
+        ~scope
+        ~clock
+        ~enable
+        ~valid
+        ~latency_without_arbitration
+        (m, s_minus_x')
+        (z', z')
+    in
     { x' = pipe x'
     ; z' = pipe z'
-    ; m_times_s_minus_x' = multiply ~reduce:true "m_times_s_minus_x'" m s_minus_x'
+    ; m_times_s_minus_x'
+    ; z'_squared
     ; y_pow_4_times_8 = pipe y_pow_4_times_8
     ; valid = pipe valid
     }
@@ -429,7 +441,7 @@ end
 
 module Stage8 = struct
   type 'a t =
-    { data_out : 'a Jacobian.t
+    { data_out : 'a O_data.t
     ; valid_out : 'a
     }
 
@@ -440,13 +452,16 @@ module Stage8 = struct
       ~clock
       ~enable
       (config : Config.t)
-      { Stage7.x'; z'; m_times_s_minus_x'; y_pow_4_times_8; valid }
+      { Stage7.x'; z'; z'_squared; m_times_s_minus_x'; y_pow_4_times_8; valid }
     =
     let spec = Reg_spec.create ~clock () in
     let pipe = pipeline ~n:(latency config) ~enable spec in
     let sub_pipe = sub_pipe ~latency ~config ~enable ~clock in
     { data_out =
-        { x = pipe x'; y = sub_pipe m_times_s_minus_x' y_pow_4_times_8; z = pipe z' }
+        { point =
+            { x = pipe x'; y = sub_pipe m_times_s_minus_x' y_pow_4_times_8; z = pipe z' }
+        ; z_squared = pipe z'_squared
+        }
     ; valid_out = pipe valid
     }
   ;;
@@ -491,10 +506,18 @@ struct
   end
 
   module O = struct
+    module Data = struct
+      type 'a t = 'a O_data.t =
+        { point : 'a Jacobian.t
+        ; z_squared : 'a [@bits bits]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
     type 'a t =
       { ready_in : 'a
       ; valid_out : 'a [@rtlprefix "out_"]
-      ; data_out : 'a Jacobian.t [@rtlprefix "out_"]
+      ; data_out : 'a Data.t [@rtlprefix "out_"]
       }
     [@@deriving sexp_of, hardcaml]
   end

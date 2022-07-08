@@ -61,6 +61,12 @@ let affine_to_jacobian point =
   { Jacobian.x; y; z }
 ;;
 
+type test_output =
+  { affine_point : Ark_bls12_377_g1.affine
+  ; z : Z.t
+  ; z_squared : Z.t
+  }
+
 let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_inputs =
   let latency = Ec_fpn_dbl.latency config in
   let inputs = Cyclesim.inputs sim in
@@ -96,13 +102,15 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
         let r = Bits.to_z ~signedness:Unsigned r in
         if montgomery then transform_from_montgomery r else r
       in
-      let z = to_z !(outputs.data_out.z) in
-      let x = to_z !(outputs.data_out.x) in
-      let y = to_z !(outputs.data_out.y) in
+      let z = to_z !(outputs.data_out.point.z) in
+      let z_squared = to_z !(outputs.data_out.z_squared) in
+      let x = to_z !(outputs.data_out.point.x) in
+      let y = to_z !(outputs.data_out.point.y) in
       let x = modulo_multiply x (modulo_inverse Z.(z ** 2)) in
       let y = modulo_multiply y (modulo_inverse Z.(z ** 3)) in
       (* TODO(fyquah): Don't assume the test outputs are always non-infinity. *)
-      test_outputs := Ark_bls12_377_g1.create ~x ~y ~infinity:false :: !test_outputs)
+      let affine_point = Ark_bls12_377_g1.create ~x ~y ~infinity:false in
+      test_outputs := { affine_point; z; z_squared } :: !test_outputs)
   in
   inputs.enable := Bits.vdd;
   List.iter test_inputs ~f:(fun { Jacobian.x; y; z } ->
@@ -143,6 +151,7 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
           (len_test_inputs : int)
           (len_test_outputs : int)];
   List.map2_exn test_inputs test_outputs ~f:(fun test_input obtained ->
+      let sexp_of_z z = Sexp.Atom ("0x" ^ Z.format "x" z) in
       if debug
       then (
         let x = test_input.x in
@@ -150,18 +159,27 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
         let z = test_input.z in
         let y_times_z = modulo_multiply y z in
         let x_squared = modulo_multiply x x in
-        let sexp_of_z z = Sexp.Atom ("0x" ^ Z.format "x" z) in
         Stdio.print_s [%message (x : z) (y : z) (z : z) (y_times_z : z) (x_squared : z)]);
       let expected = compute_expected test_input in
-      if [%equal: Ark_bls12_377_g1.affine] obtained expected
-      then Ok ()
-      else
-        Or_error.error_s
-          [%message
-            ""
-              ~input:(test_input : Utils.z Jacobian.t)
-              (obtained : Ark_bls12_377_g1.affine)
-              (expected : Ark_bls12_377_g1.affine)])
+      Or_error.combine_errors_unit
+        [ (if [%equal: Ark_bls12_377_g1.affine] obtained.affine_point expected
+          then Ok ()
+          else
+            Or_error.error_s
+              [%message
+                ""
+                  ~input:(test_input : Utils.z Jacobian.t)
+                  (obtained.affine_point : Ark_bls12_377_g1.affine)
+                  (expected : Ark_bls12_377_g1.affine)])
+        ; (if [%equal: Z.t] (modulo_multiply obtained.z obtained.z) obtained.z_squared
+          then Ok ()
+          else
+            Or_error.error_s
+              [%message
+                "z^2 doesn't match expected!"
+                  ~z:(obtained.z : z)
+                  ~z_squared:(obtained.z_squared : z)])
+        ])
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]
   |> Stdio.print_s
