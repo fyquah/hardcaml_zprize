@@ -29,6 +29,10 @@ module Config = struct
     ; p : Z.t
     }
 
+  let reduce config ~scope ~clock ~enable x =
+    config.reduce.impl ~scope ~clock ~enable x None
+  ;;
+
   let multiply_latency ~reduce (t : t) =
     t.multiply.latency + if reduce then t.reduce.latency else 0
   ;;
@@ -99,36 +103,26 @@ module Stage0 = struct
   ;;
 end
 
-let create_beat ~clock ~enable valid_in =
-  reg_fb (Reg_spec.create ~clock ()) ~width:1 ~enable ~f:(fun fb ->
-      mux2 (fb ==:. 1) gnd valid_in)
-;;
-
 let arbitrate_square
     ~(config : Config.t)
     ~scope
     ~enable
     ~clock
-    ~beat
+    ~valid
     ~latency_without_arbitration
     x1
     x2
   =
-  let spec = Reg_spec.create ~clock () in
-  let reg = reg ~enable spec in
-  let square_input = mux2 (beat ==:. 0) x1 (reg x2) in
   let scope = Scope.sub_scope scope "square" in
-  let reduce x = config.reduce.impl ~scope ~clock ~enable x None in
-  let squarer_output =
-    config.square.impl ~scope ~clock ~enable square_input None
-    |> reduce
-    |> pipeline
-         spec
-         ~enable
-         ~n:
-           (latency_without_arbitration config - Config.square_latency ~reduce:true config)
-  in
-  reg squarer_output, squarer_output
+  Arbitrate.arbitrate2 (x1, x2) ~enable ~clock ~valid ~f:(fun x ->
+      config.square.impl ~scope ~clock ~enable x None
+      |> Config.reduce config ~scope ~clock ~enable
+      |> pipeline
+           (Reg_spec.create ~clock ())
+           ~enable
+           ~n:
+             (latency_without_arbitration config
+             - Config.square_latency ~reduce:true config))
 ;;
 
 let arbitrate_multiply
@@ -136,28 +130,32 @@ let arbitrate_multiply
     ~scope
     ~enable
     ~clock
-    ~beat
+    ~valid
     ~latency_without_arbitration
     (x1, y1)
     (x2, y2)
   =
-  let spec = Reg_spec.create ~clock () in
-  let reg = reg ~enable spec in
-  let x = mux2 (beat ==:. 0) x1 (reg x2) in
-  let y = mux2 (beat ==:. 0) y1 (reg y2) in
+  assert (width y1 = width y2);
+  assert (width x1 = width x2);
+  let wy = width y1 in
+  let wx = width x1 in
   let scope = Scope.sub_scope scope "multiply" in
-  let reduce x = config.reduce.impl ~scope ~clock ~enable x None in
-  let multiply_output =
-    config.multiply.impl ~scope ~clock ~enable x (Some y)
-    |> reduce
-    |> pipeline
-         spec
-         ~enable
-         ~n:
-           (latency_without_arbitration config
-           - Config.multiply_latency ~reduce:true config)
-  in
-  reg multiply_output, multiply_output
+  Arbitrate.arbitrate2
+    (x1 @: y1, x2 @: y2)
+    ~enable
+    ~clock
+    ~valid
+    ~f:(fun input ->
+      let y = sel_bottom input wy in
+      let x = sel_top input wx in
+      config.multiply.impl ~scope ~clock ~enable x (Some y)
+      |> Config.reduce config ~scope ~clock ~enable
+      |> pipeline
+           (Reg_spec.create ~clock ())
+           ~enable
+           ~n:
+             (latency_without_arbitration config
+             - Config.multiply_latency ~reduce:true config))
 ;;
 
 module Stage1 = struct
@@ -186,7 +184,6 @@ module Stage1 = struct
     =
     let scope = Scope.sub_scope scope "stage1" in
     let spec = Reg_spec.create ~clock () in
-    let beat = create_beat ~clock ~enable valid_in in
     let pipe = pipeline spec ~n:(latency config) ~enable in
     let y_squared, x_squared =
       arbitrate_square
@@ -194,7 +191,7 @@ module Stage1 = struct
         ~scope
         ~clock
         ~enable
-        ~beat
+        ~valid:valid_in
         ~latency_without_arbitration
         y
         x
@@ -268,7 +265,6 @@ module Stage3 = struct
     =
     let scope = Scope.sub_scope scope "stage3" in
     let spec = Reg_spec.create ~clock () in
-    let beat = create_beat ~clock ~enable valid in
     let pipe = pipeline spec ~n:(latency config) ~enable in
     let y_pow_4_times_4, m_squared =
       arbitrate_square
@@ -276,7 +272,7 @@ module Stage3 = struct
         ~scope
         ~clock
         ~enable
-        ~beat
+        ~valid
         ~latency_without_arbitration
         y_squared_times_2
         m
@@ -287,7 +283,7 @@ module Stage3 = struct
         ~scope
         ~clock
         ~enable
-        ~beat
+        ~valid
         ~latency_without_arbitration
         (y, z)
         (y_squared_times_2, x_times_2)
