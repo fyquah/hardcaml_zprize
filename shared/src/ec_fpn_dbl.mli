@@ -1,6 +1,7 @@
 (** Fully unrolled eliptic curve point doubling. *)
 
 open Hardcaml
+module Jacobian = Point.Jacobian
 
 module Config : sig
   open Signal
@@ -16,16 +17,6 @@ module Config : sig
     ; reduce : fn
     ; p : Z.t
     }
-end
-
-(** Jacobian representation of a point *)
-module Jacobian : sig
-  type 'a t =
-    { x : 'a
-    ; y : 'a
-    ; z : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
 end
 
 (** Latency of the eliptic curve point doubling datapath. *)

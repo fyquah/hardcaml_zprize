@@ -11,11 +11,4 @@
  (targets post_synth_utilization.rpt post_synth_timing.rpt)
  (deps point_double.v point_double.xdc ../../../scripts/run_vivado.tcl)
  (action
-  (run
-   vivado
-   -mode
-   batch
-   -source
-   ../../../scripts/run_vivado.tcl
-   -tclargs
-   point_double)))
+  (run vivado -mode batch -source ../../../scripts/run_vivado.tcl -tclargs point_double)))
