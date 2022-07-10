@@ -11,6 +11,7 @@ open! Base
 open! Hardcaml
 open! Signal
 open! Reg_with_enable
+module Jacobian = Point.Jacobian
 
 (* TODO(fyquah): Make [adder_stages] and [subtractor_stages] configurable. *)
 let subtractor_stages = 3
@@ -70,15 +71,6 @@ let sub_pipe ~latency ~(config : Config.t) ~clock ~enable a b =
   Modulo_subtractor_pipe.create ~clock ~enable ~stages:subtractor_stages ~p:config.p a b
   |> pipeline spec ~n:(latency config - Modulo_subtractor_pipe.latency ~stages) ~enable
 ;;
-
-module Jacobian = struct
-  type 'a t =
-    { x : 'a
-    ; y : 'a
-    ; z : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
 
 module O_data = struct
   type 'a t =

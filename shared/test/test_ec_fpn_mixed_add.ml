@@ -1,16 +1,19 @@
 open Core
 open Hardcaml
 open Snarks_r_fun
-module Config = Ec_fpn_dbl.Config
-module Jacobian = Point.Jacobian
+open Point
+module Config = Ec_fpn_mixed_add.Config
 
-module Ec_fpn_dbl = Ec_fpn_dbl.With_interface (struct
+let () = Caller_id.set_mode Full_trace
+
+module Ec_fpn_mixed_add = Ec_fpn_mixed_add.With_interface (struct
   let bits = 377
 end)
 
-module Sim = Cyclesim.With_interface (Ec_fpn_dbl.I) (Ec_fpn_dbl.O)
+module Sim = Cyclesim.With_interface (Ec_fpn_mixed_add.I) (Ec_fpn_mixed_add.O)
 
 let p = Ark_bls12_377_g1.modulus ()
+let ( <--. ) dst src = dst := Bits.of_int ~width:(Bits.width !dst) src
 
 let create_sim config =
   let scope = Scope.create ~flatten_design:true () in
@@ -21,7 +24,7 @@ let create_sim config =
   in
   Sim.create
     ~config:{ Cyclesim.Config.default with is_internal_port = Some is_internal_port }
-    (Ec_fpn_dbl.create scope ~config)
+    (Ec_fpn_mixed_add.create scope ~config)
 ;;
 
 let modulo_inverse x = Utils.modulo_inverse ~p x
@@ -32,17 +35,14 @@ let c_R = Z.(one lsl log2up p)
 let c_R' = modulo_inverse c_R
 let transform_to_montgomery a = Z.(a * c_R mod p)
 let transform_from_montgomery a = Z.(a * c_R' mod p)
-let ( <--. ) dst src = dst := Bits.of_int ~width:(Bits.width !dst) src
-let compute_expected jacobian = Ark_bls12_377_g1.mul (jacobian_to_affine jacobian) ~by:2
 
-type test_output =
-  { affine_point : Ark_bls12_377_g1.affine
-  ; z : Z.t
-  ; z_squared : Z.t
-  }
+let compute_expected ~jacobian ~(affine : Z.t Affine.t) =
+  let affine = Ark_bls12_377_g1.create ~x:affine.x ~y:affine.y ~infinity:false in
+  Ark_bls12_377_g1.add (jacobian_to_affine jacobian) affine
+;;
 
 let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_inputs =
-  let latency = Ec_fpn_dbl.latency config in
+  let latency = Ec_fpn_mixed_add.latency config in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   let internal_ports = Cyclesim.internal_ports sim in
@@ -76,18 +76,18 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
         let r = Bits.to_z ~signedness:Unsigned r in
         if montgomery then transform_from_montgomery r else r
       in
-      let z = to_z !(outputs.data_out.point.z) in
-      let z_squared = to_z !(outputs.data_out.z_squared) in
-      let x = to_z !(outputs.data_out.point.x) in
-      let y = to_z !(outputs.data_out.point.y) in
+      let z = to_z !(outputs.data_out.z) in
+      let x = to_z !(outputs.data_out.x) in
+      let y = to_z !(outputs.data_out.y) in
       let x = modulo_multiply x (modulo_inverse Z.(z ** 2)) in
       let y = modulo_multiply y (modulo_inverse Z.(z ** 3)) in
       (* TODO(fyquah): Don't assume the test outputs are always non-infinity. *)
-      let affine_point = Ark_bls12_377_g1.create ~x ~y ~infinity:false in
-      test_outputs := { affine_point; z; z_squared } :: !test_outputs)
+      test_outputs := Ark_bls12_377_g1.create ~x ~y ~infinity:false :: !test_outputs)
   in
   inputs.enable := Bits.vdd;
-  List.iter test_inputs ~f:(fun { Jacobian.x; y; z } ->
+  List.iter
+    test_inputs
+    ~f:(fun ({ Jacobian.x = x1; y = y1; z = z1 }, { Affine.x = x0; y = y0 }) ->
       let of_z a =
         Bits.of_z ~width:377 (if montgomery then transform_to_montgomery a else a)
       in
@@ -99,18 +99,27 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
       in
       cycle_until_ready ();
       inputs.valid_in := Bits.vdd;
-      inputs.data_in.x := of_z x;
-      inputs.data_in.y := of_z y;
-      inputs.data_in.z := of_z z;
+      inputs.data_in0.x := of_z x0;
+      inputs.data_in0.y := of_z y0;
+      inputs.data_in1.x := of_z x1;
+      inputs.data_in1.y := of_z y1;
+      inputs.data_in1.z := of_z z1;
+      inputs.data_in1_z_squared := of_z Z.(z1 * z1 mod p);
       cycle ();
       inputs.valid_in <--. 0;
-      inputs.data_in.x <--. 0;
-      inputs.data_in.y <--. 0;
-      inputs.data_in.z <--. 0);
+      inputs.data_in0.x <--. 0;
+      inputs.data_in0.y <--. 0;
+      inputs.data_in1.z <--. 0;
+      inputs.data_in1_z_squared <--. 0;
+      inputs.data_in1.x <--. 0;
+      inputs.data_in1.y <--. 0);
   inputs.valid_in := Bits.gnd;
-  inputs.data_in.x := Bits.zero 377;
-  inputs.data_in.y := Bits.zero 377;
-  inputs.data_in.z := Bits.zero 377;
+  inputs.data_in0.x := Bits.zero 377;
+  inputs.data_in0.y := Bits.zero 377;
+  inputs.data_in1.z := Bits.zero 377;
+  inputs.data_in1_z_squared := Bits.zero 377;
+  inputs.data_in1.x := Bits.zero 377;
+  inputs.data_in1.y := Bits.zero 377;
   for _ = 0 to latency do
     cycle ()
   done;
@@ -125,35 +134,20 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
           (len_test_inputs : int)
           (len_test_outputs : int)];
   List.map2_exn test_inputs test_outputs ~f:(fun test_input obtained ->
-      let sexp_of_z z = Sexp.Atom ("0x" ^ Z.format "x" z) in
-      if debug
-      then (
-        let x = test_input.x in
-        let y = test_input.y in
-        let z = test_input.z in
-        let y_times_z = modulo_multiply y z in
-        let x_squared = modulo_multiply x x in
-        Stdio.print_s [%message (x : z) (y : z) (z : z) (y_times_z : z) (x_squared : z)]);
-      let expected = compute_expected test_input in
-      Or_error.combine_errors_unit
-        [ (if [%equal: Ark_bls12_377_g1.affine] obtained.affine_point expected
-          then Ok ()
-          else
-            Or_error.error_s
-              [%message
-                ""
-                  ~input:(test_input : Utils.z Jacobian.t)
-                  (obtained.affine_point : Ark_bls12_377_g1.affine)
-                  (expected : Ark_bls12_377_g1.affine)])
-        ; (if [%equal: Z.t] (modulo_multiply obtained.z obtained.z) obtained.z_squared
-          then Ok ()
-          else
-            Or_error.error_s
-              [%message
-                "z^2 doesn't match expected!"
-                  ~z:(obtained.z : z)
-                  ~z_squared:(obtained.z_squared : z)])
-        ])
+      let expected =
+        let jacobian = fst test_input in
+        let affine = snd test_input in
+        compute_expected ~jacobian ~affine
+      in
+      if [%equal: Ark_bls12_377_g1.affine] obtained expected
+      then Ok ()
+      else
+        Or_error.error_s
+          [%message
+            ""
+              ~input:(test_input : Utils.z Jacobian.t * Utils.z Affine.t)
+              (obtained : Ark_bls12_377_g1.affine)
+              (expected : Ark_bls12_377_g1.affine)])
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]
   |> Stdio.print_s

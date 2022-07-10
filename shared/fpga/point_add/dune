@@ -1,0 +1,14 @@
+(rule
+ (targets point_add.v)
+ (deps ../../bin/generate/verilog.exe)
+ (action
+  (run %{deps} point-add -o point_add.v)))
+
+; Runs vivado to generate output reports.
+
+(rule
+ (alias build-fpga)
+ (targets post_synth_utilization.rpt post_synth_timing.rpt)
+ (deps point_add.v point_add.xdc ../../../scripts/run_vivado.tcl)
+ (action
+  (run vivado -mode batch -source ../../../scripts/run_vivado.tcl -tclargs point_add)))

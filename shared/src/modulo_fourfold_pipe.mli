@@ -1,3 +1,5 @@
+(** Computes [(4 * x) mod p] *)
+
 open Hardcaml
 
 val latency : stages:int -> int

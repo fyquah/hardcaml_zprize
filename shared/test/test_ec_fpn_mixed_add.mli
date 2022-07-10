@@ -1,13 +1,14 @@
 open Hardcaml
 open Snarks_r_fun
-module Config = Ec_fpn_dbl.Config
-module Jacobian = Point.Jacobian
+open Point
+module Config = Ec_fpn_mixed_add.Config
 
-module Ec_fpn_dbl : module type of Ec_fpn_dbl.With_interface (struct
+module Ec_fpn_mixed_add : module type of Ec_fpn_mixed_add.With_interface (struct
   let bits = 377
 end)
 
-module Sim : module type of Cyclesim.With_interface (Ec_fpn_dbl.I) (Ec_fpn_dbl.O)
+module Sim :
+    module type of Cyclesim.With_interface (Ec_fpn_mixed_add.I) (Ec_fpn_mixed_add.O)
 
 val p : Z.t
 val create_sim : Config.t -> Sim.t
@@ -20,5 +21,5 @@ val test
   -> config:Config.t
   -> sim:Sim.t
   -> montgomery:bool
-  -> Z.t Jacobian.t list
+  -> (Z.t Jacobian.t * Z.t Affine.t) list
   -> unit

@@ -9,10 +9,7 @@
 (rule
  (alias build-fpga)
  (targets post_synth_utilization.rpt post_synth_timing.rpt)
- (deps
-  montgomery_square.v
-  montgomery_square.xdc
-  ../../../scripts/run_vivado.tcl)
+ (deps montgomery_square.v montgomery_square.xdc ../../../scripts/run_vivado.tcl)
  (action
   (run
    vivado

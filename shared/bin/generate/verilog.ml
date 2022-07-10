@@ -192,12 +192,95 @@ let command_point_double =
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
 ;;
 
+module Ec_fpn_mixed_add = Ec_fpn_mixed_add.With_interface (struct
+  let bits = 377
+end)
+
+let command_point_add =
+  Command.basic
+    ~summary:"point add"
+    (let%map_open.Command ground_multiplier = flag_ground_multiplier
+     and adder_depth =
+       flag
+         "adder-depth"
+         (optional_with_default 3 int)
+         ~doc:" Depth of adder stage in montgomery mult. Defaults to 3"
+     and subtractor_depth =
+       flag
+         "subtractor-depth"
+         (optional_with_default 3 int)
+         ~doc:" Depth of subtractor in montgomery mult. Defaults to 3"
+     and filename = flag_filename in
+     fun () ->
+       let module M = Ec_fpn_mixed_add in
+       let module C = Circuit.With_interface (M.I) (M.O) in
+       let scope = Scope.create ~flatten_design:false () in
+       let database = Scope.circuit_database scope in
+       let p = Ark_bls12_377_g1.modulus () in
+       let reduce : Snarks_r_fun.Ec_fpn_mixed_add.Config.fn =
+         let config =
+           { Montgomery_reduction.Config.multiplier_config =
+               Karatsuba_ofman_mult.Config.generate
+                 ~ground_multiplier
+                 [ Radix_2; Radix_3; Radix_3 ]
+           ; half_multiplier_config =
+               { level_radices = [ Radix_2; Radix_3; Radix_3 ]; ground_multiplier }
+           ; adder_depth
+           ; subtractor_depth
+           }
+         in
+         let latency = Montgomery_reduction.Config.latency config in
+         let impl ~scope ~clock ~enable x y =
+           assert (Option.is_none y);
+           Montgomery_reduction.hierarchical ~config ~p ~scope ~clock ~enable x
+         in
+         { impl; latency }
+       in
+       let square : Snarks_r_fun.Ec_fpn_mixed_add.Config.fn =
+         let config =
+           { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
+           ; ground_multiplier
+           }
+         in
+         let latency = Squarer.Config.latency config in
+         let impl ~scope ~clock ~enable x y =
+           assert (Option.is_none y);
+           Squarer.hierarchical ~config ~clock ~enable ~scope x
+         in
+         { impl; latency }
+       in
+       let multiply : Snarks_r_fun.Ec_fpn_mixed_add.Config.fn =
+         let config =
+           Karatsuba_ofman_mult.Config.generate
+             ~ground_multiplier
+             [ Radix_2; Radix_3; Radix_3 ]
+         in
+         let latency = Karatsuba_ofman_mult.Config.latency config in
+         let impl ~scope ~clock ~enable x y =
+           Karatsuba_ofman_mult.hierarchical
+             ~enable
+             ~config
+             ~scope
+             ~clock
+             x
+             (`Signal (Option.value_exn y))
+         in
+         { latency; impl }
+       in
+       let circuit =
+         M.create ~config:{ multiply; square; reduce; p } scope
+         |> C.create_exn ~name:"point_add"
+       in
+       Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
+;;
+
 let () =
   [ "specialized-43x43-multiplier", command_specialized_43x43_multiplier
   ; "verilog-43x43-multiplier", command_verilog_43x43_multiplier
   ; "karatsuba-ofman-mult", command_karatsuba_ofman_mult
   ; "montgomery-mult", command_montgomery_mult
   ; "point-double", command_point_double
+  ; "point-add", command_point_add
   ]
   |> Command.group ~summary:"generate verilog"
   |> Command_unix.run
