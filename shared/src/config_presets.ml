@@ -27,7 +27,7 @@ module For_bls12_377 = struct
     }
   ;;
 
-  let square : Ec_fpn_dbl.Config.fn =
+  let square : Ec_fpn_ops_config.fn =
     let config =
       { Squarer.Config.level_radices = [ Radix_3; Radix_3; Radix_2 ]
       ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
@@ -41,7 +41,7 @@ module For_bls12_377 = struct
     { impl; latency }
   ;;
 
-  let multiply : Ec_fpn_dbl.Config.fn =
+  let multiply : Ec_fpn_ops_config.fn =
     let config =
       Karatsuba_ofman_mult.Config.generate
         [ Radix_3; Radix_3 ]
@@ -60,38 +60,42 @@ module For_bls12_377 = struct
     { latency; impl }
   ;;
 
-  let point_double_with_montgomery_reduction =
-    let reduce : Ec_fpn_dbl.Config.fn =
-      let config = montgomery_reduction_config in
-      let latency = Montgomery_reduction.Config.latency config in
-      let impl ~scope ~clock ~enable x y =
-        assert (Option.is_none y);
-        Montgomery_reduction.hierarchical ~config ~p ~scope ~clock ~enable x
-      in
-      { impl; latency }
+  let montgomery_reduce : Ec_fpn_ops_config.fn =
+    let config = montgomery_reduction_config in
+    let latency = Montgomery_reduction.Config.latency config in
+    let impl ~scope ~clock ~enable x y =
+      assert (Option.is_none y);
+      Montgomery_reduction.hierarchical ~config ~p ~scope ~clock ~enable x
     in
-    { Ec_fpn_dbl.Config.multiply; square; reduce; p }
+    { impl; latency }
   ;;
 
-  let point_double_with_barrett_reduction =
-    let reduce : Ec_fpn_dbl.Config.fn =
-      let config = barrett_reduction_config in
-      let impl ~scope ~clock ~enable mult_value y =
-        assert (Option.is_none y);
-        let { With_valid.valid = _; value } =
-          Barrett_reduction.hierarchical
-            ~scope
-            ~p
-            ~clock
-            ~enable
-            ~config
-            { valid = Signal.vdd; value = mult_value }
-        in
-        value
+  let barrett_reduction : Ec_fpn_ops_config.fn =
+    let config = barrett_reduction_config in
+    let impl ~scope ~clock ~enable mult_value y =
+      assert (Option.is_none y);
+      let { With_valid.valid = _; value } =
+        Barrett_reduction.hierarchical
+          ~scope
+          ~p
+          ~clock
+          ~enable
+          ~config
+          { valid = Signal.vdd; value = mult_value }
       in
-      let latency = Barrett_reduction.Config.latency config in
-      { impl; latency }
+      value
     in
-    { Ec_fpn_dbl.Config.multiply; square; reduce; p }
+    let latency = Barrett_reduction.Config.latency config in
+    { impl; latency }
+  ;;
+
+  let ec_fpn_ops_with_montgomery_reduction =
+    let reduce = montgomery_reduce in
+    { Ec_fpn_ops_config.multiply; square; reduce; p }
+  ;;
+
+  let ec_fpn_ops_with_barrett_reduction =
+    let reduce = barrett_reduction in
+    { Ec_fpn_ops_config.multiply; square; reduce; p }
   ;;
 end

@@ -14,22 +14,7 @@
 
 open Hardcaml
 open! Point
-
-module Config : sig
-  open Signal
-
-  type fn =
-    { latency : int
-    ; impl : scope:Scope.t -> clock:t -> enable:t -> t -> t option -> t
-    }
-
-  type t =
-    { multiply : fn
-    ; square : fn
-    ; reduce : fn
-    ; p : Z.t
-    }
-end
+module Config = Ec_fpn_ops_config
 
 (** Latency of the eliptic curve point adding datapath. *)
 val latency : Config.t -> int

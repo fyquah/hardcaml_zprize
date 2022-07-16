@@ -2,7 +2,7 @@ open Core
 open Snarks_r_fun
 open Test_ec_fpn_dbl
 
-let config = Config_presets.For_bls12_377.point_double_with_barrett_reduction
+let config = Config_presets.For_bls12_377.ec_fpn_ops_with_barrett_reduction
 let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =

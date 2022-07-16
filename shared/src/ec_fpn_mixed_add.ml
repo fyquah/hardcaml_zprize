@@ -7,35 +7,7 @@ open! Point
 let subtractor_stages = 3
 let adder_stages = 3
 
-module Config = struct
-  type fn =
-    { latency : int
-    ; impl : scope:Scope.t -> clock:t -> enable:t -> t -> t option -> t
-    }
-
-  type t =
-    { multiply : fn
-    ; square : fn
-    ; reduce : fn
-    ; p : Z.t
-    }
-
-  let reduce config ~scope ~clock ~enable x =
-    config.reduce.impl ~scope ~clock ~enable x None
-  ;;
-
-  let multiply_latency ~reduce (t : t) =
-    t.multiply.latency + if reduce then t.reduce.latency else 0
-  ;;
-
-  let square_latency ~reduce (t : t) =
-    t.square.latency + if reduce then t.reduce.latency else 0
-  ;;
-
-  let subtract_and_reduce_latency (t : t) =
-    Modulo_subtractor_pipe.latency ~stages:subtractor_stages + t.reduce.latency
-  ;;
-end
+module Config = Ec_fpn_ops_config
 
 let double_pipe ~twice_width ~scope ~latency ~(config : Config.t) ~clock ~enable a =
   let stages = adder_stages in
@@ -605,7 +577,7 @@ module Stage11 = struct
     }
   [@@deriving sexp_of, hardcaml]
 
-  let latency (config : Config.t) = Config.subtract_and_reduce_latency config
+  let latency (_ : Config.t) = Modulo_subtractor_pipe.latency ~stages:subtractor_stages
 
   let create
       ~scope
