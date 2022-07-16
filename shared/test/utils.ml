@@ -9,13 +9,17 @@ let a_big_prime =
 
 let sexp_of_z z = Sexp.Atom ("0x" ^ Z.format "x" z)
 
+let generate_z ~lo_incl ~hi_incl =
+  Quickcheck.Generator.map
+    ~f:Bigint.to_zarith_bigint
+    (Bigint.gen_incl (Bigint.of_zarith_bigint lo_incl) (Bigint.of_zarith_bigint hi_incl))
+;;
+
 let random_z =
   let random = Splittable_random.State.create Random.State.default in
   fun ~lo_incl ~hi_incl ->
-    let generate =
-      Bigint.gen_incl (Bigint.of_zarith_bigint lo_incl) (Bigint.of_zarith_bigint hi_incl)
-    in
-    Bigint.to_zarith_bigint (Quickcheck.Generator.generate ~size:1 ~random generate)
+    let generate = generate_z ~lo_incl ~hi_incl in
+    Quickcheck.Generator.generate ~size:1 ~random generate
 ;;
 
 let modulo_inverse ~p x =
