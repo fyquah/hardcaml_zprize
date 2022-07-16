@@ -1,0 +1,11 @@
+(library
+ (name zprize_msm)
+ (libraries
+  ark_bls12_377_g1
+  core
+  hardcaml
+  hardcaml_axi
+  hardcaml_xilinx
+  snarks_r_fun)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))
