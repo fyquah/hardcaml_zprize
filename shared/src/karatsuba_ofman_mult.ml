@@ -148,6 +148,7 @@ and create_karatsuba_ofman_stage_radix_2
     (a : Signal.t)
     (b : Signal.t)
   =
+  let ( -- ) = Scope.naming scope in
   let { Config.child_config; post_adder_stages; radix = _ } = config in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
@@ -200,6 +201,7 @@ and create_karatsuba_ofman_stage_radix_3
     (x : Signal.t)
     (y : Signal.t)
   =
+  let ( -- ) = Scope.naming scope in
   let wx = Signal.width x in
   let spec = Reg_spec.create ~clock () in
   let reg x = if Signal.is_const x then x else reg spec ~enable x in
