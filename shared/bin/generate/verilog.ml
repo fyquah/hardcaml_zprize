@@ -184,9 +184,7 @@ let command_point_double =
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
        let circuit =
-         let config =
-           Config_presets.For_bls12_377.point_double_with_montgomery_reduction
-         in
+         let config = Config_presets.For_bls12_377.ec_fpn_ops_with_montgomery_reduction in
          M.create ~config scope |> C.create_exn ~name:"point_double"
        in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
