@@ -46,4 +46,6 @@ module Z : sig
   val ( - ) : t -> t -> t
   val ( * ) : t -> t -> t
   val inverse : t -> t
+  val pow : t -> int -> t
+  val pp : Formatter.t -> t -> unit
 end

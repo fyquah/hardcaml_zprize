@@ -178,4 +178,14 @@ module Z = struct
     if Z.compare r Z.one > 0 then raise_s [%message "Not invertable" (a : t)];
     if Z.compare t Z.zero < 0 then Z.(t + modulus) else t
   ;;
+
+  let rec pow a n =
+    if n <= 0
+    then raise_s [%message "pow must be raised to positive power" (n : int)]
+    else if n = 1
+    then a
+    else a * pow a Int.(n - 1)
+  ;;
+
+  let pp fmt z = Caml.Format.fprintf fmt "%s" (sexp_of_t z |> Sexplib.Sexp.to_string)
 end
