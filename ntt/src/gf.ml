@@ -160,4 +160,22 @@ module Z = struct
   let ( * ) = mul
   let of_int = Z.of_int
   let to_z t = t
+
+  (* Inverse computed by the extended euclidian algorithm *)
+  let inverse a =
+    let rec f t nt r nr =
+      if Z.equal nr Z.zero
+      then t, r
+      else (
+        let q = Z.div r nr in
+        let t = nt
+        and nt = Z.(t - (q * nt)) in
+        let r = nr
+        and nr = Z.(r - (q * nr)) in
+        f t nt r nr)
+    in
+    let t, r = f Z.zero Z.one modulus a in
+    if Z.compare r Z.one > 0 then raise_s [%message "Not invertable" (a : t)];
+    if Z.compare t Z.zero < 0 then Z.(t + modulus) else t
+  ;;
 end

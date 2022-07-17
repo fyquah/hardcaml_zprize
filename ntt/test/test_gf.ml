@@ -105,3 +105,18 @@ let%expect_test "mul" =
                   (actual_normalized : Gfz.t)
                   (expected : z)]))
 ;;
+
+let%expect_test "inverse" =
+  let test a =
+    (* zero is not invertible *)
+    if not (Z.equal a Z.zero)
+    then (
+      let a = Gfz.of_z a in
+      let inv_a = Gfz.inverse a in
+      let product = Gfz.(a * inv_a) in
+      (* a * (1/a) = 1 *)
+      if not (Z.equal (Gfz.to_z product) Z.one)
+      then print_s [%message "failed" (a : Gfz.t) (inv_a : Gfz.t) (product : Gfz.t)])
+  in
+  Array.iter test_vector_z ~f:test
+;;

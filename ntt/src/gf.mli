@@ -45,4 +45,5 @@ module Z : sig
   val ( + ) : t -> t -> t
   val ( - ) : t -> t -> t
   val ( * ) : t -> t -> t
+  val inverse : t -> t
 end
