@@ -180,8 +180,10 @@ module Z = struct
   ;;
 
   let rec pow a n =
-    if n <= 0
+    if n < 0
     then raise_s [%message "pow must be raised to positive power" (n : int)]
+    else if n = 0
+    then Z.one
     else if n = 1
     then a
     else a * pow a Int.(n - 1)

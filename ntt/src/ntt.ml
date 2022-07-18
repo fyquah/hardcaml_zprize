@@ -419,4 +419,48 @@ module Reference = struct
     let logn = Int.ceil_log2 (Array.length input) in
     loop1 ~input ~logn ~i:1 ~m:1
   ;;
+
+  let dit a =
+    bit_reversed_addressing a;
+    let n = Array.length a in
+    let logn = Int.ceil_log2 n in
+    for s = 1 to logn do
+      let m = 1 lsl s in
+      let wm = Gf.omega.(s) in
+      let k = ref 0 in
+      while !k < n do
+        let w = ref Gf.one in
+        for j = 0 to (m / 2) - 1 do
+          let u = a.(!k + j) in
+          let v = Gf.( *: ) !w a.(!k + j + (m / 2)) in
+          a.(!k + j) <- Gf.(u +: v);
+          a.(!k + j + (m / 2)) <- Gf.(u -: v);
+          w := Gf.(!w *: wm)
+        done;
+        k := !k + m
+      done
+    done
+  ;;
+
+  let dif a =
+    let n = Array.length a in
+    let logn = Int.ceil_log2 n in
+    for s = logn downto 1 do
+      let m = 1 lsl s in
+      let wm = Gf.omega.(s) in
+      let k = ref 0 in
+      while !k < n do
+        let w = ref Gf.one in
+        for j = 0 to (m / 2) - 1 do
+          let u = a.(!k + j) in
+          let v = a.(!k + j + (m / 2)) in
+          a.(!k + j) <- Gf.(u +: v);
+          a.(!k + j + (m / 2)) <- Gf.(!w *: (u -: v));
+          w := Gf.(!w *: wm)
+        done;
+        k := !k + m
+      done
+    done;
+    bit_reversed_addressing a
+  ;;
 end

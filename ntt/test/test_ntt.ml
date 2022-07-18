@@ -16,14 +16,20 @@ let%expect_test "bit reversed addressing" =
 
 let of_z z = Gf.of_z (Z.of_string z)
 
-let test input expected =
-  Ntt.ntt input;
+let test_transform input expected f =
+  f input;
   let expected = Array.map expected ~f:of_z in
   if not
        ([%compare.equal: Gf.t array]
           (Array.subo input ~len:(Array.length expected))
           expected)
   then print_s [%message (input : Gf.t array) (expected : Gf.t array)]
+;;
+
+let test input expected =
+  test_transform (Array.copy input) expected Ntt.ntt;
+  test_transform (Array.copy input) expected Ntt.dit;
+  test_transform (Array.copy input) expected Ntt.dif
 ;;
 
 let linear n =

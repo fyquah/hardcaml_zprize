@@ -125,5 +125,13 @@ module Reference : sig
   module Gf : module type of Gf.Make (Hardcaml.Bits)
 
   val bit_reversed_addressing : 'a array -> unit
+
+  (** From the reference implementation provided to the competition *)
   val ntt : Gf.t array -> unit
+
+  (** Standard decimation in time algorithm *)
+  val dit : Gf.t array -> unit
+
+  (** Standard decimation in frequency algorithm *)
+  val dif : Gf.t array -> unit
 end
