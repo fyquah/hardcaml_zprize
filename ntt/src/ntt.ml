@@ -463,4 +463,52 @@ module Reference = struct
     done;
     bit_reversed_addressing a
   ;;
+
+  let matrix a log_rows log_cols =
+    let rows = 1 lsl log_rows in
+    let cols = 1 lsl log_cols in
+    Array.init rows ~f:(fun row -> Array.init cols ~f:(fun col -> a.((row * cols) + col)))
+  ;;
+
+  let transpose a =
+    let rows = Array.length a in
+    let cols = Array.length a.(0) in
+    Array.init cols ~f:(fun col -> Array.init rows ~f:(fun row -> a.(row).(col)))
+  ;;
+
+  let row a row = Array.copy a.(row)
+  let col a col = Array.init (Array.length a) ~f:(fun row -> a.(row).(col))
+
+  let apply_twiddles wm a =
+    let rec row wm w a index =
+      if index = Array.length a
+      then ()
+      else (
+        a.(index) <- Gf.(w *: a.(index));
+        row wm Gf.(wm *: w) a (index + 1))
+    in
+    let rec f wm w index =
+      if index = Array.length a
+      then ()
+      else (
+        row w Gf.one a.(index) 0;
+        f wm Gf.(w *: wm) (index + 1))
+    in
+    f wm Gf.one 0
+  ;;
+
+  let four_step a log_rows =
+    let n = Array.length a in
+    let logn = Int.ceil_log2 n in
+    let log_cols = logn - log_rows in
+    assert (log_rows > 0);
+    assert (log_cols > 0);
+    let matrix = matrix a log_cols log_rows |> transpose in
+    Array.iter matrix ~f:dit;
+    apply_twiddles Gf.omega.(logn) matrix;
+    let matrix = transpose matrix in
+    Array.iter matrix ~f:dit;
+    let matrix = transpose matrix in
+    Array.concat (Array.to_list matrix)
+  ;;
 end
