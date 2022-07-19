@@ -19,9 +19,8 @@ module Make (Bits : Comb.S) = struct
   let one = of_int ~width:num_bits 1
   let two = of_int ~width:num_bits 2
   let epsilon = of_int ~width:num_bits ((1 lsl 32) - 1)
-  let modulus_z = Z.of_string "0xFFFF_FFFF_0000_0001"
+  let modulus_z = Gf_z.to_z Gf_z.modulus
   let modulus = of_z ~width:num_bits modulus_z
-  let mult_mask = of_int64 ~width:num_bits 0xFFFF_FFFF_FFFF_FFFFL
   let is_normalized x = Uop.(x <: modulus)
   let to_canonical x = mux2 (is_normalized x) x (x -: modulus)
   let of_z z = Z.erem z modulus_z |> Bits.of_z ~width:64
@@ -141,53 +140,4 @@ module Make (Bits : Comb.S) = struct
   let ( +: ) = add
   let ( -: ) = sub
   let ( *: ) a b = mul a b
-end
-
-module Z = struct
-  type t = Z.t
-
-  let sexp_of_t t = Z.to_string t |> [%sexp_of: String.t]
-
-  (* This is a solinas prime (2^64 - 2^32 + 1) which has a fast modular
-     reduction algorithm. *)
-  let modulus = Z.((one lsl 64) - (one lsl 32) + one)
-  let of_z t = Z.(erem t modulus)
-  let add a b = Z.((a + b) mod modulus)
-  let sub a b = Z.(erem (a - b) modulus)
-  let mul a b = Z.(a * b mod modulus)
-  let ( + ) = add
-  let ( - ) = sub
-  let ( * ) = mul
-  let of_int = Z.of_int
-  let to_z t = t
-
-  (* Inverse computed by the extended euclidian algorithm *)
-  let inverse a =
-    let rec f t nt r nr =
-      if Z.equal nr Z.zero
-      then t, r
-      else (
-        let q = Z.div r nr in
-        let t = nt
-        and nt = Z.(t - (q * nt)) in
-        let r = nr
-        and nr = Z.(r - (q * nr)) in
-        f t nt r nr)
-    in
-    let t, r = f Z.zero Z.one modulus a in
-    if Z.compare r Z.one > 0 then raise_s [%message "Not invertable" (a : t)];
-    if Z.compare t Z.zero < 0 then Z.(t + modulus) else t
-  ;;
-
-  let rec pow a n =
-    if n < 0
-    then raise_s [%message "pow must be raised to positive power" (n : int)]
-    else if n = 0
-    then Z.one
-    else if n = 1
-    then a
-    else a * pow a Int.(n - 1)
-  ;;
-
-  let pp fmt z = Caml.Format.fprintf fmt "%s" (sexp_of_t z |> Sexplib.Sexp.to_string)
 end

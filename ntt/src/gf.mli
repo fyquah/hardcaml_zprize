@@ -6,14 +6,13 @@ module Make (Bits : Comb.S) : sig
 
   val num_bits : int
 
-  (** {2 Constants}*)
+  (** {2 Constants} *)
 
   val zero : t
   val one : t
   val two : t
   val epsilon : t
   val modulus : t
-  val mult_mask : t
   val omega : t array
 
   (** {2 Arithmetic operations} *)
@@ -31,21 +30,4 @@ module Make (Bits : Comb.S) : sig
   val of_bits : Bits.t -> t
   val of_z : Z.t -> t
   val to_z : t -> Z.t
-end
-
-module Z : sig
-  type t [@@deriving sexp_of]
-
-  (** Solinas prime [2^64 - 2^31 + 1] *)
-  val modulus : t
-
-  val of_z : Z.t -> t
-  val of_int : int -> t
-  val to_z : t -> Z.t
-  val ( + ) : t -> t -> t
-  val ( - ) : t -> t -> t
-  val ( * ) : t -> t -> t
-  val inverse : t -> t
-  val pow : t -> int -> t
-  val pp : Formatter.t -> t -> unit
 end

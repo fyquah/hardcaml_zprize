@@ -1,6 +1,6 @@
 open! Core
 open Hardcaml
-module Gfz = Ntts_r_fun.Gf.Z
+module Gf_z = Ntts_r_fun.Gf_z
 module Gf = Ntts_r_fun.Gf.Make (Bits)
 
 let sexp_of_z z = Z.to_string z |> [%sexp_of: String.t]
@@ -15,7 +15,7 @@ let test_vector_z =
       ; at_power 32 i
       ; at_power 63 i
       ; [ (let offset = 10 - i in
-           Gfz.(modulus - Gfz.of_int offset |> Gfz.to_z))
+           Gf_z.(modulus - Gf_z.of_z (Z.of_int offset) |> Gf_z.to_z))
         ]
       ]
       |> List.concat
@@ -32,12 +32,11 @@ let%expect_test "constants" =
         (Gf.one : Gf.t)
         (Gf.two : Gf.t)
         (Gf.modulus : Gf.t)
-        (Gf.epsilon : Gf.t)
-        (Gf.mult_mask : Gf.t)];
+        (Gf.epsilon : Gf.t)];
   [%expect
     {|
     ((Gf.zero 0) (Gf.one 1) (Gf.two 2) (Gf.modulus 18446744069414584321)
-     (Gf.epsilon 4294967295) (Gf.mult_mask 18446744073709551615)) |}]
+     (Gf.epsilon 4294967295)) |}]
 ;;
 
 let%expect_test "test vectors" =
@@ -70,7 +69,7 @@ let%expect_test "add" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
           let actual = Gf.(of_z left +: of_z right |> Gf.to_z) in
-          let expected = Gfz.(of_z left + of_z right |> Gfz.to_z) in
+          let expected = Gf_z.(of_z left + of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)
           then
             raise_s
@@ -81,7 +80,7 @@ let%expect_test "sub" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
           let actual = Gf.(of_z left -: of_z right |> Gf.to_z) in
-          let expected = Gfz.(of_z left - of_z right |> Gfz.to_z) in
+          let expected = Gf_z.(of_z left - of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)
           then
             raise_s
@@ -92,8 +91,8 @@ let%expect_test "mul" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
           let actual = Gf.(of_z left *: of_z right |> Gf.to_z) in
-          let actual_normalized = Gfz.of_z actual in
-          let expected = Gfz.(of_z left * of_z right |> Gfz.to_z) in
+          let actual_normalized = Gf_z.of_z actual in
+          let expected = Gf_z.(of_z left * of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)
           then
             raise_s
@@ -102,7 +101,7 @@ let%expect_test "mul" =
                   (left : z)
                   (right : z)
                   (actual : z)
-                  (actual_normalized : Gfz.t)
+                  (actual_normalized : Gf_z.t)
                   (expected : z)]))
 ;;
 
@@ -111,20 +110,20 @@ let%expect_test "inverse" =
     (* zero is not invertible *)
     if not (Z.equal a Z.zero)
     then (
-      let a = Gfz.of_z a in
-      let inv_a = Gfz.inverse a in
-      let product = Gfz.(a * inv_a) in
+      let a = Gf_z.of_z a in
+      let inv_a = Gf_z.inverse a in
+      let product = Gf_z.(a * inv_a) in
       (* a * (1/a) = 1 *)
-      if not (Z.equal (Gfz.to_z product) Z.one)
-      then print_s [%message "failed" (a : Gfz.t) (inv_a : Gfz.t) (product : Gfz.t)])
+      if not (Z.equal (Gf_z.to_z product) Z.one)
+      then print_s [%message "failed" (a : Gf_z.t) (inv_a : Gf_z.t) (product : Gf_z.t)])
   in
   Array.iter test_vector_z ~f:test
 ;;
 
 let%expect_test "omega roots" =
-  let inv_omega = Array.map Gf.omega ~f:(fun omega -> Gf.to_z omega |> Gfz.of_z) in
-  let omega = Array.map inv_omega ~f:Gfz.inverse in
-  print_s [%message (inv_omega : Gfz.t array) (omega : Gfz.t array)];
+  let inv_omega = Array.map Gf.omega ~f:(fun omega -> Gf.to_z omega |> Gf_z.of_z) in
+  let omega = Array.map inv_omega ~f:Gf_z.inverse in
+  print_s [%message (inv_omega : Gf_z.t array) (omega : Gf_z.t array)];
   [%expect
     {|
     ((inv_omega
@@ -151,33 +150,35 @@ let%expect_test "omega roots" =
        16884827967813875098 10516896061424301529 4514835231089717636
        16488041148801377373 16303955383020744715 10790884855407511297
        8554224884056360729))) |}];
-  let prod = Array.map2_exn inv_omega omega ~f:Gfz.( * ) in
-  print_s [%message (prod : Gfz.t array)];
+  let prod = Array.map2_exn inv_omega omega ~f:Gf_z.( * ) in
+  print_s [%message (prod : Gf_z.t array)];
   [%expect
     {| (prod (1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)) |}];
   (* compute powers *)
   print_s
     [%message
-      (Gfz.pow omega.(1) 2 : Gfz.t)
-        (Gfz.pow omega.(2) 4 : Gfz.t)
-        (Gfz.pow omega.(3) 8 : Gfz.t)
-        (Gfz.pow omega.(4) 16 : Gfz.t)
-        (Gfz.pow omega.(5) 32 : Gfz.t)
-        (Gfz.pow omega.(6) 64 : Gfz.t)];
-  [%expect{|
-    (("Gfz.pow (omega.(1)) 2" 1) ("Gfz.pow (omega.(2)) 4" 1)
-     ("Gfz.pow (omega.(3)) 8" 1) ("Gfz.pow (omega.(4)) 16" 1)
-     ("Gfz.pow (omega.(5)) 32" 1) ("Gfz.pow (omega.(6)) 64" 1)) |}];
+      (Gf_z.pow omega.(1) 2 : Gf_z.t)
+        (Gf_z.pow omega.(2) 4 : Gf_z.t)
+        (Gf_z.pow omega.(3) 8 : Gf_z.t)
+        (Gf_z.pow omega.(4) 16 : Gf_z.t)
+        (Gf_z.pow omega.(5) 32 : Gf_z.t)
+        (Gf_z.pow omega.(6) 64 : Gf_z.t)];
+  [%expect
+    {|
+    (("Gf_z.pow (omega.(1)) 2" 1) ("Gf_z.pow (omega.(2)) 4" 1)
+     ("Gf_z.pow (omega.(3)) 8" 1) ("Gf_z.pow (omega.(4)) 16" 1)
+     ("Gf_z.pow (omega.(5)) 32" 1) ("Gf_z.pow (omega.(6)) 64" 1)) |}];
   print_s
     [%message
-      (Gfz.pow inv_omega.(1) 2 : Gfz.t)
-        (Gfz.pow inv_omega.(2) 4 : Gfz.t)
-        (Gfz.pow inv_omega.(3) 8 : Gfz.t)
-        (Gfz.pow inv_omega.(4) 16 : Gfz.t)
-        (Gfz.pow inv_omega.(5) 32 : Gfz.t)
-        (Gfz.pow inv_omega.(6) 64 : Gfz.t)];
-  [%expect {|
-    (("Gfz.pow (inv_omega.(1)) 2" 1) ("Gfz.pow (inv_omega.(2)) 4" 1)
-     ("Gfz.pow (inv_omega.(3)) 8" 1) ("Gfz.pow (inv_omega.(4)) 16" 1)
-     ("Gfz.pow (inv_omega.(5)) 32" 1) ("Gfz.pow (inv_omega.(6)) 64" 1)) |}]
+      (Gf_z.pow inv_omega.(1) 2 : Gf_z.t)
+        (Gf_z.pow inv_omega.(2) 4 : Gf_z.t)
+        (Gf_z.pow inv_omega.(3) 8 : Gf_z.t)
+        (Gf_z.pow inv_omega.(4) 16 : Gf_z.t)
+        (Gf_z.pow inv_omega.(5) 32 : Gf_z.t)
+        (Gf_z.pow inv_omega.(6) 64 : Gf_z.t)];
+  [%expect
+    {|
+    (("Gf_z.pow (inv_omega.(1)) 2" 1) ("Gf_z.pow (inv_omega.(2)) 4" 1)
+     ("Gf_z.pow (inv_omega.(3)) 8" 1) ("Gf_z.pow (inv_omega.(4)) 16" 1)
+     ("Gf_z.pow (inv_omega.(5)) 32" 1) ("Gf_z.pow (inv_omega.(6)) 64" 1)) |}]
 ;;
