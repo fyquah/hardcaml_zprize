@@ -6,9 +6,9 @@ open! Hardcaml
 let n = 8
 let logn = Int.ceil_log2 n
 
-module Controller = struct
-  module Gf = Gf.Make (Hardcaml.Signal)
+module Gf = Gf_bits.Make (Hardcaml.Signal)
 
+module Controller = struct
   module I = struct
     type 'a t =
       { clock : 'a
@@ -126,7 +126,6 @@ end
 (* Butterly and twiddle factor calculation *)
 module Datapath = struct
   open Signal
-  module Gf = Gf.Make (Hardcaml.Signal)
 
   module I = struct
     type 'a t =
@@ -172,7 +171,6 @@ end
 
 module Core = struct
   open! Signal
-  module Gf = Gf.Make (Hardcaml.Signal)
 
   module I = struct
     type 'a t =
@@ -241,7 +239,6 @@ end
 
 module With_rams = struct
   open! Signal
-  module Gf = Core.Gf
 
   module I = struct
     type 'a t =
@@ -357,7 +354,7 @@ end
 
 module Reference = struct
   open! Bits
-  module Gf = Gf.Make (Bits)
+  module Gf = Gf_bits.Make (Bits)
 
   let bit_reversed_addressing input =
     let logn = Int.ceil_log2 (Array.length input) in

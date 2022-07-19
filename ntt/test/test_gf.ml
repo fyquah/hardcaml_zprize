@@ -1,7 +1,7 @@
 open! Core
 open Hardcaml
 module Gf_z = Ntts_r_fun.Gf_z
-module Gf = Ntts_r_fun.Gf.Make (Bits)
+module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
 
 let sexp_of_z z = Z.to_string z |> [%sexp_of: String.t]
 

@@ -1,9 +1,8 @@
 open! Base
 open! Hardcaml
+module Gf : module type of Gf_bits.Make (Signal)
 
 module Controller : sig
-  module Gf : module type of Gf.Make (Hardcaml.Signal)
-
   module I : sig
     type 'a t =
       { clock : 'a
@@ -34,8 +33,6 @@ module Controller : sig
 end
 
 module Datapath : sig
-  module Gf : module type of Gf.Make (Hardcaml.Signal)
-
   module I : sig
     type 'a t =
       { clock : 'a
@@ -61,8 +58,6 @@ module Datapath : sig
 end
 
 module Core : sig
-  module Gf : module type of Gf.Make (Hardcaml.Signal)
-
   module I : sig
     type 'a t =
       { clock : 'a
@@ -122,7 +117,7 @@ module With_rams : sig
 end
 
 module Reference : sig
-  module Gf : module type of Gf.Make (Hardcaml.Bits)
+  module Gf : module type of Gf_bits.Make (Hardcaml.Bits)
 
   val bit_reversed_addressing : 'a array -> unit
 

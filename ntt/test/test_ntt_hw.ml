@@ -62,7 +62,7 @@ let%expect_test "addressing" =
 ;;
 
 module Ntt = Ntts_r_fun.Ntt.With_rams
-module Gf = Ntts_r_fun.Gf.Make (Bits)
+module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
