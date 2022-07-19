@@ -121,12 +121,11 @@ let%expect_test "inverse" =
 ;;
 
 let%expect_test "omega roots" =
-  let inv_omega = Array.map Gf.omega ~f:(fun omega -> Gf.to_z omega |> Gf_z.of_z) in
-  let omega = Array.map inv_omega ~f:Gf_z.inverse in
-  print_s [%message (inv_omega : Gf_z.t array) (omega : Gf_z.t array)];
+  let inverse, forward = Ntts_r_fun.Roots.inverse, Ntts_r_fun.Roots.forward in
+  print_s [%message (inverse : Gf_z.t array) (forward : Gf_z.t array)];
   [%expect
     {|
-    ((inv_omega
+    ((inverse
       (1 18446744069414584320 281474976710656 18446744069397807105
        17293822564807737345 70368744161280 549755813888 17870292113338400769
        13797081185216407910 1803076106186727246 11353340290879379826
@@ -138,7 +137,7 @@ let%expect_test "omega roots" =
        17096174751763063430 1213594585890690845 6414415596519834757
        16116352524544190054 9123114210336311365 4614640910117430873
        1753635133440165772))
-     (omega
+     (forward
       (1 18446744069414584320 18446462594437873665 1099511627520 68719476736
        18446744069414322177 18302628881338728449 18442240469787213841
        2117504431143841456 4459017075746761332 4295002282146690441
@@ -150,35 +149,35 @@ let%expect_test "omega roots" =
        16884827967813875098 10516896061424301529 4514835231089717636
        16488041148801377373 16303955383020744715 10790884855407511297
        8554224884056360729))) |}];
-  let prod = Array.map2_exn inv_omega omega ~f:Gf_z.( * ) in
+  let prod = Array.map2_exn inverse forward ~f:Gf_z.( * ) in
   print_s [%message (prod : Gf_z.t array)];
   [%expect
     {| (prod (1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)) |}];
   (* compute powers *)
   print_s
     [%message
-      (Gf_z.pow omega.(1) 2 : Gf_z.t)
-        (Gf_z.pow omega.(2) 4 : Gf_z.t)
-        (Gf_z.pow omega.(3) 8 : Gf_z.t)
-        (Gf_z.pow omega.(4) 16 : Gf_z.t)
-        (Gf_z.pow omega.(5) 32 : Gf_z.t)
-        (Gf_z.pow omega.(6) 64 : Gf_z.t)];
+      (Gf_z.pow inverse.(1) 2 : Gf_z.t)
+        (Gf_z.pow inverse.(2) 4 : Gf_z.t)
+        (Gf_z.pow inverse.(3) 8 : Gf_z.t)
+        (Gf_z.pow inverse.(4) 16 : Gf_z.t)
+        (Gf_z.pow inverse.(5) 32 : Gf_z.t)
+        (Gf_z.pow inverse.(6) 64 : Gf_z.t)];
   [%expect
     {|
-    (("Gf_z.pow (omega.(1)) 2" 1) ("Gf_z.pow (omega.(2)) 4" 1)
-     ("Gf_z.pow (omega.(3)) 8" 1) ("Gf_z.pow (omega.(4)) 16" 1)
-     ("Gf_z.pow (omega.(5)) 32" 1) ("Gf_z.pow (omega.(6)) 64" 1)) |}];
+    (("Gf_z.pow (inverse.(1)) 2" 1) ("Gf_z.pow (inverse.(2)) 4" 1)
+     ("Gf_z.pow (inverse.(3)) 8" 1) ("Gf_z.pow (inverse.(4)) 16" 1)
+     ("Gf_z.pow (inverse.(5)) 32" 1) ("Gf_z.pow (inverse.(6)) 64" 1)) |}];
   print_s
     [%message
-      (Gf_z.pow inv_omega.(1) 2 : Gf_z.t)
-        (Gf_z.pow inv_omega.(2) 4 : Gf_z.t)
-        (Gf_z.pow inv_omega.(3) 8 : Gf_z.t)
-        (Gf_z.pow inv_omega.(4) 16 : Gf_z.t)
-        (Gf_z.pow inv_omega.(5) 32 : Gf_z.t)
-        (Gf_z.pow inv_omega.(6) 64 : Gf_z.t)];
+      (Gf_z.pow forward.(1) 2 : Gf_z.t)
+        (Gf_z.pow forward.(2) 4 : Gf_z.t)
+        (Gf_z.pow forward.(3) 8 : Gf_z.t)
+        (Gf_z.pow forward.(4) 16 : Gf_z.t)
+        (Gf_z.pow forward.(5) 32 : Gf_z.t)
+        (Gf_z.pow forward.(6) 64 : Gf_z.t)];
   [%expect
     {|
-    (("Gf_z.pow (inv_omega.(1)) 2" 1) ("Gf_z.pow (inv_omega.(2)) 4" 1)
-     ("Gf_z.pow (inv_omega.(3)) 8" 1) ("Gf_z.pow (inv_omega.(4)) 16" 1)
-     ("Gf_z.pow (inv_omega.(5)) 32" 1) ("Gf_z.pow (inv_omega.(6)) 64" 1)) |}]
+    (("Gf_z.pow (forward.(1)) 2" 1) ("Gf_z.pow (forward.(2)) 4" 1)
+     ("Gf_z.pow (forward.(3)) 8" 1) ("Gf_z.pow (forward.(4)) 16" 1)
+     ("Gf_z.pow (forward.(5)) 32" 1) ("Gf_z.pow (forward.(6)) 64" 1)) |}]
 ;;

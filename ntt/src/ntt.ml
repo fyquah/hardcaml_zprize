@@ -58,7 +58,11 @@ module Controller = struct
     let k_next = k.value +: m_next in
     let addr1 = Var.reg spec ~width:logn in
     let addr2 = Var.reg spec ~width:logn in
-    let omega = List.init logn ~f:(fun i -> Gf.to_bits Gf.omega.(i + 1)) |> mux i.value in
+    let omega =
+      List.init logn ~f:(fun i ->
+          Roots.inverse.(i + 1) |> Gf_z.to_z |> Gf.of_z |> Gf.to_bits)
+      |> mux i.value
+    in
     let start_twiddles = Var.reg spec ~width:1 in
     let first_stage = Var.reg spec ~width:1 in
     Always.(
@@ -403,11 +407,13 @@ module Reference = struct
       loop2 ~input ~i ~k:(k + (2 * m)) ~m ~n ~w_m)
   ;;
 
+  let omega i = Roots.inverse.(i) |> Gf_z.to_z |> Gf.of_z
+
   let rec loop1 ~input ~logn ~i ~m =
     if i > logn
     then ()
     else (
-      loop2 ~input ~i ~k:0 ~m ~n:(1 lsl logn) ~w_m:Gf.omega.(i);
+      loop2 ~input ~i ~k:0 ~m ~n:(1 lsl logn) ~w_m:(omega i);
       loop1 ~input ~logn ~i:(i + 1) ~m:(m * 2))
   ;;
 
@@ -423,7 +429,7 @@ module Reference = struct
     let logn = Int.ceil_log2 n in
     for s = 1 to logn do
       let m = 1 lsl s in
-      let wm = Gf.omega.(s) in
+      let wm = omega s in
       let k = ref 0 in
       while !k < n do
         let w = ref Gf.one in
@@ -444,7 +450,7 @@ module Reference = struct
     let logn = Int.ceil_log2 n in
     for s = logn downto 1 do
       let m = 1 lsl s in
-      let wm = Gf.omega.(s) in
+      let wm = omega s in
       let k = ref 0 in
       while !k < n do
         let w = ref Gf.one in
@@ -502,7 +508,7 @@ module Reference = struct
     assert (log_cols > 0);
     let matrix = matrix a log_cols log_rows |> transpose in
     Array.iter matrix ~f:dit;
-    apply_twiddles Gf.omega.(logn) matrix;
+    apply_twiddles (omega logn) matrix;
     let matrix = transpose matrix in
     Array.iter matrix ~f:dit;
     let matrix = transpose matrix in

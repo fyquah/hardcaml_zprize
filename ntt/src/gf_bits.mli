@@ -13,7 +13,6 @@ module Make (Bits : Comb.S) : sig
   val two : t
   val epsilon : t
   val modulus : t
-  val omega : t array
 
   (** {2 Arithmetic operations} *)
 
