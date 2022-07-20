@@ -45,8 +45,8 @@ let test_transform input expected f =
 
 let test input expected =
   test_transform (Array.copy input) expected Ntt_reference.ntt;
-  test_transform (Array.copy input) expected Ntt_sw.dit;
-  test_transform (Array.copy input) expected Ntt_sw.dif
+  test_transform (Array.copy input) expected Ntt_sw.inverse_dit;
+  test_transform (Array.copy input) expected Ntt_sw.inverse_dif
 ;;
 
 let linear n =
@@ -125,7 +125,7 @@ let%expect_test "form matrix, transpose" =
 let%expect_test "4 step" =
   let input = Array.init 16 ~f:(fun i -> Gf.of_z (Z.of_int i)) in
   let expected = Array.copy input in
-  Ntt_sw.dit expected;
+  Ntt_sw.inverse_dit expected;
   print_s [%message (expected : Gf.t array)];
   let four_step = Ntt_sw.four_step input 2 in
   print_s [%message (four_step : Gf.t array)];
@@ -143,4 +143,22 @@ let%expect_test "4 step" =
       9189586793186428920 18446744069414584313 9257157276228155385
       18444483473373661177 9261661979662120952 2251799813685240
       9257140787580274680 2243003586447352 9261643283401050105)) |}]
+;;
+
+let%expect_test "round trip" =
+  (* Test a few sizes, a few times. *)
+  for logn = 2 to 8 do
+    let n = 1 lsl logn in
+    let invn = Gf.inverse (Gf.of_z (Z.of_int n)) in
+    for _ = 0 to 3 do
+      (* Perform a forward then inverse ntt, scale by 1/n *)
+      let input = Array.init n ~f:(fun _ -> Gf.of_z (Z.of_int (Random.int 100_000))) in
+      let data = Array.copy input in
+      Ntt_sw.forward_dit data;
+      Ntt_sw.inverse_dit data;
+      let result = Array.map data ~f:(Gf.( * ) invn) in
+      if not ([%compare.equal: Gf.t array] input result)
+      then raise_s [%message (input : Gf.t array) (result : Gf.t array)]
+    done
+  done
 ;;

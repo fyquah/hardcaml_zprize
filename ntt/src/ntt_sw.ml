@@ -3,15 +3,16 @@ open Hardcaml
 open! Bits
 
 module Make (Gf : Gf_intf.S) = struct
-  let omega i = Roots.inverse.(i) |> Gf_z.to_z |> Gf.of_z
+  let forward_roots = Array.map Roots.forward ~f:(fun z -> Gf_z.to_z z |> Gf.of_z)
+  let inverse_roots = Array.map Roots.inverse ~f:(fun z -> Gf_z.to_z z |> Gf.of_z)
 
-  let dit a =
+  let dit omega a =
     Util.bit_reversed_addressing a;
     let n = Array.length a in
     let logn = Int.ceil_log2 n in
     for s = 1 to logn do
       let m = 1 lsl s in
-      let wm = omega s in
+      let wm = omega.(s) in
       let k = ref 0 in
       while !k < n do
         let w = ref Gf.one in
@@ -27,12 +28,12 @@ module Make (Gf : Gf_intf.S) = struct
     done
   ;;
 
-  let dif a =
+  let dif omega a =
     let n = Array.length a in
     let logn = Int.ceil_log2 n in
     for s = logn downto 1 do
       let m = 1 lsl s in
-      let wm = omega s in
+      let wm = omega.(s) in
       let k = ref 0 in
       while !k < n do
         let w = ref Gf.one in
@@ -48,6 +49,11 @@ module Make (Gf : Gf_intf.S) = struct
     done;
     Util.bit_reversed_addressing a
   ;;
+
+  let forward_dit = dit forward_roots
+  let inverse_dit = dit inverse_roots
+  let forward_dif = dif forward_roots
+  let inverse_dif = dif inverse_roots
 
   let matrix a log_rows log_cols =
     let rows = 1 lsl log_rows in
@@ -89,10 +95,10 @@ module Make (Gf : Gf_intf.S) = struct
     assert (log_rows > 0);
     assert (log_cols > 0);
     let matrix = matrix a log_cols log_rows |> transpose in
-    Array.iter matrix ~f:dit;
-    apply_twiddles (omega logn) matrix;
+    Array.iter matrix ~f:inverse_dit;
+    apply_twiddles inverse_roots.(logn) matrix;
     let matrix = transpose matrix in
-    Array.iter matrix ~f:dit;
+    Array.iter matrix ~f:inverse_dit;
     let matrix = transpose matrix in
     Array.concat (Array.to_list matrix)
   ;;
