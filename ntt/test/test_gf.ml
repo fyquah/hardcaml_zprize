@@ -58,7 +58,7 @@ let%expect_test "test vectors are normalized" =
   Array.iter test_vector ~f:(fun x -> assert (Bits.to_bool (Gf.is_normalized x)))
 ;;
 
-let%expect_test "add" =
+let%expect_test "compare add implementations" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
           let actual = Gf.(of_z left + of_z right |> Gf.to_z) in
@@ -69,7 +69,7 @@ let%expect_test "add" =
               [%message "add failed" (left : z) (right : z) (actual : z) (expected : z)]))
 ;;
 
-let%expect_test "sub" =
+let%expect_test "compare sub implementations" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
           let actual = Gf.(of_z left - of_z right |> Gf.to_z) in
@@ -80,7 +80,7 @@ let%expect_test "sub" =
               [%message "sub failed" (left : z) (right : z) (actual : z) (expected : z)]))
 ;;
 
-let%expect_test "mul" =
+let%expect_test "compare mul implementations" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
           let actual = Gf.(of_z left * of_z right |> Gf.to_z) in
@@ -113,40 +113,14 @@ let%expect_test "inverse" =
   Array.iter test_vector_z ~f:test
 ;;
 
-let%expect_test "omega roots" =
+let%expect_test "roots of unity" =
   let inverse, forward = Ntts_r_fun.Roots.inverse, Ntts_r_fun.Roots.forward in
-  print_s [%message (inverse : Gf_z.t array) (forward : Gf_z.t array)];
-  [%expect
-    {|
-    ((inverse
-      (1 18446744069414584320 281474976710656 18446744069397807105
-       17293822564807737345 70368744161280 549755813888 17870292113338400769
-       13797081185216407910 1803076106186727246 11353340290879379826
-       455906449640507599 17492915097719143606 1532612707718625687
-       16207902636198568418 17776499369601055404 6115771955107415310
-       12380578893860276750 9306717745644682924 18146160046829613826
-       3511170319078647661 17654865857378133588 5416168637041100469
-       16905767614792059275 9713644485405565297 5456943929260765144
-       17096174751763063430 1213594585890690845 6414415596519834757
-       16116352524544190054 9123114210336311365 4614640910117430873
-       1753635133440165772))
-     (forward
-      (1 18446744069414584320 18446462594437873665 1099511627520 68719476736
-       18446744069414322177 18302628881338728449 18442240469787213841
-       2117504431143841456 4459017075746761332 4295002282146690441
-       8548973421900915981 11164456749895610016 3968367389790187850
-       4654242210262998966 1553425662128427817 7868944258580147481
-       14744321562856667967 2513567076326282710 5089696809409609209
-       17260140776825220475 11898519751787946856 15307271466853436433
-       5456584715443070302 1219213613525454263 13843946492009319323
-       16884827967813875098 10516896061424301529 4514835231089717636
-       16488041148801377373 16303955383020744715 10790884855407511297
-       8554224884056360729))) |}];
+  (* product is [1]. *)
   let prod = Array.map2_exn inverse forward ~f:Gf_z.( * ) in
   print_s [%message (prod : Gf_z.t array)];
   [%expect
     {| (prod (1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)) |}];
-  (* compute powers *)
+  (* compute powers - [w.(i) ^ (2 ^ i) = 1]  *)
   print_s
     [%message
       (Gf_z.pow inverse.(1) 2 : Gf_z.t)
