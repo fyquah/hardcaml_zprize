@@ -1,7 +1,10 @@
 open! Core
-module Ntt_reference = Ntts_r_fun.Ntt_competition_reference
-module Ntt_sw = Ntts_r_fun.Ntt_sw
-module Gf = Ntt_reference.Gf
+
+(* We should be able to run the sw ntt tests using either the Z or Bits Gf field types. *)
+(* module Gf = Ntts_r_fun.Gf_bits.Make (Hardcaml.Bits) *)
+module Gf = Ntts_r_fun.Gf_z
+module Ntt_reference = Ntts_r_fun.Ntt_competition_reference.Make (Gf)
+module Ntt_sw = Ntts_r_fun.Ntt_sw.Make (Gf)
 module Util = Ntts_r_fun.Util
 
 let%expect_test "reserve bits in values" =
