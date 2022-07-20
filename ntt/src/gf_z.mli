@@ -1,15 +1,8 @@
 open Base
+include Gf_intf.S
 
-type t [@@deriving sexp_of]
+(** {2 Misc} *)
 
-(** Solinas prime [2^64 - 2^31 + 1] *)
-val modulus : t
-
-val of_z : Z.t -> t
-val to_z : t -> Z.t
-val ( + ) : t -> t -> t
-val ( - ) : t -> t -> t
-val ( * ) : t -> t -> t
 val inverse : t -> t
 val pow : t -> int -> t
 val pp : Formatter.t -> t -> unit

@@ -1,16 +1,20 @@
 open Base
 
-type t = Z.t
+type t = Z.t [@@deriving compare, equal]
 
 let sexp_of_t t = Z.to_string t |> [%sexp_of: String.t]
 
 (* This is a solinas prime (2^64 - 2^32 + 1) which has a fast modular
      reduction algorithm. *)
 let modulus = Z.((one lsl 64) - (one lsl 32) + one)
+let zero = Z.zero
+let one = Z.one
+let two = Z.of_int 2
 let of_z t = Z.(erem t modulus)
 let add a b = Z.((a + b) mod modulus)
 let sub a b = Z.(erem (a - b) modulus)
 let mul a b = Z.(a * b mod modulus)
+let negate a = if Z.(equal a zero) then Z.zero else Z.(modulus - a)
 let ( + ) = add
 let ( - ) = sub
 let ( * ) = mul

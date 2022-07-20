@@ -11,9 +11,9 @@ let rec loop3 ~input ~i ~j ~k ~m ~w ~w_m =
   else (
     let t1 = input.(k + j) in
     let t2 = input.(k + j + m) in
-    let t = Gf.(t2 *: w) in
-    input.(k + j) <- Gf.(t1 +: t);
-    input.(k + j + m) <- Gf.(t1 -: t);
+    let t = Gf.(t2 * w) in
+    input.(k + j) <- Gf.(t1 + t);
+    input.(k + j + m) <- Gf.(t1 - t);
     if debugging
     then
       Stdio.printf
@@ -24,7 +24,7 @@ let rec loop3 ~input ~i ~j ~k ~m ~w ~w_m =
         (Gf.to_z t2 |> Z.to_string)
         (Gf.to_z input.(k + j) |> Z.to_string)
         (Gf.to_z input.(k + j + m) |> Z.to_string);
-    loop3 ~input ~i ~j:(j + 1) ~k ~m ~w:Gf.(w *: w_m) ~w_m)
+    loop3 ~input ~i ~j:(j + 1) ~k ~m ~w:Gf.(w * w_m) ~w_m)
 ;;
 
 let rec loop2 ~input ~i ~k ~m ~n ~w_m =

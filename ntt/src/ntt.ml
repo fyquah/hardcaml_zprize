@@ -150,9 +150,9 @@ module Datapath = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let ( *: ) a b = Gf.( *: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-  let ( +: ) a b = Gf.( +: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-  let ( -: ) a b = Gf.( -: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let ( *: ) a b = Gf.( * ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let ( +: ) a b = Gf.( + ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let ( -: ) a b = Gf.( - ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
   let twiddle_factor (i : _ I.t) w = mux2 i.start_twiddles Gf.(to_bits one) (w *: i.omega)
 
   let create _scope (i : _ I.t) =

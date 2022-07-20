@@ -26,17 +26,10 @@ let test_vector_z =
 let test_vector = Array.map test_vector_z ~f:Gf.of_z
 
 let%expect_test "constants" =
-  print_s
-    [%message
-      (Gf.zero : Gf.t)
-        (Gf.one : Gf.t)
-        (Gf.two : Gf.t)
-        (Gf.modulus : Gf.t)
-        (Gf.epsilon : Gf.t)];
+  print_s [%message (Gf.zero : Gf.t) (Gf.one : Gf.t) (Gf.two : Gf.t) (Gf.modulus : Gf.t)];
   [%expect
     {|
-    ((Gf.zero 0) (Gf.one 1) (Gf.two 2) (Gf.modulus 18446744069414584321)
-     (Gf.epsilon 4294967295)) |}]
+    ((Gf.zero 0) (Gf.one 1) (Gf.two 2) (Gf.modulus 18446744069414584321)) |}]
 ;;
 
 let%expect_test "test vectors" =
@@ -68,7 +61,7 @@ let%expect_test "test vectors are normalized" =
 let%expect_test "add" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left +: of_z right |> Gf.to_z) in
+          let actual = Gf.(of_z left + of_z right |> Gf.to_z) in
           let expected = Gf_z.(of_z left + of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)
           then
@@ -79,7 +72,7 @@ let%expect_test "add" =
 let%expect_test "sub" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left -: of_z right |> Gf.to_z) in
+          let actual = Gf.(of_z left - of_z right |> Gf.to_z) in
           let expected = Gf_z.(of_z left - of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)
           then
@@ -90,7 +83,7 @@ let%expect_test "sub" =
 let%expect_test "mul" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left *: of_z right |> Gf.to_z) in
+          let actual = Gf.(of_z left * of_z right |> Gf.to_z) in
           let actual_normalized = Gf_z.of_z actual in
           let expected = Gf_z.(of_z left * of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)

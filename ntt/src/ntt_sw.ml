@@ -17,10 +17,10 @@ let dit a =
       let w = ref Gf.one in
       for j = 0 to (m / 2) - 1 do
         let u = a.(!k + j) in
-        let v = Gf.( *: ) !w a.(!k + j + (m / 2)) in
-        a.(!k + j) <- Gf.(u +: v);
-        a.(!k + j + (m / 2)) <- Gf.(u -: v);
-        w := Gf.(!w *: wm)
+        let v = Gf.( * ) !w a.(!k + j + (m / 2)) in
+        a.(!k + j) <- Gf.(u + v);
+        a.(!k + j + (m / 2)) <- Gf.(u - v);
+        w := Gf.(!w * wm)
       done;
       k := !k + m
     done
@@ -39,9 +39,9 @@ let dif a =
       for j = 0 to (m / 2) - 1 do
         let u = a.(!k + j) in
         let v = a.(!k + j + (m / 2)) in
-        a.(!k + j) <- Gf.(u +: v);
-        a.(!k + j + (m / 2)) <- Gf.(!w *: (u -: v));
-        w := Gf.(!w *: wm)
+        a.(!k + j) <- Gf.(u + v);
+        a.(!k + j + (m / 2)) <- Gf.(!w * (u - v));
+        w := Gf.(!w * wm)
       done;
       k := !k + m
     done
@@ -69,15 +69,15 @@ let apply_twiddles wm a =
     if index = Array.length a
     then ()
     else (
-      a.(index) <- Gf.(w *: a.(index));
-      row wm Gf.(wm *: w) a (index + 1))
+      a.(index) <- Gf.(w * a.(index));
+      row wm Gf.(wm * w) a (index + 1))
   in
   let rec f wm w index =
     if index = Array.length a
     then ()
     else (
       row w Gf.one a.(index) 0;
-      f wm Gf.(w *: wm) (index + 1))
+      f wm Gf.(w * wm) (index + 1))
   in
   f wm Gf.one 0
 ;;
