@@ -1,4 +1,3 @@
-(* *)
 open! Base
 open! Hardcaml
 
@@ -6,9 +5,9 @@ open! Hardcaml
 let n = 8
 let logn = Int.ceil_log2 n
 
-module Controller = struct
-  module Gf = Gf.Make (Hardcaml.Signal)
+module Gf = Gf_bits.Make (Hardcaml.Signal)
 
+module Controller = struct
   module I = struct
     type 'a t =
       { clock : 'a
@@ -58,7 +57,11 @@ module Controller = struct
     let k_next = k.value +: m_next in
     let addr1 = Var.reg spec ~width:logn in
     let addr2 = Var.reg spec ~width:logn in
-    let omega = List.init logn ~f:(fun i -> Gf.to_bits Gf.omega.(i + 1)) |> mux i.value in
+    let omega =
+      List.init logn ~f:(fun i ->
+          Roots.inverse.(i + 1) |> Gf_z.to_z |> Gf.of_z |> Gf.to_bits)
+      |> mux i.value
+    in
     let start_twiddles = Var.reg spec ~width:1 in
     let first_stage = Var.reg spec ~width:1 in
     Always.(
@@ -126,7 +129,6 @@ end
 (* Butterly and twiddle factor calculation *)
 module Datapath = struct
   open Signal
-  module Gf = Gf.Make (Hardcaml.Signal)
 
   module I = struct
     type 'a t =
@@ -148,9 +150,9 @@ module Datapath = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let ( *: ) a b = Gf.( *: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-  let ( +: ) a b = Gf.( +: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-  let ( -: ) a b = Gf.( -: ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let ( *: ) a b = Gf.( * ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let ( +: ) a b = Gf.( + ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  let ( -: ) a b = Gf.( - ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
   let twiddle_factor (i : _ I.t) w = mux2 i.start_twiddles Gf.(to_bits one) (w *: i.omega)
 
   let create _scope (i : _ I.t) =
@@ -172,7 +174,6 @@ end
 
 module Core = struct
   open! Signal
-  module Gf = Gf.Make (Hardcaml.Signal)
 
   module I = struct
     type 'a t =
@@ -241,7 +242,6 @@ end
 
 module With_rams = struct
   open! Signal
-  module Gf = Core.Gf
 
   module I = struct
     type 'a t =
@@ -352,71 +352,5 @@ module With_rams = struct
   let hierarchy scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
     Hier.hierarchical ~name:"top" ~scope create
-  ;;
-end
-
-module Reference = struct
-  open! Bits
-  module Gf = Gf.Make (Bits)
-
-  let bit_reversed_addressing input =
-    let logn = Int.ceil_log2 (Array.length input) in
-    let max = ones logn in
-    let rec loop k =
-      let rk = reverse k in
-      if Bits.equal (k <: rk) vdd
-      then (
-        let tmp = input.(to_int rk) in
-        input.(to_int rk) <- input.(to_int k);
-        input.(to_int k) <- tmp);
-      if Bits.equal k max then () else loop (k +:. 1)
-    in
-    loop (zero logn)
-  ;;
-
-  let debugging = false
-
-  let rec loop3 ~input ~i ~j ~k ~m ~w ~w_m =
-    if j >= m
-    then ()
-    else (
-      let t1 = input.(k + j) in
-      let t2 = input.(k + j + m) in
-      let t = Gf.(t2 *: w) in
-      input.(k + j) <- Gf.(t1 +: t);
-      input.(k + j + m) <- Gf.(t1 -: t);
-      if debugging
-      then
-        Stdio.printf
-          "%i %i %s %s %s %s\n"
-          (k + j)
-          (k + j + m)
-          (Gf.to_z t1 |> Z.to_string)
-          (Gf.to_z t2 |> Z.to_string)
-          (Gf.to_z input.(k + j) |> Z.to_string)
-          (Gf.to_z input.(k + j + m) |> Z.to_string);
-      loop3 ~input ~i ~j:(j + 1) ~k ~m ~w:Gf.(w *: w_m) ~w_m)
-  ;;
-
-  let rec loop2 ~input ~i ~k ~m ~n ~w_m =
-    if k >= n
-    then ()
-    else (
-      loop3 ~input ~i ~j:0 ~k ~m ~w:Gf.one ~w_m;
-      loop2 ~input ~i ~k:(k + (2 * m)) ~m ~n ~w_m)
-  ;;
-
-  let rec loop1 ~input ~logn ~i ~m =
-    if i > logn
-    then ()
-    else (
-      loop2 ~input ~i ~k:0 ~m ~n:(1 lsl logn) ~w_m:Gf.omega.(i);
-      loop1 ~input ~logn ~i:(i + 1) ~m:(m * 2))
-  ;;
-
-  let ntt input =
-    bit_reversed_addressing input;
-    let logn = Int.ceil_log2 (Array.length input) in
-    loop1 ~input ~logn ~i:1 ~m:1
   ;;
 end

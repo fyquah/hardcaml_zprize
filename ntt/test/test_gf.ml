@@ -1,7 +1,7 @@
 open! Core
 open Hardcaml
-module Gfz = Ntts_r_fun.Gf.Z
-module Gf = Ntts_r_fun.Gf.Make (Bits)
+module Gf_z = Ntts_r_fun.Gf_z
+module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
 
 let sexp_of_z z = Z.to_string z |> [%sexp_of: String.t]
 
@@ -15,7 +15,7 @@ let test_vector_z =
       ; at_power 32 i
       ; at_power 63 i
       ; [ (let offset = 10 - i in
-           Gfz.(modulus - Gfz.of_int offset |> Gfz.to_z))
+           Gf_z.(modulus - Gf_z.of_z (Z.of_int offset) |> Gf_z.to_z))
         ]
       ]
       |> List.concat
@@ -26,18 +26,10 @@ let test_vector_z =
 let test_vector = Array.map test_vector_z ~f:Gf.of_z
 
 let%expect_test "constants" =
-  print_s
-    [%message
-      (Gf.zero : Gf.t)
-        (Gf.one : Gf.t)
-        (Gf.two : Gf.t)
-        (Gf.modulus : Gf.t)
-        (Gf.epsilon : Gf.t)
-        (Gf.mult_mask : Gf.t)];
+  print_s [%message (Gf.zero : Gf.t) (Gf.one : Gf.t) (Gf.two : Gf.t) (Gf.modulus : Gf.t)];
   [%expect
     {|
-    ((Gf.zero 0) (Gf.one 1) (Gf.two 2) (Gf.modulus 18446744069414584321)
-     (Gf.epsilon 4294967295) (Gf.mult_mask 18446744073709551615)) |}]
+    ((Gf.zero 0) (Gf.one 1) (Gf.two 2) (Gf.modulus 18446744069414584321)) |}]
 ;;
 
 let%expect_test "test vectors" =
@@ -66,34 +58,34 @@ let%expect_test "test vectors are normalized" =
   Array.iter test_vector ~f:(fun x -> assert (Bits.to_bool (Gf.is_normalized x)))
 ;;
 
-let%expect_test "add" =
+let%expect_test "compare add implementations" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left +: of_z right |> Gf.to_z) in
-          let expected = Gfz.(of_z left + of_z right |> Gfz.to_z) in
+          let actual = Gf.(of_z left + of_z right |> Gf.to_z) in
+          let expected = Gf_z.(of_z left + of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)
           then
             raise_s
               [%message "add failed" (left : z) (right : z) (actual : z) (expected : z)]))
 ;;
 
-let%expect_test "sub" =
+let%expect_test "compare sub implementations" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left -: of_z right |> Gf.to_z) in
-          let expected = Gfz.(of_z left - of_z right |> Gfz.to_z) in
+          let actual = Gf.(of_z left - of_z right |> Gf.to_z) in
+          let expected = Gf_z.(of_z left - of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)
           then
             raise_s
               [%message "sub failed" (left : z) (right : z) (actual : z) (expected : z)]))
 ;;
 
-let%expect_test "mul" =
+let%expect_test "compare mul implementations" =
   Array.iter test_vector_z ~f:(fun left ->
       Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left *: of_z right |> Gf.to_z) in
-          let actual_normalized = Gfz.of_z actual in
-          let expected = Gfz.(of_z left * of_z right |> Gfz.to_z) in
+          let actual = Gf.(of_z left * of_z right |> Gf.to_z) in
+          let actual_normalized = Gf_z.of_z actual in
+          let expected = Gf_z.(of_z left * of_z right |> Gf_z.to_z) in
           if not (Z.equal actual expected)
           then
             raise_s
@@ -102,6 +94,57 @@ let%expect_test "mul" =
                   (left : z)
                   (right : z)
                   (actual : z)
-                  (actual_normalized : Gfz.t)
+                  (actual_normalized : Gf_z.t)
                   (expected : z)]))
+;;
+
+let%expect_test "inverse" =
+  let test a =
+    (* zero is not invertible *)
+    if not (Z.equal a Z.zero)
+    then (
+      let a = Gf_z.of_z a in
+      let inv_a = Gf_z.inverse a in
+      let product = Gf_z.(a * inv_a) in
+      (* a * (1/a) = 1 *)
+      if not (Z.equal (Gf_z.to_z product) Z.one)
+      then print_s [%message "failed" (a : Gf_z.t) (inv_a : Gf_z.t) (product : Gf_z.t)])
+  in
+  Array.iter test_vector_z ~f:test
+;;
+
+let%expect_test "roots of unity" =
+  let inverse, forward = Ntts_r_fun.Roots.inverse, Ntts_r_fun.Roots.forward in
+  (* product is [1]. *)
+  let prod = Array.map2_exn inverse forward ~f:Gf_z.( * ) in
+  print_s [%message (prod : Gf_z.t array)];
+  [%expect
+    {| (prod (1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1)) |}];
+  (* compute powers - [w.(i) ^ (2 ^ i) = 1]  *)
+  print_s
+    [%message
+      (Gf_z.pow inverse.(1) 2 : Gf_z.t)
+        (Gf_z.pow inverse.(2) 4 : Gf_z.t)
+        (Gf_z.pow inverse.(3) 8 : Gf_z.t)
+        (Gf_z.pow inverse.(4) 16 : Gf_z.t)
+        (Gf_z.pow inverse.(5) 32 : Gf_z.t)
+        (Gf_z.pow inverse.(6) 64 : Gf_z.t)];
+  [%expect
+    {|
+    (("Gf_z.pow (inverse.(1)) 2" 1) ("Gf_z.pow (inverse.(2)) 4" 1)
+     ("Gf_z.pow (inverse.(3)) 8" 1) ("Gf_z.pow (inverse.(4)) 16" 1)
+     ("Gf_z.pow (inverse.(5)) 32" 1) ("Gf_z.pow (inverse.(6)) 64" 1)) |}];
+  print_s
+    [%message
+      (Gf_z.pow forward.(1) 2 : Gf_z.t)
+        (Gf_z.pow forward.(2) 4 : Gf_z.t)
+        (Gf_z.pow forward.(3) 8 : Gf_z.t)
+        (Gf_z.pow forward.(4) 16 : Gf_z.t)
+        (Gf_z.pow forward.(5) 32 : Gf_z.t)
+        (Gf_z.pow forward.(6) 64 : Gf_z.t)];
+  [%expect
+    {|
+    (("Gf_z.pow (forward.(1)) 2" 1) ("Gf_z.pow (forward.(2)) 4" 1)
+     ("Gf_z.pow (forward.(3)) 8" 1) ("Gf_z.pow (forward.(4)) 16" 1)
+     ("Gf_z.pow (forward.(5)) 32" 1) ("Gf_z.pow (forward.(6)) 64" 1)) |}]
 ;;
