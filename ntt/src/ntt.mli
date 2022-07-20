@@ -115,26 +115,3 @@ module With_rams : sig
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
-
-module Reference : sig
-  module Gf : module type of Gf_bits.Make (Hardcaml.Bits)
-
-  val bit_reversed_addressing : 'a array -> unit
-
-  (** From the reference implementation provided to the competition *)
-  val ntt : Gf.t array -> unit
-
-  (** Standard decimation in time algorithm *)
-  val dit : Gf.t array -> unit
-
-  (** Standard decimation in frequency algorithm *)
-  val dif : Gf.t array -> unit
-
-  val matrix : Gf.t array -> int -> int -> Gf.t array array
-  val transpose : Gf.t array array -> Gf.t array array
-  val row : Gf.t array array -> int -> Gf.t array
-  val col : Gf.t array array -> int -> Gf.t array
-
-  (** Four step decomposition *)
-  val four_step : Gf.t array -> int -> Gf.t array
-end

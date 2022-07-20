@@ -1,6 +1,7 @@
 open! Core
-module Ntt = Ntts_r_fun.Ntt.Reference
-module Gf = Ntt.Gf
+module Ntt_reference = Ntts_r_fun.Ntt_competition_reference
+module Ntt_sw = Ntts_r_fun.Ntt_sw
+module Gf = Ntt_reference.Gf
 module Util = Ntts_r_fun.Util
 
 let%expect_test "reserve bits in values" =
@@ -9,7 +10,8 @@ let%expect_test "reserve bits in values" =
       (Util.reverse 8 0b10000000 : Int.Hex.t)
         (Util.reverse 8 0b00000001 : Int.Hex.t)
         (Util.reverse 8 0b11110000 : Int.Hex.t)];
-  [%expect {|
+  [%expect
+    {|
     (("Util.reverse 8 0b10000000" 0x1) ("Util.reverse 8 0b00000001" 0x80)
      ("Util.reverse 8 0b11110000" 0xf)) |}]
 ;;
@@ -39,9 +41,9 @@ let test_transform input expected f =
 ;;
 
 let test input expected =
-  test_transform (Array.copy input) expected Ntt.ntt;
-  test_transform (Array.copy input) expected Ntt.dit;
-  test_transform (Array.copy input) expected Ntt.dif
+  test_transform (Array.copy input) expected Ntt_reference.ntt;
+  test_transform (Array.copy input) expected Ntt_sw.dit;
+  test_transform (Array.copy input) expected Ntt_sw.dif
 ;;
 
 let linear n =
@@ -107,9 +109,9 @@ let%expect_test "4096pt linear" =
 
 let%expect_test "form matrix, transpose" =
   let input = Array.init 16 ~f:(fun i -> Gf.of_z (Z.of_int i)) in
-  let matrix = Ntt.matrix input 2 2 in
+  let matrix = Ntt_sw.matrix input 2 2 in
   print_s [%message (matrix : Gf.t array array)];
-  let transpose = Ntt.transpose matrix in
+  let transpose = Ntt_sw.transpose matrix in
   print_s [%message (transpose : Gf.t array array)];
   [%expect
     {|
@@ -120,9 +122,9 @@ let%expect_test "form matrix, transpose" =
 let%expect_test "4 step" =
   let input = Array.init 16 ~f:(fun i -> Gf.of_z (Z.of_int i)) in
   let expected = Array.copy input in
-  Ntt.dit expected;
+  Ntt_sw.dit expected;
   print_s [%message (expected : Gf.t array)];
-  let four_step = Ntt.four_step input 2 in
+  let four_step = Ntt_sw.four_step input 2 in
   print_s [%message (four_step : Gf.t array)];
   [%expect
     {|
