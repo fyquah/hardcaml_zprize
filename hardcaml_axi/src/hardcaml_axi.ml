@@ -4,6 +4,7 @@
 
 module Stream = Stream
 module Lite = Lite
+module type Config = Config.S
 
 module Make (X : Config.S) = struct
   module Stream = Stream.Make (X)
@@ -50,6 +51,15 @@ module Axi256 = struct
   module Config = struct
     let addr_bits = 32
     let data_bits = 256
+  end
+
+  include Make (Config)
+end
+
+module Axi512 = struct
+  module Config = struct
+    let addr_bits = 32
+    let data_bits = 512
   end
 
   include Make (Config)

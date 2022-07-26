@@ -1,0 +1,13 @@
+# Various host binary executables
+*/host/*.exe
+*/host/*.log
+
+# The build directory for xclbin
+*/build
+
+# Various files generated in testing
+*/test/*.exe
+*/test/*.log
+*/test/*.exe
+*/test/*.run
+*/test/emconfig.json

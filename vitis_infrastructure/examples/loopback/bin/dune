@@ -1,0 +1,5 @@
+(executables
+ (names generate)
+ (libraries core core_unix.command_unix vitis_loopback_example)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))
