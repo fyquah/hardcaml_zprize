@@ -3,7 +3,7 @@
 */host/*.log
 
 # The build directory for xclbin
-*/build
+*/fpga/build
 
 # Various files generated in testing
 */test/*.exe
