@@ -9,5 +9,5 @@ set -x
 	--build-target hw_emu \
 	--cfg loopback.cfg \
 	krnl_mm2s:cpp \
-  ../../../../_build/default/vitis_infrastructure/examples/loopback/fpga/krnl_loopback \
+  krnl_loopback \
 	krnl_s2mm:cpp \
