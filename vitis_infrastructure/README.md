@@ -118,6 +118,23 @@ window.
 See [the loopback example](examples/loopback) for more example of this in
 action.
 
+# Introspecting a HW Build
+
+When building the loopback example for the varium-c1100, I see a vivado.log in
+`build/_x.hw.xilinx_u55n_gen3x4_xdma_2_202110_1/link/vivado/vpl/vivado.log`. It
+refers to a post-route dcp in
+`build/_x.hw.xilinx_u55n_gen3x4_xdma_2_202110_1/link/vivado/vpl/prj/prj.runs/impl_1/level0_wrapper_routed.dcp`
+
+## Varium C1100
+
+From loading the DCP on the varium C1100, I see the following:
+
+![](images/varium-c1100-snapshot.png)
+
+The big things that we learn here are:
+- 2 SLRs
+- SLR0 (the bottom one) is closer to the HBMs
+
 # Resources
 
 General notes about vitis
