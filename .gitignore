@@ -2,3 +2,5 @@ _build
 fpga/*/*.v
 fpga/*/vivado*
 fpga/*/*.rpt
+
+**.swp

@@ -1,0 +1,251 @@
+==========================
+Basic Platform Information
+==========================
+Platform:           gen3x4_xdma_2
+File:               /opt/xilinx/platforms/xilinx_u55n_gen3x4_xdma_2_202110_1/xilinx_u55n_gen3x4_xdma_2_202110_1.xpfm
+Description:        
+    This platform targets the Alveo U55n Data Center Accelerator Card. This high-performance acceleration platform features HBM, the expanded partial reconfiguration flow for high fabric resource availability, and Xilinx DMA Subsystem for PCI Express with PCIe Gen3 x16 connectivity.
+  
+
+=====================================
+Hardware Platform (Shell) Information
+=====================================
+Vendor:                           xilinx
+Board:                            U55N (gen3x4_xdma_2)
+Name:                             gen3x4_xdma_2
+Version:                          202110.1
+Generated Version:                2021.1
+Hardware:                         1
+Software Emulation:               1
+Hardware Emulation:               1
+Hardware Emulation Platform:      1
+FPGA Family:                      virtexuplusHBM
+FPGA Device:                      xcu55n
+Board Vendor:                     xilinx.com
+Board Name:                       xilinx.com:au55n:1.0
+Board Part:                       xcu55n-fsvh2892-2L-e
+
+=====================
+Interface Information
+=====================
+  Interface Name: PCIe
+  Interface Type: gen3x4
+  PCIe Vendor Id:    
+  PCIe Device Id:    
+  PCIe Subsystem Id: 
+
+=================
+Clock Information
+=================
+  Default Clock Index: 0
+  Clock Index:         0
+    Frequency:         300.000000
+  Clock Index:         1
+    Frequency:         500.000000
+  Clock Index:         2
+    Frequency:         100.000000
+
+==========
+Valid SLRs
+==========
+SLR0, SLR1
+
+=====================
+Resource Availability
+=====================
+  =====
+  Total
+  =====
+    LUTs:  788640
+    FFs:   1577280
+    BRAMs: 1188
+    DSPs:  5640
+
+  =======
+  Per SLR
+  =======
+    SLR0:
+      LUTs:  394080
+      FFs:   788160
+      BRAMs: 588
+      DSPs:  2712
+    SLR1:
+      LUTs:  394560
+      FFs:   789120
+      BRAMs: 600
+      DSPs:  2928
+
+==================
+Memory Information
+==================
+  Bus SP Tag: HBM
+    Segment Index: 0
+      Consumption: default
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 1
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 2
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 3
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 4
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 5
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 6
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 7
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 8
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 9
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 10
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 11
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 12
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 13
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 14
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 15
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 16
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 17
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 18
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 19
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 20
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 21
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 22
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 23
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 24
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 25
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 26
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 27
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 28
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 29
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 30
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+    Segment Index: 31
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 32
+  Bus SP Tag: PLRAM
+    Segment Index: 0
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 15
+    Segment Index: 1
+      Consumption: automatic
+      SLR:         SLR0
+      Max Masters: 15
+    Segment Index: 2
+      Consumption: automatic
+      SLR:         SLR1
+      Max Masters: 15
+    Segment Index: 3
+      Consumption: automatic
+      SLR:         SLR1
+      Max Masters: 15
+  Bus SP Tag: HOST
+    Segment Index: 0
+      Consumption: explicit
+      SLR:         SLR1
+      Max Masters: 15
+
+=============================
+Software Platform Information
+=============================
+Number of Runtimes:            1
+Default System Configuration:  config0_0
+System Configurations:
+  System Config Name:                      config0_0
+  System Config Description:               config0_0 Linux OS on x86_0
+  System Config Default Processor Group:   x86_0
+  System Config Default Boot Image:        
+  System Config Is QEMU Supported:         0
+  System Config Processor Groups:
+    Processor Group Name:      x86_0
+    Processor Group CPU Type:  x86
+    Processor Group OS Name:   Linux OS
+  System Config Boot Images:
+Supported Runtimes:
+  Runtime: OpenCL
+

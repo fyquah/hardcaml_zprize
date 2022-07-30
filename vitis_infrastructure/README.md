@@ -18,6 +18,11 @@ Examples with hardcaml RTL kernels
   converting `m_axi` to `axis` doing loopback with byte swapping and a simple
   register interface. This is very close to a "hello world" example.
 
+Examples with C++ kernels
+- [stream\_reverse](examples/stream_reverse) - example C++ kernel that performs
+  the reads and writes as required for the NTT core. This is the "experimental
+  playground" for the vitis-facing layer of the NTT core.
+
 Examples copied from the Vitis Accel Examples repository
 - [rtl\_adder\_streams](examples/rtl_adder_streams)
 - [rtl\_vadd](examples/rtl_vadd)
@@ -114,6 +119,9 @@ user_pre_sim_script=CURRENT_DIRECTORY/xsim.tcl
 3. Run your simulation. When you open xsim, you'll see a limited set of waves
 in the viewer. To see the other waves, navigate to your kernel in the "Scope"
 window.
+
+4. (Only if running in `debug_mode=batch`) Open the generated `.wdb` file by
+running `xsim -gui foo.wdb`
 
 See [the loopback example](examples/loopback) for more example of this in
 action.
