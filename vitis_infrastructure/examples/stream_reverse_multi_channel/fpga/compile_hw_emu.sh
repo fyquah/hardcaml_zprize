@@ -6,7 +6,7 @@ set -x
 	--top-level-name stream_reverse \
 	--platform varium-c1100 \
 	--build-dir build \
-	--build-target hw \
+	--build-target hw_emu \
 	--cfg stream_reverse.cfg \
 	krnl_controller:cpp \
 	krnl_reverse:cpp

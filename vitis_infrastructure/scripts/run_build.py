@@ -37,7 +37,7 @@ class KernelType(enum.Enum):
     RTL = 1
     CPP = 2
 
-Kernel = collections.namedtuple("Kernel", ["name", "type_"])
+Kernel = collections.namedtuple("Kernel", ["name", "type_", "has_kernel_cfg"])
 
 def resolve_platform(platform):
     if platform == "varium-c1100":
@@ -65,6 +65,10 @@ def write_kernels_mk(build_dir, kernels):
         f.write("VIVADO := $(XILINX_VIVADO)/bin/vivado\n")
         for kernel in kernels:
             kernel_name = kernel.name
+            additional_vpp_flags = ""
+            if kernel.has_kernel_cfg:
+                additional_vpp_flags += f"--config src/{kernel_name}/kernel.cfg "
+
             if kernel.type_ == KernelType.RTL:
                 f.write(f"$(TEMP_DIR)/{kernel_name}.xo: package_kernel.tcl src/{kernel_name}/kernel_ports.tcl gen_xo.tcl src/{kernel_name}/*.sv src/{kernel_name}/*.v\n")
                 f.write(f"\tmkdir -p $(TEMP_DIR)\n")
@@ -72,7 +76,7 @@ def write_kernels_mk(build_dir, kernels):
             elif kernel.type_ == KernelType.CPP:
                 f.write(f"$(TEMP_DIR)/{kernel_name}.xo: src/{kernel_name}/*.cpp\n")
                 f.write(f"\tmkdir -p $(TEMP_DIR)\n")
-                f.write(f"\tv++ $(VPP_FLAGS) -c -k {kernel_name} -I'$(<D)' -o'$@' '$<'\n")
+                f.write(f"\tv++ $(VPP_FLAGS) {additional_vpp_flags} -c -k {kernel_name} -I'$(<D)' -o'$@' '$<'\n")
             else:
                 assert False
             f.write("\n")
@@ -127,8 +131,10 @@ def copy_kernel_sources(args):
                 raise RuntimeError(
                         f"Expecting RTL kernel directory to contain a kernel_ports.tcl (kernel directory = {src})")
 
+        has_kernel_cfg = os.path.isfile(os.path.join(src, "kernel.cfg"))
+
         distutils.dir_util.copy_tree(src, dst)
-        kernels.append(Kernel(name=kernel_name, type_=kernel_type))
+        kernels.append(Kernel(name=kernel_name, type_=kernel_type, has_kernel_cfg=has_kernel_cfg))
     return kernels
 
 def build_target(args):
