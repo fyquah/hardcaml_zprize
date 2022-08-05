@@ -9,14 +9,26 @@
 
 typedef std::vector<uint64_t, aligned_allocator<uint64_t>> vec64;
 
+class LogTimeTaken {
+private:
+  const char *descr;
+  std::chrono::time_point<std::chrono::steady_clock> start;
+
+public:
+  LogTimeTaken(const char *descr)
+    : descr(descr), start(std::chrono::steady_clock::now()) {}
+
+  ~LogTimeTaken() {
+    auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+    std::cout << "[" << descr << "] " << elapsed_seconds.count() << "s\n";
+  }
+};
+
 template<typename F>
 auto bench(const char *descr, F f) {
-	auto start = std::chrono::steady_clock::now();
-	auto ret = f();
-	auto end = std::chrono::steady_clock::now();
-	std::chrono::duration<double> elapsed_seconds = end-start;
-	std::cout << "[" << descr << "] " << elapsed_seconds.count() << "s\n";
-	return ret;
+  LogTimeTaken log_time_taken(descr);
+  return f();
 }
 
 class NttFpgaDriver {
@@ -41,31 +53,32 @@ public:
   }
 
   void evaluate_inplace(uint64_t *data) {
-    memcpy(host_buffer_points.data(), data, sizeof(uint64_t) * matrix_size);
+    bench("Copy to internal page-aligned buffer", [&](){
+        memcpy(host_buffer_points.data(), data, sizeof(uint64_t) * matrix_size);
+    });
 
     // Copy buffer input to device memory
     bench("copy to device", [&]() {
         OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, 0 /* 0 means from host*/, nullptr, nullptr));
         OCL_CHECK(err, err = q.finish());
-	return 0;
     });
 
     // Actually do computation
-    bench("NTT computation", [&]() {
+    bench("Doing actual work", [&]() {
 	OCL_CHECK(err, err = q.enqueueTask(krnl_reverse));
 	OCL_CHECK(err, err = q.enqueueTask(krnl_controller));
 	OCL_CHECK(err, err = q.finish());
-	return 0;
     });
 
     // Copy Result from Device Global Memory to Host Local Memory
     bench("copy from device", [&]() {
         OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, CL_MIGRATE_MEM_OBJECT_HOST));
         OCL_CHECK(err, err = q.finish());
-        return 0;
     });
 
-    memcpy(data, host_buffer_points.data(), sizeof(uint64_t) * matrix_size);
+    bench("Copy from internal page-aligned buffer", [&]() {
+        memcpy(data, host_buffer_points.data(), sizeof(uint64_t) * matrix_size);
+    });
   }
 
   void load_xclbin(const std::string& binaryFile)
