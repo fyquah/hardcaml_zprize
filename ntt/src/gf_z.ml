@@ -45,7 +45,13 @@ let rec pow a n =
   then Z.one
   else if n = 1
   then a
-  else a * pow a Int.(n - 1)
+  else (
+    (* recursively divide in half.  We could be a little more efficient still by memoising. *)
+    let nl = n / 2 in
+    let nr = Int.(n - nl) in
+    pow a nl * pow a nr)
 ;;
+
+(* a * pow a Int.(n - 1) *)
 
 let pp fmt z = Caml.Format.fprintf fmt "%s" (sexp_of_t z |> Sexplib.Sexp.to_string)
