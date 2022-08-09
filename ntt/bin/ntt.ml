@@ -1,6 +1,6 @@
 open! Core
-module Ntt = Ntts_r_fun.Ntt
-module Gf = Ntt.Gf
+module Gf = Ntts_r_fun.Gf_z
+module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf)
 
 let command =
   Command.basic
@@ -18,7 +18,7 @@ let command =
         let refs = load_gf reffile in
         if Array.length inputs <> Array.length refs
         then raise_s [%message "input and reference files are not the same length"];
-        Ntt.ntt inputs;
+        Ntt.inverse_dit inputs;
         if [%compare.equal: Gf.t array] inputs refs
         then raise_s [%message "Test failed." (inputs : Gf.t array)]]
 ;;

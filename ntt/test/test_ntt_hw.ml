@@ -3,10 +3,13 @@ open Hardcaml
 open Hardcaml_waveterm
 open Expect_test_helpers_base
 
+module Ntt = Ntts_r_fun.Ntt.Make (struct
+  let logn = 3
+end)
+
 let%expect_test "addressing" =
-  let module Ntt = Ntts_r_fun.Ntt.Controller in
-  let module Sim = Cyclesim.With_interface (Ntt.I) (Ntt.O) in
-  let sim = Sim.create (Ntt.create (Scope.create ~flatten_design:true ())) in
+  let module Sim = Cyclesim.With_interface (Ntt.Controller.I) (Ntt.Controller.O) in
+  let sim = Sim.create (Ntt.Controller.create (Scope.create ~flatten_design:true ())) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   inputs.clear := Bits.vdd;
@@ -61,17 +64,17 @@ let%expect_test "addressing" =
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
-module Ntt = Ntts_r_fun.Ntt.With_rams
+module With_rams = Ntt.With_rams
 module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let inverse_ntt_test ~waves input_coefs =
-  let module Sim = Cyclesim.With_interface (Ntt.I) (Ntt.O) in
+  let module Sim = Cyclesim.With_interface (With_rams.I) (With_rams.O) in
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
-      (Ntt.create
+      (With_rams.create
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
   in
   let waves, sim =
