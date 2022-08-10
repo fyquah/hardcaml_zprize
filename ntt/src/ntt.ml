@@ -26,7 +26,7 @@ module Make (P : Size) = struct
     module O = struct
       type 'a t =
         { done_ : 'a
-        ; i : 'a [@bits Int.ceil_log2 logn]
+        ; i : 'a [@bits Int.ceil_log2 (logn + 1)]
         ; j : 'a [@bits logn]
         ; k : 'a [@bits logn]
         ; m : 'a [@bits logn]
@@ -129,51 +129,6 @@ module Make (P : Size) = struct
     let hierarchy scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
       Hier.hierarchical ~name:"ctrl" ~scope create
-    ;;
-  end
-
-  module Twiddle_controller = struct
-    module I = struct
-      type 'a t =
-        { clock : 'a
-        ; clear : 'a
-        ; start : 'a
-        ; d : 'a [@bits Gf.num_bits]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module O = struct
-      type 'a t =
-        { done_ : 'a
-        ; addr : 'a
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module State = struct
-      type t =
-        | Idle
-        | Looping
-      [@@deriving compare, enumerate, sexp_of, variants]
-    end
-
-    module Var = Always.Variable
-
-    let _create _scope (i : _ I.t) =
-      let open Signal in
-      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
-      let sm = Always.State_machine.create (module State) spec in
-      let j = Var.reg spec ~width:logn in
-      let j_next = j.value +:. 1 in
-      Always.(
-        compile
-          [ sm.switch
-              [ Idle, [ j <--. 0; when_ i.start [ sm.set_next Looping ] ]
-              ; Looping, [ j <-- j_next; when_ (j_next ==:. 0) [ sm.set_next Idle ] ]
-              ]
-          ]);
-      O.Of_signal.of_int 0
     ;;
   end
 

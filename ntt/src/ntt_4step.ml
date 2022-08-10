@@ -83,28 +83,68 @@ module Parallel_cores = struct
   ;;
 end
 
+module Twiddle_controller = struct
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; clear : 'a
+      ; start : 'a
+      ; d : 'a [@bits Gf.num_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { done_ : 'a
+      ; addr : 'a [@bits logn]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module State = struct
+    type t =
+      | Idle
+      | Twiddle_loop
+    [@@deriving compare, enumerate, sexp_of, variants]
+  end
+
+  module Var = Always.Variable
+
+  let create _scope (i : _ I.t) =
+    let open Signal in
+    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+    let sm = Always.State_machine.create (module State) spec in
+    let j = Var.reg spec ~width:logn in
+    let j_next = j.value +:. 1 in
+    Always.(
+      compile
+        [ sm.switch
+            [ Idle, [ j <--. 0; when_ i.start [ sm.set_next Twiddle_loop ] ]
+            ; Twiddle_loop, [ j <-- j_next; when_ (j_next ==:. 0) [ sm.set_next Idle ] ]
+            ]
+        ]);
+    { O.done_ = sm.is Idle; addr = j.value }
+  ;;
+end
+
 module Controller = struct
   module I = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
       ; start : 'a
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
-  module Dma_request = struct
-    type 'a t =
-      { address : 'a
-      ; length : 'a
-      ; load_or_store : 'a
-      ; req : 'a
+      ; cores_done : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
-    type 'a t = { d : 'a } [@@deriving sexp_of, hardcaml]
+    type 'a t =
+      { done_ : 'a
+      ; start_cores : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
   end
 
   module State = struct
@@ -114,14 +154,71 @@ module Controller = struct
     [@@deriving sexp_of, compare, enumerate]
   end
 
+  module Var = Always.Variable
+
   let create scope (i : _ I.t) =
     let ( -- ) = Scope.naming scope in
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
-    let _dma_request = Dma_request.Of_always.reg spec in
+    let start_cores = Var.wire ~default:gnd in
     ignore (sm.current -- "STATE");
+    ignore (start_cores.value -- "START_CORES");
     Always.(
-      compile [ sm.switch [ Start, [ when_ i.start [ sm.set_next Loop ] ]; Loop, [] ] ]);
-    O.Of_signal.of_int 0
+      compile
+        [ sm.switch
+            [ Start, [ when_ i.start [ start_cores <-- vdd; sm.set_next Loop ] ]
+            ; Loop, []
+            ]
+        ]);
+    { O.done_ = sm.is Start; start_cores = start_cores.value }
+  ;;
+end
+
+module Core = struct
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; clear : 'a
+      ; start : 'a
+      ; wr_d : 'a [@bits Gf.num_bits]
+      ; wr_en : 'a
+      ; wr_addr : 'a [@bits logn + logcores]
+      ; rd_en : 'a
+      ; rd_addr : 'a [@bits logn + logcores]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { done_ : 'a
+      ; rd_q : 'a [@bits Gf.num_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  let create scope (i : _ I.t) =
+    let cores_done = wire 1 in
+    let controller =
+      Controller.create
+        scope
+        { Controller.I.clock = i.clock; clear = i.clear; start = i.start; cores_done }
+    in
+    (* let twiddler = Twiddle_controller.create {} *)
+    let cores =
+      Parallel_cores.create
+        scope
+        { Parallel_cores.I.clock = i.clock
+        ; clear = i.clear
+        ; start = controller.start_cores
+        ; wr_d = i.wr_d
+        ; wr_en = i.wr_en
+        ; wr_addr = i.wr_addr
+        ; rd_en = i.rd_en
+        ; rd_addr = i.rd_addr
+        }
+    in
+    cores_done <== cores.done_;
+    { O.done_ = controller.done_; rd_q = cores.rd_q }
   ;;
 end

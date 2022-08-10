@@ -1,7 +1,10 @@
-open! Base
+open Base
+open Hardcaml
+open Hardcaml_waveterm
 open Expect_test_helpers_base
 module Gf = Ntts_r_fun.Gf_z
 module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf)
+module Ntt_hw = Ntts_r_fun.Ntt_4step
 
 let%expect_test "show twiddle generation" =
   let n = 8 in
@@ -132,4 +135,41 @@ let%expect_test "show twiddle generation" =
     {|
     ((i4 (549755813888 549755813888 549755813888 549755813888))
      (i5 (549755813888 14041890976876060974 1125917086449664 4299803665592489687))) |}]
+;;
+
+let%expect_test "twiddle controller" =
+  let module Twiddle = Ntt_hw.Twiddle_controller in
+  let module Sim = Cyclesim.With_interface (Twiddle.I) (Twiddle.O) in
+  let sim = Sim.create (Twiddle.create (Scope.create ())) in
+  let waves, sim = Waveform.create sim in
+  let inputs = Cyclesim.inputs sim in
+  inputs.start := Bits.vdd;
+  Cyclesim.cycle sim;
+  inputs.start := Bits.gnd;
+  for _ = 0 to 16 do
+    Cyclesim.cycle sim
+  done;
+  Waveform.print ~display_width:94 ~wave_width:1 waves;
+  [%expect
+    {|
+    ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────────┐
+    │clock             ││┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ │
+    │                  ││  └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─│
+    │clear             ││                                                                        │
+    │                  ││────────────────────────────────────────────────────────────────────────│
+    │start             ││────┐                                                                   │
+    │                  ││    └───────────────────────────────────────────────────────────────────│
+    │                  ││────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───│
+    │addr              ││ 0      │1  │2  │3  │4  │5  │6  │7  │8  │9  │A  │B  │C  │D  │E  │F  │0  │
+    │                  ││────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───│
+    │done_             ││────┐                                                               ┌───│
+    │                  ││    └───────────────────────────────────────────────────────────────┘   │
+    │                  ││                                                                        │
+    │                  ││                                                                        │
+    │                  ││                                                                        │
+    │                  ││                                                                        │
+    │                  ││                                                                        │
+    │                  ││                                                                        │
+    │                  ││                                                                        │
+    └──────────────────┘└────────────────────────────────────────────────────────────────────────┘ |}]
 ;;
