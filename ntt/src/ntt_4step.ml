@@ -17,12 +17,12 @@ open Signal
 *)
 
 (* Overall, we are going to compute an ntt of 2^(logn + logn) *)
-let logn = 4
+let logn = 5
 
 (* Specifying this as a log is probably not as flexible as we want (if we can
    fit 29 cores, this would limit us to 16). But it greatly simplifies things to
    start with. *)
-let logcores = 2
+let logcores = 3
 let cores = 1 lsl logcores
 
 module Gf = Gf_bits.Make (Hardcaml.Signal)
@@ -57,19 +57,25 @@ module Parallel_cores = struct
   let create scope (i : _ I.t) =
     let cores =
       Array.init cores ~f:(fun index ->
-        Ntt.With_rams.hierarchy
-          scope
-          { Ntt.With_rams.I.clock = i.clock
-          ; clear = i.clear
-          ; start = i.start
-          ; wr_d = i.wr_d.(index)
-          ; wr_en = i.wr_en.:(index)
-          ; wr_addr = i.wr_addr
-          ; rd_en = i.rd_en.:(index)
-          ; rd_addr = i.rd_addr
-          })
+          Ntt.With_rams.hierarchy
+            ~instance:("ntt" ^ Int.to_string index)
+            scope
+            { Ntt.With_rams.I.clock = i.clock
+            ; clear = i.clear
+            ; start = i.start
+            ; wr_d = i.wr_d.(index)
+            ; wr_en = i.wr_en.:(index)
+            ; wr_addr = i.wr_addr
+            ; rd_en = i.rd_en.:(index)
+            ; rd_addr = i.rd_addr
+            })
     in
     { O.done_ = cores.(0).done_; rd_q = Array.map cores ~f:(fun core -> core.rd_q) }
+  ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"parallel_cores" ~scope create
   ;;
 end
 
@@ -115,6 +121,11 @@ module Twiddle_controller = struct
             ]
         ]);
     { O.done_ = sm.is Idle; addr = j.value }
+  ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"twiddle" ~scope create
   ;;
 end
 
@@ -217,6 +228,11 @@ module Controller = struct
     ; start_cores = start_cores.value
     }
   ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"controller" ~scope create
+  ;;
 end
 
 module Core = struct
@@ -249,7 +265,7 @@ module Core = struct
   let create scope (i : _ I.t) =
     let cores_done = wire 1 in
     let controller =
-      Controller.create
+      Controller.hierarchy
         scope
         { Controller.I.clock = i.clock
         ; clear = i.clear
@@ -261,7 +277,7 @@ module Core = struct
     in
     (* let twiddler = Twiddle_controller.create {} *)
     let cores =
-      Parallel_cores.create
+      Parallel_cores.hierarchy
         scope
         { Parallel_cores.I.clock = i.clock
         ; clear = i.clear
@@ -280,6 +296,11 @@ module Core = struct
     ; rd_q = cores.rd_q
     }
   ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"cores" ~scope create
+  ;;
 end
 
 module Kernel = struct
@@ -290,18 +311,18 @@ module Kernel = struct
       { clock : 'a
       ; clear : 'a
       ; start : 'a
-      ; data_in : 'a Axi512.Stream.Source.t [@rtlmangle true]
-      ; data_out_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "controller_to_compute_"]
+      ; data_in : 'a Axi512.Stream.Source.t
+      ; data_out_dest : 'a Axi512.Stream.Dest.t
       }
-    [@@deriving sexp_of, hardcaml]
+    [@@deriving sexp_of, hardcaml ~rtlmangle:true]
   end
 
   module O = struct
     type 'a t =
-      { data_out : 'a Axi512.Stream.Source.t [@rtlmangle true]
-      ; data_in_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "compute_to_controller_"]
+      { data_out : 'a Axi512.Stream.Source.t
+      ; data_in_dest : 'a Axi512.Stream.Dest.t
       }
-    [@@deriving sexp_of, hardcaml]
+    [@@deriving sexp_of, hardcaml ~rtlmangle:true]
   end
 
   module Var = Always.Variable
@@ -399,16 +420,29 @@ module Kernel = struct
         ; clear = i.clear
         ; start = i.start
         ; wr_d = i.data_in.tdata |> split_lsb ~part_width:Gf.num_bits |> Array.of_list
-        ; wr_en = repeat i.data_in.tvalid cores
-        ; wr_addr = zero logn
-        ; rd_en = zero cores
-        ; rd_addr = zero logn
+        ; wr_en = repeat (i.data_in.tvalid &: load_sm.tready) cores
+        ; wr_addr = load_sm.wr_addr
+        ; rd_en = repeat store_sm.rd_en cores
+        ; rd_addr = store_sm.rd_addr
         ; input_done = load_sm.done_
         ; output_done = store_sm.done_
         }
     in
     start_input <== cores.start_input;
     start_output <== cores.start_output;
-    O.Of_signal.of_int 0
+    { O.data_out =
+        { tvalid = store_sm.tvalid
+        ; tdata = cores.rd_q |> Array.to_list |> concat_lsb
+        ; tlast = gnd
+        ; tkeep = ones (512 / 8)
+        ; tstrb = ones (512 / 8)
+        }
+    ; data_in_dest = { tready = load_sm.tready }
+    }
+  ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"kernel" ~scope create
   ;;
 end

@@ -122,6 +122,6 @@ module Make (P : Size) : sig
     end
 
     val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : ?instance:string -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 end

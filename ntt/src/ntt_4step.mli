@@ -34,6 +34,7 @@ module Parallel_cores : sig
   end
 
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
 
 module Twiddle_controller : sig
@@ -56,6 +57,7 @@ module Twiddle_controller : sig
   end
 
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
 
 module Controller : sig
@@ -82,6 +84,7 @@ module Controller : sig
   end
 
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
 
 module Core : sig
@@ -112,6 +115,7 @@ module Core : sig
   end
 
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
 
 module Kernel : sig
@@ -137,4 +141,5 @@ module Kernel : sig
   end
 
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end

@@ -164,7 +164,8 @@ module Make (P : Size) = struct
       mux2 i.start_twiddles Gf.(to_bits one) (w *: i.omega)
     ;;
 
-    let create _scope (i : _ I.t) =
+    let create scope (i : _ I.t) =
+      let ( -- ) = Scope.naming scope in
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
       (* XXX aray: Need to up the latency for a practical version *)
@@ -277,7 +278,6 @@ module Make (P : Size) = struct
     let input_ram (i : _ I.t) (core : _ Core.O.t) =
       let q =
         Ram.create
-          ~name:"input_ram"
           ~collision_mode:Write_before_read
           ~size:n
           ~write_ports:
@@ -305,7 +305,6 @@ module Make (P : Size) = struct
     let output_ram (i : _ I.t) (core : _ Core.O.t) =
       let q =
         Ram.create
-          ~name:"output_ram"
           ~collision_mode:Write_before_read
           ~size:n
           ~write_ports:
@@ -358,9 +357,9 @@ module Make (P : Size) = struct
       { O.done_ = core.done_; rd_q = d_out.(2) }
     ;;
 
-    let hierarchy scope =
+    let hierarchy ?instance scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"top" ~scope create
+      Hier.hierarchical ~name:"ntt_with_rams" ?instance ~scope create
     ;;
   end
 end
