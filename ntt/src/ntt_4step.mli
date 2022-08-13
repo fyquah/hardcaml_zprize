@@ -16,7 +16,7 @@ module Parallel_cores : sig
       { clock : 'a
       ; clear : 'a
       ; start : 'a
-      ; wr_d : 'a
+      ; wr_d : 'a array
       ; wr_en : 'a
       ; wr_addr : 'a
       ; rd_en : 'a
@@ -28,7 +28,7 @@ module Parallel_cores : sig
   module O : sig
     type 'a t =
       { done_ : 'a
-      ; rd_q : 'a
+      ; rd_q : 'a array
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -64,6 +64,8 @@ module Controller : sig
       { clock : 'a
       ; clear : 'a
       ; start : 'a
+      ; input_done : 'a
+      ; output_done : 'a
       ; cores_done : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -72,6 +74,8 @@ module Controller : sig
   module O : sig
     type 'a t =
       { done_ : 'a
+      ; start_input : 'a
+      ; start_output : 'a
       ; start_cores : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -86,11 +90,13 @@ module Core : sig
       { clock : 'a
       ; clear : 'a
       ; start : 'a
-      ; wr_d : 'a
+      ; wr_d : 'a array
       ; wr_en : 'a
       ; wr_addr : 'a
       ; rd_en : 'a
       ; rd_addr : 'a
+      ; input_done : 'a
+      ; output_done : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -98,7 +104,34 @@ module Core : sig
   module O : sig
     type 'a t =
       { done_ : 'a
-      ; rd_q : 'a
+      ; start_input : 'a
+      ; start_output : 'a
+      ; rd_q : 'a array
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+end
+
+module Kernel : sig
+  module Axi512 = Hardcaml_axi.Axi512
+
+  module I : sig
+    type 'a t =
+      { clock : 'a
+      ; clear : 'a
+      ; start : 'a
+      ; data_in : 'a Axi512.Stream.Source.t
+      ; data_out_dest : 'a Axi512.Stream.Dest.t
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O : sig
+    type 'a t =
+      { data_out : 'a Axi512.Stream.Source.t
+      ; data_in_dest : 'a Axi512.Stream.Dest.t
       }
     [@@deriving sexp_of, hardcaml]
   end

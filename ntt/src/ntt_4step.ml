@@ -37,11 +37,11 @@ module Parallel_cores = struct
       { clock : 'a
       ; clear : 'a
       ; start : 'a
-      ; wr_d : 'a [@bits Gf.num_bits]
+      ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
       ; wr_en : 'a
-      ; wr_addr : 'a [@bits logn + logcores]
-      ; rd_en : 'a
-      ; rd_addr : 'a [@bits logn + logcores]
+      ; wr_addr : 'a [@bits logn]
+      ; rd_en : 'a [@bit cores]
+      ; rd_addr : 'a [@bits logn]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -49,37 +49,27 @@ module Parallel_cores = struct
   module O = struct
     type 'a t =
       { done_ : 'a
-      ; rd_q : 'a [@bits Gf.num_bits]
+      ; rd_q : 'a array [@bits Gf.num_bits] [@length cores]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   let create scope (i : _ I.t) =
-    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let cores =
-      List.init cores ~f:(fun index ->
-          let wr_en = i.wr_addr.:[logcores + logn - 1, logn] ==:. index &: i.wr_en in
-          let wr_addr = i.wr_addr.:[logn - 1, 0] in
-          let rd_en = i.rd_addr.:[logcores + logn - 1, logn] ==:. index &: i.rd_en in
-          let rd_addr = i.rd_addr.:[logn - 1, 0] in
-          Ntt.With_rams.hierarchy
-            scope
-            { Ntt.With_rams.I.clock = i.clock
-            ; clear = i.clear
-            ; start = i.start
-            ; wr_d = i.wr_d
-            ; wr_en
-            ; wr_addr
-            ; rd_en
-            ; rd_addr
-            })
+      Array.init cores ~f:(fun index ->
+        Ntt.With_rams.hierarchy
+          scope
+          { Ntt.With_rams.I.clock = i.clock
+          ; clear = i.clear
+          ; start = i.start
+          ; wr_d = i.wr_d.(index)
+          ; wr_en = i.wr_en.:(index)
+          ; wr_addr = i.wr_addr
+          ; rd_en = i.rd_en.:(index)
+          ; rd_addr = i.rd_addr
+          })
     in
-    { O.done_ = (List.nth_exn cores 0).done_
-    ; rd_q =
-        mux
-          (reg spec i.rd_addr.:[logcores + logn - 1, logn])
-          (List.map cores ~f:(fun core -> core.rd_q))
-    }
+    { O.done_ = cores.(0).done_; rd_q = Array.map cores ~f:(fun core -> core.rd_q) }
   ;;
 end
 
@@ -134,6 +124,8 @@ module Controller = struct
       { clock : 'a
       ; clear : 'a
       ; start : 'a
+      ; input_done : 'a
+      ; output_done : 'a
       ; cores_done : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -142,6 +134,8 @@ module Controller = struct
   module O = struct
     type 'a t =
       { done_ : 'a
+      ; start_input : 'a
+      ; start_output : 'a
       ; start_cores : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -150,27 +144,78 @@ module Controller = struct
   module State = struct
     type t =
       | Start
-      | Loop
+      | First_load
+      | Main_iter
+      | Last_store
+      | Finish
     [@@deriving sexp_of, compare, enumerate]
   end
 
   module Var = Always.Variable
 
+  (* We need to track 3 external states
+
+
+     1. Input ready
+     2. Core ready
+     3. Output ready
+
+     When each of these occurs, we are ready to start a new set of transforms, and
+     request that the IO subsystem run.
+
+  *)
+
   let create scope (i : _ I.t) =
     let ( -- ) = Scope.naming scope in
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
+    let start_input = Var.wire ~default:gnd in
+    let start_output = Var.wire ~default:gnd in
     let start_cores = Var.wire ~default:gnd in
+    let log_num_iterations = logn - logcores in
+    let iteration = Var.reg spec ~width:log_num_iterations in
+    let iteration_next = iteration.value +:. 1 in
     ignore (sm.current -- "STATE");
+    ignore (start_input.value -- "START_INPUT");
+    ignore (start_output.value -- "START_OUTPUT");
     ignore (start_cores.value -- "START_CORES");
+    ignore (iteration.value -- "ITERATION");
+    let all_done = i.input_done &: i.output_done &: i.cores_done in
     Always.(
       compile
         [ sm.switch
-            [ Start, [ when_ i.start [ start_cores <-- vdd; sm.set_next Loop ] ]
-            ; Loop, []
+            [ Start, [ when_ i.start [ start_input <-- vdd; sm.set_next First_load ] ]
+            ; ( First_load
+              , [ when_
+                    all_done
+                    [ iteration <--. 1
+                    ; start_input <-- vdd
+                    ; start_cores <-- vdd
+                    ; sm.set_next Main_iter
+                    ]
+                ] )
+            ; ( Main_iter
+              , [ when_
+                    all_done
+                    [ iteration <-- iteration_next
+                    ; if_
+                        (iteration_next ==:. 0)
+                        [ start_output <-- vdd
+                        ; start_cores <-- vdd
+                        ; sm.set_next Last_store
+                        ]
+                        [ start_input <-- vdd; start_output <-- vdd; start_cores <-- vdd ]
+                    ]
+                ] )
+            ; Last_store, [ when_ all_done [ start_output <-- vdd; sm.set_next Finish ] ]
+            ; Finish, [ when_ all_done [ sm.set_next Start ] ]
             ]
         ]);
-    { O.done_ = sm.is Start; start_cores = start_cores.value }
+    { O.done_ = sm.is Start
+    ; start_input = start_input.value
+    ; start_output = start_output.value
+    ; start_cores = start_cores.value
+    }
   ;;
 end
 
@@ -180,11 +225,13 @@ module Core = struct
       { clock : 'a
       ; clear : 'a
       ; start : 'a
-      ; wr_d : 'a [@bits Gf.num_bits]
-      ; wr_en : 'a
-      ; wr_addr : 'a [@bits logn + logcores]
-      ; rd_en : 'a
-      ; rd_addr : 'a [@bits logn + logcores]
+      ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
+      ; wr_en : 'a [@bits cores]
+      ; wr_addr : 'a [@bits logn]
+      ; rd_en : 'a [@bits cores]
+      ; rd_addr : 'a [@bits logn]
+      ; input_done : 'a
+      ; output_done : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -192,7 +239,9 @@ module Core = struct
   module O = struct
     type 'a t =
       { done_ : 'a
-      ; rd_q : 'a [@bits Gf.num_bits]
+      ; start_input : 'a
+      ; start_output : 'a
+      ; rd_q : 'a array [@bits Gf.num_bits] [@length cores]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -202,7 +251,13 @@ module Core = struct
     let controller =
       Controller.create
         scope
-        { Controller.I.clock = i.clock; clear = i.clear; start = i.start; cores_done }
+        { Controller.I.clock = i.clock
+        ; clear = i.clear
+        ; start = i.start
+        ; input_done = i.input_done
+        ; output_done = i.output_done
+        ; cores_done
+        }
     in
     (* let twiddler = Twiddle_controller.create {} *)
     let cores =
@@ -219,6 +274,141 @@ module Core = struct
         }
     in
     cores_done <== cores.done_;
-    { O.done_ = controller.done_; rd_q = cores.rd_q }
+    { O.done_ = controller.done_
+    ; start_input = controller.start_input
+    ; start_output = controller.start_output
+    ; rd_q = cores.rd_q
+    }
+  ;;
+end
+
+module Kernel = struct
+  module Axi512 = Hardcaml_axi.Axi512
+
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; clear : 'a
+      ; start : 'a
+      ; data_in : 'a Axi512.Stream.Source.t [@rtlmangle true]
+      ; data_out_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "controller_to_compute_"]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { data_out : 'a Axi512.Stream.Source.t [@rtlmangle true]
+      ; data_in_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "compute_to_controller_"]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module Var = Always.Variable
+
+  module Load_sm = struct
+    type t =
+      | Start
+      | Stream
+    [@@deriving sexp_of, compare, enumerate]
+  end
+
+  type load_sm =
+    { done_ : Signal.t
+    ; tready : Signal.t
+    ; wr_addr : Signal.t
+    ; wr_en : Signal.t
+    }
+
+  let load_sm (i : _ I.t) ~start =
+    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+    let sm = Always.State_machine.create (module Load_sm) spec in
+    let addr = Var.reg spec ~width:logn in
+    let addr_next = addr.value +:. 1 in
+    Always.(
+      compile
+        [ sm.switch
+            [ Start, [ addr <--. 0; when_ start [ sm.set_next Stream ] ]
+            ; ( Stream
+              , [ when_
+                    i.data_in.tvalid
+                    [ addr <-- addr_next; when_ (addr_next ==:. 0) [ sm.set_next Start ] ]
+                ] )
+            ]
+        ]);
+    let done_ = sm.is Start in
+    let processing = ~:done_ in
+    { done_
+    ; tready = processing
+    ; wr_en = processing &: i.data_in.tvalid
+    ; wr_addr = addr.value
+    }
+  ;;
+
+  module Store_sm = struct
+    type t =
+      | Start
+      | Preroll
+      | Stream
+    [@@deriving sexp_of, compare, enumerate]
+  end
+
+  type store_sm =
+    { done_ : Signal.t
+    ; tvalid : Signal.t
+    ; rd_addr : Signal.t
+    ; rd_en : Signal.t
+    }
+
+  let store_sm (i : _ I.t) ~start =
+    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+    let sm = Always.State_machine.create (module Store_sm) spec in
+    let addr = Var.reg spec ~width:logn in
+    let addr_next = addr.value +:. 1 in
+    let rd_en = Var.wire ~default:gnd in
+    let tvalid = Var.reg spec ~width:1 in
+    (* XXX fixme *)
+    Always.(
+      compile
+        [ sm.switch
+            [ Start, [ addr <--. 0; when_ start [ rd_en <-- vdd; sm.set_next Preroll ] ]
+            ; Preroll, [ rd_en <-- vdd; addr <--. 1; tvalid <-- vdd; sm.set_next Stream ]
+            ; ( Stream
+              , [ when_
+                    i.data_out_dest.tready
+                    [ rd_en <-- vdd
+                    ; addr <-- addr_next
+                    ; when_ (addr_next ==:. 0) [ tvalid <-- gnd; sm.set_next Start ]
+                    ]
+                ] )
+            ]
+        ]);
+    let done_ = sm.is Start in
+    { done_; tvalid = tvalid.value; rd_addr = addr.value; rd_en = rd_en.value }
+  ;;
+
+  let create scope (i : _ I.t) =
+    let start_input = wire 1 in
+    let start_output = wire 1 in
+    let load_sm = load_sm i ~start:start_input in
+    let store_sm = store_sm i ~start:start_output in
+    let cores =
+      Core.create
+        scope
+        { Core.I.clock = i.clock
+        ; clear = i.clear
+        ; start = i.start
+        ; wr_d = i.data_in.tdata |> split_lsb ~part_width:Gf.num_bits |> Array.of_list
+        ; wr_en = repeat i.data_in.tvalid cores
+        ; wr_addr = zero logn
+        ; rd_en = zero cores
+        ; rd_addr = zero logn
+        ; input_done = load_sm.done_
+        ; output_done = store_sm.done_
+        }
+    in
+    start_input <== cores.start_input;
+    start_output <== cores.start_output;
+    O.Of_signal.of_int 0
   ;;
 end
