@@ -35,6 +35,7 @@ module Make (P : Size) = struct
         ; omega : 'a [@bits Gf.num_bits]
         ; start_twiddles : 'a
         ; first_stage : 'a
+        ; last_stage : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -70,6 +71,7 @@ module Make (P : Size) = struct
       in
       let start_twiddles = Var.reg spec ~width:1 in
       let first_stage = Var.reg spec ~width:1 in
+      let last_stage = Var.reg spec ~width:1 in
       Always.(
         compile
           [ start_twiddles <--. 0
@@ -107,7 +109,10 @@ module Make (P : Size) = struct
                           ; first_stage <--. 0
                           ; m <-- m_next
                           ; addr2 <-- k_next +: m_next
-                          ; when_ (i_next ==:. logn) [ done_ <--. 1; sm.set_next Idle ]
+                          ; when_ (i_next ==:. logn - 1) [ last_stage <--. 1 ]
+                          ; when_
+                              (i_next ==:. logn)
+                              [ done_ <--. 1; last_stage <--. 0; sm.set_next Idle ]
                           ]
                       ]
                   ] )
@@ -123,6 +128,7 @@ module Make (P : Size) = struct
       ; omega
       ; start_twiddles = start_twiddles.value
       ; first_stage = first_stage.value
+      ; last_stage = last_stage.value
       }
     ;;
 
@@ -207,6 +213,7 @@ module Make (P : Size) = struct
         ; addr2_out : 'a [@bits logn]
         ; write_enable_out : 'a
         ; first_stage : 'a
+        ; last_stage : 'a
         ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml]
@@ -240,6 +247,7 @@ module Make (P : Size) = struct
       ; addr2_out = controller.addr2 |> pipe
       ; write_enable_out = ~:(controller.done_) |> pipe
       ; first_stage = controller.first_stage
+      ; last_stage = controller.last_stage
       ; done_ = controller.done_
       }
     ;;
@@ -276,42 +284,20 @@ module Make (P : Size) = struct
       [@@deriving sexp_of, hardcaml]
     end
 
-    let input_ram _build_mode (i : _ I.t) (core : _ Core.O.t) =
-      let phase_w =
-        reg_fb
-          (Reg_spec.create ~clock:i.clock ~clear:i.clear ())
-          ~width:1
-          ~enable:i.flip
-          ~f:( ~: )
-      in
-      let phase_r = ~:phase_w in
-      let q =
-        Ram.create
-          ~collision_mode:Write_before_read
-          ~size:(n * 2)
-          ~write_ports:
-            [| { write_clock = i.clock
-               ; write_address = phase_w @: i.wr_addr
-               ; write_data = i.wr_d
-               ; write_enable = i.wr_en
-               }
-            |]
-          ~read_ports:
-            [| { read_clock = i.clock
-               ; read_address = phase_r @: reverse core.addr1_in
-               ; read_enable = core.read_enable_in
-               }
-             ; { read_clock = i.clock
-               ; read_address = phase_r @: reverse core.addr2_in
-               ; read_enable = core.read_enable_in
-               }
-            |]
-          ()
-      in
-      q
+    let input_ram build_mode (i : _ I.t) (core : _ Core.O.t) =
+      Bram.create_dual
+        ~build_mode
+        ~size:n
+        ~clock:i.clock
+        ~clear:i.clear
+        ~flip:i.flip
+        ~write_port_a:{ address = i.wr_addr; data = i.wr_d; enable = i.wr_en }
+        ~write_port_b:{ address = zero logn; data = zero Gf.num_bits; enable = gnd }
+        ~read_port_a:{ address = reverse core.addr1_in; enable = core.read_enable_in }
+        ~read_port_b:{ address = reverse core.addr2_in; enable = core.read_enable_in }
     ;;
 
-    let output_ram _build_mode (i : _ I.t) (core : _ Core.O.t) =
+    let transpose_ram _build_mode (i : _ I.t) (core : _ Core.O.t) =
       let phase_i =
         reg_fb
           (Reg_spec.create ~clock:i.clock ~clear:i.clear ())
@@ -352,6 +338,30 @@ module Make (P : Size) = struct
             |]
           ()
       in
+      q.(0), q.(1), q.(2)
+    ;;
+
+    let output_ram build_mode (i : _ I.t) (core : _ Core.O.t) ~last_stage =
+      let q, _ =
+        Bram.create_dual
+          ~build_mode
+          ~size:n
+          ~clock:i.clock
+          ~clear:i.clear
+          ~flip:i.flip
+          ~write_port_a:
+            { address = core.addr1_out
+            ; data = core.q1
+            ; enable = core.write_enable_out &: last_stage
+            }
+          ~write_port_b:
+            { address = core.addr2_out
+            ; data = core.q2
+            ; enable = core.write_enable_out &: last_stage
+            }
+          ~read_port_a:{ address = i.rd_addr; enable = i.rd_en }
+          ~read_port_b:{ address = zero logn; enable = gnd }
+      in
       q
     ;;
 
@@ -359,10 +369,11 @@ module Make (P : Size) = struct
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let core = Core.O.Of_signal.wires () in
       (* input and output rams *)
-      let d_in = input_ram build_mode i core in
-      let d_out = output_ram build_mode i core in
+      let d_in_0, d_in_1 = input_ram build_mode i core in
+      let d_out_0, d_out_1, _d_out = transpose_ram build_mode i core in
       (* core *)
       let piped_first_stage = pipeline spec ~n:1 core.first_stage in
+      let piped_last_stage = pipeline spec ~n:1 core.last_stage in
       Core.O.iter2
         core
         (Core.hierarchy
@@ -370,11 +381,12 @@ module Make (P : Size) = struct
            { clock = i.clock
            ; clear = i.clear
            ; start = i.start
-           ; d1 = mux2 piped_first_stage d_in.(0) d_out.(0)
-           ; d2 = mux2 piped_first_stage d_in.(1) d_out.(1)
+           ; d1 = mux2 piped_first_stage d_in_0 d_out_0
+           ; d2 = mux2 piped_first_stage d_in_1 d_out_1
            })
         ~f:( <== );
-      { O.done_ = core.done_; rd_q = d_out.(2) }
+      let d_out = output_ram build_mode i core ~last_stage:piped_last_stage in
+      { O.done_ = core.done_; rd_q = d_out }
     ;;
 
     let hierarchy ?instance ~build_mode scope =

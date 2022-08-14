@@ -92,8 +92,8 @@ let%expect_test "show twiddle generation" =
        3291437157293746400
        562949953421314
        10832292272906805046))) |}];
-  (* Iteratively generate the triddles in batches. This is needed to hide the
-     latency of the multiplier.Arith_status
+  (* Iteratively generate the twiddles in batches. This is needed to hide the
+     latency of the multiplier.
 
      So far we can hide it within rows, though I haven't yet worked out how to
      hide it as we go to the next set of rows (although I think I see how it's

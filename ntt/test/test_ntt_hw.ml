@@ -3,11 +3,12 @@ open Hardcaml
 open Hardcaml_waveterm
 open Expect_test_helpers_base
 
-module Ntt = Ntts_r_fun.Ntt.Make (struct
-  let logn = 3
-end)
-
 let%expect_test "addressing" =
+  let module Ntt =
+    Ntts_r_fun.Ntt.Make (struct
+      let logn = 3
+    end)
+  in
   let module Sim = Cyclesim.With_interface (Ntt.Controller.I) (Ntt.Controller.O) in
   let sim = Sim.create (Ntt.Controller.create (Scope.create ~flatten_design:true ())) in
   let waves, sim = Waveform.create sim in
@@ -50,6 +51,8 @@ let%expect_test "addressing" =
     │                  ││────────────┬───┬───┬───┬───────┬───────┬───────────────────────────│
     │k                 ││ 0          │2  │4  │6  │0      │4      │0                          │
     │                  ││────────────┴───┴───┴───┴───────┴───────┴───────────────────────────│
+    │last_stage        ││                                        ┌───────────────┐           │
+    │                  ││────────────────────────────────────────┘               └───────────│
     │                  ││────────┬───────────────┬───────────────┬───────────────┬───────────│
     │m                 ││ 0      │1              │2              │4              │0          │
     │                  ││────────┴───────────────┴───────────────┴───────────────┴───────────│
@@ -59,22 +62,37 @@ let%expect_test "addressing" =
     │start_twiddles    ││        ┌───────────────────┐   ┌───┐   ┌───┐           ┌───┐       │
     │                  ││────────┘                   └───┘   └───┘   └───────────┘   └───────│
     │                  ││                                                                    │
-    │                  ││                                                                    │
-    │                  ││                                                                    │
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
-module With_rams = Ntt.With_rams
+(* module With_rams = Ntt.With_rams *)
 module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
+let compare_results coefs sim_result =
+  let module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf) in
+  Ntt.inverse_dit coefs;
+  if not ([%equal: Gf.t array] coefs sim_result)
+  then
+    print_s
+      [%message
+        "Simulation results are incorrect." (coefs : Gf.t array) (sim_result : Gf.t array)]
+;;
+
 let inverse_ntt_test ~waves input_coefs =
-  let module Sim = Cyclesim.With_interface (With_rams.I) (With_rams.O) in
+  let n = Array.length input_coefs in
+  let logn = Int.ceil_log2 n in
+  let module Ntt =
+    Ntts_r_fun.Ntt.Make (struct
+      let logn = logn
+    end)
+  in
+  let module Sim = Cyclesim.With_interface (Ntt.With_rams.I) (Ntt.With_rams.O) in
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
-      (With_rams.create
+      (Ntt.With_rams.create
          ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
   in
@@ -95,7 +113,7 @@ let inverse_ntt_test ~waves input_coefs =
   inputs.wr_en <-- 1;
   Array.iteri input_coefs ~f:(fun addr coef ->
       inputs.wr_addr <-- addr;
-      inputs.wr_d := coef;
+      inputs.wr_d := Gf.to_bits coef;
       Cyclesim.cycle sim);
   inputs.wr_en <-- 0;
   (* flip rams *)
@@ -121,11 +139,11 @@ let inverse_ntt_test ~waves input_coefs =
   inputs.flip <-- 0;
   Cyclesim.cycle sim;
   (* Read results *)
-  let result = Array.create ~len:8 Gf.zero in
+  let result = Array.create ~len:n Gf.zero in
   inputs.rd_en <-- 1;
   inputs.rd_addr <-- 0;
   Cyclesim.cycle sim;
-  for i = 1 to 8 do
+  for i = 1 to n do
     inputs.rd_addr <-- i;
     result.(i - 1) <- Gf.of_bits !(outputs.rd_q);
     Cyclesim.cycle sim
@@ -134,6 +152,7 @@ let inverse_ntt_test ~waves input_coefs =
   for _ = 0 to 11 do
     Cyclesim.cycle sim
   done;
+  compare_results input_coefs result;
   waves, result
 ;;
 
@@ -154,10 +173,9 @@ let%expect_test "8pt linear" =
     inverse_ntt_test
       ~waves:false
       (Array.init 8 ~f:(function
-           | 0 -> Gf.one
-           | 1 -> Gf.two
-           | _ -> Gf.zero)
-      |> Array.map ~f:Gf.to_bits)
+          | 0 -> Gf.one
+          | 1 -> Gf.two
+          | _ -> Gf.zero))
   in
   let result =
     Array.map result ~f:(fun b ->
@@ -191,7 +209,7 @@ let%expect_test "8pt random" =
         ; "0x10d812558ad9c103"
         ; "0xd19d3e319d1b6b4a"
        |]
-      |> Array.map ~f:(fun z -> Z.of_string z |> Gf.of_z |> Gf.to_bits))
+      |> Array.map ~f:(fun z -> Z.of_string z |> Gf.of_z))
   in
   let result =
     Array.map result ~f:(fun b ->

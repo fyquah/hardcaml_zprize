@@ -33,6 +33,7 @@ module Make (P : Size) : sig
         ; omega : 'a
         ; start_twiddles : 'a
         ; first_stage : 'a
+        ; last_stage : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -89,6 +90,7 @@ module Make (P : Size) : sig
         ; addr2_out : 'a
         ; write_enable_out : 'a
         ; first_stage : 'a
+        ; last_stage : 'a
         ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml]

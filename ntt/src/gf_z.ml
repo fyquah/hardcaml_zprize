@@ -55,3 +55,12 @@ let rec pow a n =
 (* a * pow a Int.(n - 1) *)
 
 let pp fmt z = Caml.Format.fprintf fmt "%s" (sexp_of_t z |> Sexplib.Sexp.to_string)
+
+let rec random =
+  let p = Z.(two ** 32) in
+  fun () ->
+    let a = Random.int (1 lsl 32) |> Z.of_int in
+    let b = Random.int (1 lsl 32) |> Z.of_int in
+    let c = Z.(a + (b * p)) in
+    if Z.compare c modulus < 0 then c else random ()
+;;
