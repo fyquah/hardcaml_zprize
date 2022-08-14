@@ -43,11 +43,17 @@ open Hardcaml
 open Hardcaml_waveterm
 module N4 = Ntts_r_fun.Ntt_4step
 module Gf_bits = Ntts_r_fun.Gf_bits.Make (Bits)
-module Core = Ntts_r_fun.Ntt_4step.Core
+
+module Size = struct
+  let logn = 5
+end
+
+module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Size)
+module Core = Ntt_4step.Core
 module Sim = Cyclesim.With_interface (Core.I) (Core.O)
 
-let logn = N4.logn
-let logcores = N4.logcores
+let logn = Size.logn
+let logcores = Ntt_4step.logcores
 let num_cores = 1 lsl logcores
 
 let%expect_test "" =
@@ -166,7 +172,7 @@ let%expect_test "" =
     │                  ││────────────────────────────────────────────────────────────────────────│
     │rd_q7             ││ 0000000000000000                                                       │
     │                  ││────────────────────────────────────────────────────────────────────────│
-    │start_input       ││                                                        ┌┐              │
-    │                  ││────────────────────────────────────────────────────────┘└──────────────│
+    │start_input       ││                                                             ┌┐         │
+    │                  ││─────────────────────────────────────────────────────────────┘└─────────│
     └──────────────────┘└────────────────────────────────────────────────────────────────────────┘ |}]
 ;;

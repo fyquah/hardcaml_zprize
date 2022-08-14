@@ -5,9 +5,14 @@ let command_kernel =
   Command.basic
     ~summary:"Generate NTT kernel"
     [%map_open.Command
-      let () = return () in
+      let logn = anon ("LOGN" %: int) in
       fun () ->
-        let module Kernel = Ntts_r_fun.Ntt_4step.Kernel in
+        let module Ntt_4step =
+          Ntts_r_fun.Ntt_4step.Make (struct
+            let logn = logn
+          end)
+        in
+        let module Kernel = Ntt_4step.Kernel in
         let module Circuit = Circuit.With_interface (Kernel.I) (Kernel.O) in
         let scope = Scope.create ~flatten_design:false () in
         let circ =
