@@ -61,6 +61,7 @@ let run_simple () =
     Sim.create
       ~config:Cyclesim.Config.trace_all
       (Kernel.create
+         ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
   in
   let inputs = Cyclesim.inputs sim in
@@ -101,6 +102,7 @@ let run ?(verbose = false) () =
     Sim.create
       ~config:Cyclesim.Config.trace_all
       (Kernel.create
+         ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
   in
   let inputs = Cyclesim.inputs sim in

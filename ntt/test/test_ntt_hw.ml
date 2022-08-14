@@ -75,6 +75,7 @@ let inverse_ntt_test ~waves input_coefs =
     Sim.create
       ~config:Cyclesim.Config.trace_all
       (With_rams.create
+         ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
   in
   let waves, sim =

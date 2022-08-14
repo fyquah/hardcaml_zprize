@@ -169,7 +169,7 @@ module Make (P : Size) = struct
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
       (* XXX aray: Need to up the latency for a practical version *)
-      (* XXX aray: THe pipeline below is timed for 1 cycle ram latency, and 0 cycles twiddle latency *)
+      (* XXX aray: The pipeline below is timed for 1 cycle ram latency, and 0 cycles twiddle latency *)
       let w = wire Gf.num_bits -- "twiddle" in
       w <== reg spec (twiddle_factor i w);
       let t = i.d2 *: w in
@@ -276,7 +276,7 @@ module Make (P : Size) = struct
       [@@deriving sexp_of, hardcaml]
     end
 
-    let input_ram (i : _ I.t) (core : _ Core.O.t) =
+    let input_ram _build_mode (i : _ I.t) (core : _ Core.O.t) =
       let phase_w =
         reg_fb
           (Reg_spec.create ~clock:i.clock ~clear:i.clear ())
@@ -311,7 +311,7 @@ module Make (P : Size) = struct
       q
     ;;
 
-    let output_ram (i : _ I.t) (core : _ Core.O.t) =
+    let output_ram _build_mode (i : _ I.t) (core : _ Core.O.t) =
       let phase_i =
         reg_fb
           (Reg_spec.create ~clock:i.clock ~clear:i.clear ())
@@ -355,12 +355,12 @@ module Make (P : Size) = struct
       q
     ;;
 
-    let create scope (i : _ I.t) =
+    let create ~build_mode scope (i : _ I.t) =
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let core = Core.O.Of_signal.wires () in
       (* input and output rams *)
-      let d_in = input_ram i core in
-      let d_out = output_ram i core in
+      let d_in = input_ram build_mode i core in
+      let d_out = output_ram build_mode i core in
       (* core *)
       let piped_first_stage = pipeline spec ~n:1 core.first_stage in
       Core.O.iter2
@@ -377,9 +377,9 @@ module Make (P : Size) = struct
       { O.done_ = core.done_; rd_q = d_out.(2) }
     ;;
 
-    let hierarchy ?instance scope =
+    let hierarchy ?instance ~build_mode scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"ntt_with_rams" ?instance ~scope create
+      Hier.hierarchical ~name:"ntt_with_rams" ?instance ~scope (create ~build_mode)
     ;;
   end
 end

@@ -1,5 +1,5 @@
 (executables
- (names ntt simulate)
+ (names ntt simulate generate)
  (libraries
    core
    core_unix

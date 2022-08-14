@@ -39,9 +39,9 @@ module Parallel_cores = struct
       ; start : 'a
       ; flip : 'a
       ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
-      ; wr_en : 'a
+      ; wr_en : 'a [@bits cores]
       ; wr_addr : 'a [@bits logn]
-      ; rd_en : 'a [@bit cores]
+      ; rd_en : 'a [@bits cores]
       ; rd_addr : 'a [@bits logn]
       }
     [@@deriving sexp_of, hardcaml]
@@ -55,10 +55,11 @@ module Parallel_cores = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create scope (i : _ I.t) =
+  let create ~build_mode scope (i : _ I.t) =
     let cores =
       Array.init cores ~f:(fun index ->
           Ntt.With_rams.hierarchy
+            ~build_mode
             ~instance:("ntt" ^ Int.to_string index)
             scope
             { Ntt.With_rams.I.clock = i.clock
@@ -75,9 +76,9 @@ module Parallel_cores = struct
     { O.done_ = cores.(0).done_; rd_q = Array.map cores ~f:(fun core -> core.rd_q) }
   ;;
 
-  let hierarchy scope =
+  let hierarchy ~build_mode scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
-    Hier.hierarchical ~name:"parallel_cores" ~scope create
+    Hier.hierarchical ~name:"parallel_cores" ~scope (create ~build_mode)
   ;;
 end
 
@@ -266,7 +267,7 @@ module Core = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create scope (i : _ I.t) =
+  let create ~build_mode scope (i : _ I.t) =
     let cores_done = wire 1 in
     let controller =
       Controller.hierarchy
@@ -282,6 +283,7 @@ module Core = struct
     (* let twiddler = Twiddle_controller.create {} *)
     let cores =
       Parallel_cores.hierarchy
+        ~build_mode
         scope
         { Parallel_cores.I.clock = i.clock
         ; clear = i.clear
@@ -302,9 +304,9 @@ module Core = struct
     }
   ;;
 
-  let hierarchy scope =
+  let hierarchy ~build_mode scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
-    Hier.hierarchical ~name:"cores" ~scope create
+    Hier.hierarchical ~name:"cores" ~scope (create ~build_mode)
   ;;
 end
 
@@ -419,13 +421,14 @@ module Kernel = struct
     }
   ;;
 
-  let create scope (i : _ I.t) =
+  let create ~build_mode scope (i : _ I.t) =
     let start_input = wire 1 in
     let start_output = wire 1 in
     let load_sm = load_sm i ~start:start_input in
     let store_sm = store_sm i ~start:start_output in
     let cores =
       Core.create
+        ~build_mode
         scope
         { Core.I.clock = i.clock
         ; clear = i.clear
@@ -452,8 +455,8 @@ module Kernel = struct
     }
   ;;
 
-  let hierarchy scope =
+  let hierarchy ~build_mode scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
-    Hier.hierarchical ~name:"kernel" ~scope create
+    Hier.hierarchical ~name:"kernel" ~scope (create ~build_mode)
   ;;
 end
