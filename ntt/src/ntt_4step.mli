@@ -16,6 +16,7 @@ module Parallel_cores : sig
       { clock : 'a
       ; clear : 'a
       ; start : 'a
+      ; flip : 'a
       ; wr_d : 'a array
       ; wr_en : 'a
       ; wr_addr : 'a
@@ -79,6 +80,7 @@ module Controller : sig
       ; start_input : 'a
       ; start_output : 'a
       ; start_cores : 'a
+      ; flip : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

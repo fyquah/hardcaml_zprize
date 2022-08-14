@@ -97,6 +97,11 @@ let inverse_ntt_test ~waves input_coefs =
       inputs.wr_d := coef;
       Cyclesim.cycle sim);
   inputs.wr_en <-- 0;
+  (* flip rams *)
+  inputs.flip <-- 1;
+  Cyclesim.cycle sim;
+  inputs.flip <-- 0;
+  Cyclesim.cycle sim;
   (* start the core *)
   inputs.start <-- 1;
   Cyclesim.cycle sim;
@@ -109,6 +114,11 @@ let inverse_ntt_test ~waves input_coefs =
   for _ = 0 to 1 do
     Cyclesim.cycle sim
   done;
+  (* flip rams *)
+  inputs.flip <-- 1;
+  Cyclesim.cycle sim;
+  inputs.flip <-- 0;
+  Cyclesim.cycle sim;
   (* Read results *)
   let result = Array.create ~len:8 Gf.zero in
   inputs.rd_en <-- 1;

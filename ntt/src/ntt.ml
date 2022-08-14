@@ -258,6 +258,7 @@ module Make (P : Size) = struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; flip : 'a
         ; wr_d : 'a [@bits Gf.num_bits]
         ; wr_en : 'a
         ; wr_addr : 'a [@bits logn]
@@ -276,24 +277,32 @@ module Make (P : Size) = struct
     end
 
     let input_ram (i : _ I.t) (core : _ Core.O.t) =
+      let phase_w =
+        reg_fb
+          (Reg_spec.create ~clock:i.clock ~clear:i.clear ())
+          ~width:1
+          ~enable:i.flip
+          ~f:( ~: )
+      in
+      let phase_r = ~:phase_w in
       let q =
         Ram.create
           ~collision_mode:Write_before_read
-          ~size:n
+          ~size:(n * 2)
           ~write_ports:
             [| { write_clock = i.clock
-               ; write_address = i.wr_addr
+               ; write_address = phase_w @: i.wr_addr
                ; write_data = i.wr_d
                ; write_enable = i.wr_en
                }
             |]
           ~read_ports:
             [| { read_clock = i.clock
-               ; read_address = reverse core.addr1_in
+               ; read_address = phase_r @: reverse core.addr1_in
                ; read_enable = core.read_enable_in
                }
              ; { read_clock = i.clock
-               ; read_address = reverse core.addr2_in
+               ; read_address = phase_r @: reverse core.addr2_in
                ; read_enable = core.read_enable_in
                }
             |]
@@ -303,32 +312,43 @@ module Make (P : Size) = struct
     ;;
 
     let output_ram (i : _ I.t) (core : _ Core.O.t) =
+      let phase_i =
+        reg_fb
+          (Reg_spec.create ~clock:i.clock ~clear:i.clear ())
+          ~width:1
+          ~enable:i.flip
+          ~f:( ~: )
+      in
+      let phase_o = ~:phase_i in
       let q =
         Ram.create
           ~collision_mode:Write_before_read
-          ~size:n
+          ~size:(n * 2)
           ~write_ports:
             [| { write_clock = i.clock
-               ; write_address = core.addr1_out
+               ; write_address = phase_i @: core.addr1_out
                ; write_data = core.q1
                ; write_enable = core.write_enable_out
                }
              ; { write_clock = i.clock
-               ; write_address = core.addr2_out
+               ; write_address = phase_i @: core.addr2_out
                ; write_data = core.q2
                ; write_enable = core.write_enable_out
                }
             |]
           ~read_ports:
             [| { read_clock = i.clock
-               ; read_address = core.addr1_in
+               ; read_address = phase_i @: core.addr1_in
                ; read_enable = core.read_enable_in
                }
              ; { read_clock = i.clock
-               ; read_address = core.addr2_in
+               ; read_address = phase_i @: core.addr2_in
                ; read_enable = core.read_enable_in
                }
-             ; { read_clock = i.clock; read_address = i.rd_addr; read_enable = i.rd_en }
+             ; { read_clock = i.clock
+               ; read_address = phase_o @: i.rd_addr
+               ; read_enable = i.rd_en
+               }
             |]
           ()
       in

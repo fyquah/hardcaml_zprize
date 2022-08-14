@@ -37,6 +37,7 @@ module Parallel_cores = struct
       { clock : 'a
       ; clear : 'a
       ; start : 'a
+      ; flip : 'a
       ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
       ; wr_en : 'a
       ; wr_addr : 'a [@bits logn]
@@ -63,6 +64,7 @@ module Parallel_cores = struct
             { Ntt.With_rams.I.clock = i.clock
             ; clear = i.clear
             ; start = i.start
+            ; flip = i.flip
             ; wr_d = i.wr_d.(index)
             ; wr_en = i.wr_en.:(index)
             ; wr_addr = i.wr_addr
@@ -148,6 +150,7 @@ module Controller = struct
       ; start_input : 'a
       ; start_output : 'a
       ; start_cores : 'a
+      ; flip : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -226,6 +229,7 @@ module Controller = struct
     ; start_input = start_input.value
     ; start_output = start_output.value
     ; start_cores = start_cores.value
+    ; flip = start_cores.value |: start_output.value
     }
   ;;
 
@@ -282,6 +286,7 @@ module Core = struct
         { Parallel_cores.I.clock = i.clock
         ; clear = i.clear
         ; start = controller.start_cores
+        ; flip = controller.flip
         ; wr_d = i.wr_d
         ; wr_en = i.wr_en
         ; wr_addr = i.wr_addr
@@ -384,7 +389,7 @@ module Kernel = struct
   let store_sm (i : _ I.t) ~start =
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module Store_sm) spec in
-    let addr = Var.reg spec ~width:logn in
+    let addr = Var.reg spec ~width:(logn + 1) in
     let addr_next = addr.value +:. 1 in
     let rd_en = Var.wire ~default:gnd in
     let tvalid = Var.reg spec ~width:1 in
@@ -395,17 +400,23 @@ module Kernel = struct
             [ Start, [ addr <--. 0; when_ start [ rd_en <-- vdd; sm.set_next Preroll ] ]
             ; Preroll, [ rd_en <-- vdd; addr <--. 1; tvalid <-- vdd; sm.set_next Stream ]
             ; ( Stream
-              , [ when_
+              , [ rd_en <-- vdd (* XXX control the read enable properly. *)
+                ; when_
                     i.data_out_dest.tready
-                    [ rd_en <-- vdd
-                    ; addr <-- addr_next
-                    ; when_ (addr_next ==:. 0) [ tvalid <-- gnd; sm.set_next Start ]
+                    [ addr <-- addr_next
+                    ; when_
+                        (addr.value ==:. 1 lsl logn)
+                        [ tvalid <-- gnd; sm.set_next Start ]
                     ]
                 ] )
             ]
         ]);
     let done_ = sm.is Start in
-    { done_; tvalid = tvalid.value; rd_addr = addr.value; rd_en = rd_en.value }
+    { done_
+    ; tvalid = tvalid.value
+    ; rd_addr = addr.value.:[logn - 1, 0]
+    ; rd_en = rd_en.value
+    }
   ;;
 
   let create scope (i : _ I.t) =

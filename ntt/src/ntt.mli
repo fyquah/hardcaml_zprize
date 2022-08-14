@@ -104,6 +104,7 @@ module Make (P : Size) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; flip : 'a
         ; wr_d : 'a
         ; wr_en : 'a
         ; wr_addr : 'a
