@@ -1,5 +1,11 @@
-(executable
- (name ntt)
- (libraries core core_unix core_unix.command_unix ntts_r_fun)
+(executables
+ (names ntt simulate generate)
+ (libraries
+   core
+   core_unix
+   core_unix.command_unix
+   hardcaml_waveterm.interactive
+   ntts_r_fun
+   ntts_r_fun_test)
  (preprocess (pps ppx_jane))
 )

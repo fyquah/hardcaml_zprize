@@ -1,5 +1,5 @@
 (library
  ; XXX aray: Err ... lets make more sensible makes
  (name ntts_r_fun)
- (libraries base hardcaml hardcaml_verify)
+ (libraries base hardcaml hardcaml_axi hardcaml_xilinx hardcaml_verify)
  (preprocess (pps ppx_jane ppx_deriving_hardcaml)))

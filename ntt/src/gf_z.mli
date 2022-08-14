@@ -6,3 +6,4 @@ include Gf_intf.S
 val inverse : t -> t
 val pow : t -> int -> t
 val pp : Formatter.t -> t -> unit
+val random : unit -> t

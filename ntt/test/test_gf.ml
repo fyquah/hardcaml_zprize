@@ -113,6 +113,20 @@ let%expect_test "inverse" =
   Array.iter test_vector_z ~f:test
 ;;
 
+let%expect_test "powers" =
+  let rec loop n x acc =
+    if n = 23
+    then ()
+    else (
+      let y = Gf_z.(acc * x) in
+      let z = Gf_z.pow x n in
+      if not (Gf_z.equal y z)
+      then raise_s [%message "bad power" (y : Gf_z.t) (z : Gf_z.t) (n : int)];
+      loop (n + 1) x y)
+  in
+  loop 1 (Gf_z.of_z (Z.of_int 923751)) Gf_z.one
+;;
+
 let%expect_test "roots of unity" =
   let inverse, forward = Ntts_r_fun.Roots.inverse, Ntts_r_fun.Roots.forward in
   (* product is [1]. *)

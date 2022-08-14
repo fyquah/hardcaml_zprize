@@ -4,9 +4,13 @@ open Hardcaml_waveterm
 open Expect_test_helpers_base
 
 let%expect_test "addressing" =
-  let module Ntt = Ntts_r_fun.Ntt.Controller in
-  let module Sim = Cyclesim.With_interface (Ntt.I) (Ntt.O) in
-  let sim = Sim.create (Ntt.create (Scope.create ~flatten_design:true ())) in
+  let module Ntt =
+    Ntts_r_fun.Ntt.Make (struct
+      let logn = 3
+    end)
+  in
+  let module Sim = Cyclesim.With_interface (Ntt.Controller.I) (Ntt.Controller.O) in
+  let sim = Sim.create (Ntt.Controller.create (Scope.create ~flatten_design:true ())) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   inputs.clear := Bits.vdd;
@@ -28,50 +32,67 @@ let%expect_test "addressing" =
     │                  ││    └───────────────────────────────────────────────────────────────│
     │start             ││    ┌───┐                                                           │
     │                  ││────┘   └───────────────────────────────────────────────────────────│
-    │                  ││────────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────────│
-    │addr1             ││ 0          │2  │4  │6  │0  │1  │4  │5  │0  │1  │2  │3  │0          │
-    │                  ││────────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────────│
-    │                  ││────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───────────│
-    │addr2             ││ 0      │1  │3  │5  │7  │2  │3  │6  │7  │4  │5  │6  │7  │0          │
-    │                  ││────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───────────│
-    │done_             ││    ┌───┐                                               ┌───────────│
-    │                  ││────┘   └───────────────────────────────────────────────┘           │
-    │first_stage       ││        ┌───────────────┐                                           │
-    │                  ││────────┘               └───────────────────────────────────────────│
-    │                  ││────────────────────────┬───────────────┬───────────────┬───────────│
-    │i                 ││ 0                      │1              │2              │3          │
-    │                  ││────────────────────────┴───────────────┴───────────────┴───────────│
-    │                  ││────────────────────────────┬───┬───┬───┬───┬───┬───┬───┬───────────│
-    │j                 ││ 0                          │1  │0  │1  │0  │1  │2  │3  │0          │
-    │                  ││────────────────────────────┴───┴───┴───┴───┴───┴───┴───┴───────────│
-    │                  ││────────────┬───┬───┬───┬───────┬───────┬───────────────────────────│
-    │k                 ││ 0          │2  │4  │6  │0      │4      │0                          │
-    │                  ││────────────┴───┴───┴───┴───────┴───────┴───────────────────────────│
-    │                  ││────────┬───────────────┬───────────────┬───────────────┬───────────│
-    │m                 ││ 0      │1              │2              │4              │0          │
-    │                  ││────────┴───────────────┴───────────────┴───────────────┴───────────│
-    │                  ││────────────────────────┬───────────────┬───────────────────────────│
-    │omega             ││ FFFFFFFF00000000       │00010000000000.│FFFFFFFEFF000001           │
-    │                  ││────────────────────────┴───────────────┴───────────────────────────│
-    │start_twiddles    ││        ┌───────────────────┐   ┌───┐   ┌───┐           ┌───┐       │
-    │                  ││────────┘                   └───┘   └───┘   └───────────┘   └───────│
-    │                  ││                                                                    │
-    │                  ││                                                                    │
-    │                  ││                                                                    │
+    │                  ││────────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───│
+    │addr1             ││ 0          │2  │4  │6  │7  │0  │1  │4  │5  │6  │0  │1  │2  │3  │4  │
+    │                  ││────────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───│
+    │                  ││────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───│
+    │addr2             ││ 0      │1  │3  │5  │7  │0  │2  │3  │6  │7  │0  │4  │5  │6  │7  │0  │
+    │                  ││────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───│
+    │done_             ││    ┌───┐                                                           │
+    │                  ││────┘   └───────────────────────────────────────────────────────────│
+    │first_stage       ││        ┌───────────────────┐                                       │
+    │                  ││────────┘                   └───────────────────────────────────────│
+    │flip              ││                        ┌───┐               ┌───┐               ┌───│
+    │                  ││────────────────────────┘   └───────────────┘   └───────────────┘   │
+    │                  ││────────────────────────────┬───────────────────┬───────────────────│
+    │i                 ││ 0                          │1                  │2                  │
+    │                  ││────────────────────────────┴───────────────────┴───────────────────│
+    │                  ││────────────────────────┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───│
+    │j                 ││ 0                      │1  │0  │1  │0  │1  │2  │0  │1  │2  │3  │4  │
+    │                  ││────────────────────────┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───│
+    │                  ││────────────┬───┬───┬───────┬───────┬───────────┬───────────────────│
+    │k                 ││ 0          │2  │4  │6      │0      │4          │0                  │
+    │                  ││────────────┴───┴───┴───────┴───────┴───────────┴───────────────────│
+    │last_stage        ││                                                ┌───────────────────│
+    │                  ││────────────────────────────────────────────────┘                   │
+    │                  ││────────┬───────────────────┬───────────────────┬───────────────────│
+    │m                 ││ 0      │1                  │2                  │4                  │
+    │                  ││────────┴───────────────────┴───────────────────┴───────────────────│
+    │                  ││────────────────────────────┬───────────────────┬───────────────────│
+    │omega             ││ FFFFFFFF00000000           │0001000000000000   │FFFFFFFEFF000001   │
+    │                  ││────────────────────────────┴───────────────────┴───────────────────│
+    │read_write_enable ││        ┌───────────────┐   ┌───────────────┐   ┌───────────────┐   │
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
-module Ntt = Ntts_r_fun.Ntt.With_rams
 module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
+let compare_results coefs sim_result =
+  let module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf) in
+  Ntt.inverse_dit coefs;
+  if not ([%equal: Gf.t array] coefs sim_result)
+  then
+    print_s
+      [%message
+        "Simulation results are incorrect." (coefs : Gf.t array) (sim_result : Gf.t array)]
+;;
+
 let inverse_ntt_test ~waves input_coefs =
-  let module Sim = Cyclesim.With_interface (Ntt.I) (Ntt.O) in
+  let n = Array.length input_coefs in
+  let logn = Int.ceil_log2 n in
+  let module Ntt =
+    Ntts_r_fun.Ntt.Make (struct
+      let logn = logn
+    end)
+  in
+  let module Sim = Cyclesim.With_interface (Ntt.With_rams.I) (Ntt.With_rams.O) in
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
-      (Ntt.create
+      (Ntt.With_rams.create
+         ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
   in
   let waves, sim =
@@ -91,9 +112,14 @@ let inverse_ntt_test ~waves input_coefs =
   inputs.wr_en <-- 1;
   Array.iteri input_coefs ~f:(fun addr coef ->
       inputs.wr_addr <-- addr;
-      inputs.wr_d := coef;
+      inputs.wr_d := Gf.to_bits coef;
       Cyclesim.cycle sim);
   inputs.wr_en <-- 0;
+  (* flip rams *)
+  inputs.flip <-- 1;
+  Cyclesim.cycle sim;
+  inputs.flip <-- 0;
+  Cyclesim.cycle sim;
   (* start the core *)
   inputs.start <-- 1;
   Cyclesim.cycle sim;
@@ -106,12 +132,17 @@ let inverse_ntt_test ~waves input_coefs =
   for _ = 0 to 1 do
     Cyclesim.cycle sim
   done;
+  (* flip rams *)
+  inputs.flip <-- 1;
+  Cyclesim.cycle sim;
+  inputs.flip <-- 0;
+  Cyclesim.cycle sim;
   (* Read results *)
-  let result = Array.create ~len:8 Gf.zero in
+  let result = Array.create ~len:n Gf.zero in
   inputs.rd_en <-- 1;
   inputs.rd_addr <-- 0;
   Cyclesim.cycle sim;
-  for i = 1 to 8 do
+  for i = 1 to n do
     inputs.rd_addr <-- i;
     result.(i - 1) <- Gf.of_bits !(outputs.rd_q);
     Cyclesim.cycle sim
@@ -120,6 +151,7 @@ let inverse_ntt_test ~waves input_coefs =
   for _ = 0 to 11 do
     Cyclesim.cycle sim
   done;
+  compare_results input_coefs result;
   waves, result
 ;;
 
@@ -140,10 +172,9 @@ let%expect_test "8pt linear" =
     inverse_ntt_test
       ~waves:false
       (Array.init 8 ~f:(function
-           | 0 -> Gf.one
-           | 1 -> Gf.two
-           | _ -> Gf.zero)
-      |> Array.map ~f:Gf.to_bits)
+          | 0 -> Gf.one
+          | 1 -> Gf.two
+          | _ -> Gf.zero))
   in
   let result =
     Array.map result ~f:(fun b ->
@@ -177,7 +208,7 @@ let%expect_test "8pt random" =
         ; "0x10d812558ad9c103"
         ; "0xd19d3e319d1b6b4a"
        |]
-      |> Array.map ~f:(fun z -> Z.of_string z |> Gf.of_z |> Gf.to_bits))
+      |> Array.map ~f:(fun z -> Z.of_string z |> Gf.of_z))
   in
   let result =
     Array.map result ~f:(fun b ->
