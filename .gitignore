@@ -3,4 +3,7 @@ fpga/*/*.v
 fpga/*/vivado*
 fpga/*/*.rpt
 
+# Any generated submission files will be a .tar.gz file
+*.tar.gz
+
 **.swp
