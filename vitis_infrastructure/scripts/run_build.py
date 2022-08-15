@@ -134,6 +134,11 @@ def copy_kernel_sources(args):
         has_kernel_cfg = os.path.isfile(os.path.join(src, "kernel.cfg"))
 
         distutils.dir_util.copy_tree(src, dst)
+
+        # Delete dune file from the dst directory, otherwise dune might get confused!
+        if os.path.isfile(os.path.join(dst, "dune")):
+          os.remove(os.path.join(dst, "dune"))
+
         kernels.append(Kernel(name=kernel_name, type_=kernel_type, has_kernel_cfg=has_kernel_cfg))
     return kernels
 

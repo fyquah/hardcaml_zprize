@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -x
+
+../../../../vitis_infrastructure/scripts/run_build.py \
+	--top-level-name ntt_fpga \
+	--platform varium-c1100 \
+	--build-dir build \
+	--build-target hw \
+	--cfg ntt_fpga.cfg \
+	krnl_controller:cpp \
+	krnl_ntt:cpp

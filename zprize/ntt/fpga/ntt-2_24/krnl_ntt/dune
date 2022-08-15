@@ -1,0 +1,8 @@
+(rule
+ (mode promote)
+ (action (with-stdout-to krnl_ntt.v (run ../../../../../ntt/bin/generate.exe kernel 12))))
+
+(rule
+ (mode promote)
+ (target stub.sv)
+ (action (write-file %{target} "")))
