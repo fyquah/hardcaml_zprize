@@ -337,6 +337,7 @@ struct
       type 'a t =
         { data_out : 'a Axi512.Stream.Source.t
         ; data_in_dest : 'a Axi512.Stream.Dest.t
+        ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml ~rtlmangle:true]
     end
@@ -344,100 +345,106 @@ struct
     module Var = Always.Variable
 
     module Load_sm = struct
-      type t =
-        | Start
-        | Stream
-      [@@deriving sexp_of, compare, enumerate]
+      module State = struct
+        type t =
+          | Start
+          | Stream
+        [@@deriving sexp_of, compare, enumerate]
+      end
+
+      type 'a t =
+        { done_ : 'a
+        ; tready : 'a
+        ; wr_addr : 'a
+        ; wr_en : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+
+      let create (i : _ I.t) ~start =
+        let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+        let sm = Always.State_machine.create (module State) spec in
+        let addr = Var.reg spec ~width:logn in
+        let addr_next = addr.value +:. 1 in
+        Always.(
+          compile
+            [ sm.switch
+                [ Start, [ addr <--. 0; when_ start [ sm.set_next Stream ] ]
+                ; ( Stream
+                  , [ when_
+                        i.data_in.tvalid
+                        [ addr <-- addr_next
+                        ; when_ (addr_next ==:. 0) [ sm.set_next Start ]
+                        ]
+                    ] )
+                ]
+            ]);
+        let done_ = sm.is Start in
+        let processing = ~:done_ in
+        { done_
+        ; tready = processing
+        ; wr_en = processing &: i.data_in.tvalid
+        ; wr_addr = addr.value
+        }
+      ;;
     end
-
-    type load_sm =
-      { done_ : Signal.t
-      ; tready : Signal.t
-      ; wr_addr : Signal.t
-      ; wr_en : Signal.t
-      }
-
-    let load_sm (i : _ I.t) ~start =
-      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
-      let sm = Always.State_machine.create (module Load_sm) spec in
-      let addr = Var.reg spec ~width:logn in
-      let addr_next = addr.value +:. 1 in
-      Always.(
-        compile
-          [ sm.switch
-              [ Start, [ addr <--. 0; when_ start [ sm.set_next Stream ] ]
-              ; ( Stream
-                , [ when_
-                      i.data_in.tvalid
-                      [ addr <-- addr_next
-                      ; when_ (addr_next ==:. 0) [ sm.set_next Start ]
-                      ]
-                  ] )
-              ]
-          ]);
-      let done_ = sm.is Start in
-      let processing = ~:done_ in
-      { done_
-      ; tready = processing
-      ; wr_en = processing &: i.data_in.tvalid
-      ; wr_addr = addr.value
-      }
-    ;;
 
     module Store_sm = struct
-      type t =
-        | Start
-        | Preroll
-        | Stream
-      [@@deriving sexp_of, compare, enumerate]
+      module State = struct
+        type t =
+          | Start
+          | Preroll
+          | Stream
+        [@@deriving sexp_of, compare, enumerate]
+      end
+
+      type 'a t =
+        { done_ : 'a
+        ; tvalid : 'a
+        ; rd_addr : 'a
+        ; rd_en : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+
+      let create (i : _ I.t) ~start =
+        let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+        let sm = Always.State_machine.create (module State) spec in
+        let addr = Var.reg spec ~width:(logn + 1) in
+        let addr_next = addr.value +:. 1 in
+        let rd_en = Var.wire ~default:gnd in
+        let tvalid = Var.reg spec ~width:1 in
+        (* XXX fixme *)
+        Always.(
+          compile
+            [ sm.switch
+                [ Start, [ addr <--. 0; when_ start [ sm.set_next Preroll ] ]
+                ; ( Preroll
+                  , [ rd_en <-- vdd; addr <--. 1; tvalid <-- vdd; sm.set_next Stream ] )
+                ; ( Stream
+                  , [ when_
+                        i.data_out_dest.tready
+                        [ addr <-- addr_next
+                        ; rd_en <-- vdd
+                        ; when_
+                            (addr.value ==:. 1 lsl logn)
+                            [ tvalid <-- gnd; sm.set_next Start ]
+                        ]
+                    ] )
+                ]
+            ]);
+        let done_ = sm.is Start in
+        { done_
+        ; tvalid = tvalid.value
+        ; rd_addr = addr.value.:[logn - 1, 0]
+        ; rd_en = rd_en.value
+        }
+      ;;
     end
-
-    type store_sm =
-      { done_ : Signal.t
-      ; tvalid : Signal.t
-      ; rd_addr : Signal.t
-      ; rd_en : Signal.t
-      }
-
-    let store_sm (i : _ I.t) ~start =
-      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
-      let sm = Always.State_machine.create (module Store_sm) spec in
-      let addr = Var.reg spec ~width:(logn + 1) in
-      let addr_next = addr.value +:. 1 in
-      let rd_en = Var.wire ~default:gnd in
-      let tvalid = Var.reg spec ~width:1 in
-      (* XXX fixme *)
-      Always.(
-        compile
-          [ sm.switch
-              [ Start, [ addr <--. 0; when_ start [ rd_en <-- vdd; sm.set_next Preroll ] ]
-              ; ( Preroll
-                , [ rd_en <-- vdd; addr <--. 1; tvalid <-- vdd; sm.set_next Stream ] )
-              ; ( Stream
-                , [ rd_en <-- vdd (* XXX control the read enable properly. *)
-                  ; when_
-                      i.data_out_dest.tready
-                      [ addr <-- addr_next
-                      ; when_
-                          (addr.value ==:. 1 lsl logn)
-                          [ tvalid <-- gnd; sm.set_next Start ]
-                      ]
-                  ] )
-              ]
-          ]);
-      let done_ = sm.is Start in
-      { done_
-      ; tvalid = tvalid.value
-      ; rd_addr = addr.value.:[logn - 1, 0]
-      ; rd_en = rd_en.value
-      }
-    ;;
 
     let create ~build_mode scope (i : _ I.t) =
       let start_input = wire 1 in
       let start_output = wire 1 in
-      let load_sm = load_sm i ~start:start_input in
-      let store_sm = store_sm i ~start:start_output in
+      let load_sm = Load_sm.create i ~start:start_input in
+      let store_sm = Store_sm.create i ~start:start_output in
       let cores =
         Core.create
           ~build_mode
@@ -464,6 +471,7 @@ struct
           ; tstrb = ones (512 / 8)
           }
       ; data_in_dest = { tready = load_sm.tready }
+      ; done_ = cores.done_
       }
     ;;
 

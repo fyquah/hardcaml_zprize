@@ -150,8 +150,21 @@ end) : sig
       type 'a t =
         { data_out : 'a Axi512.Stream.Source.t
         ; data_in_dest : 'a Axi512.Stream.Dest.t
+        ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml]
+    end
+
+    module Store_sm : sig
+      type 'a t =
+        { done_ : 'a
+        ; tvalid : 'a
+        ; rd_addr : 'a
+        ; rd_en : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+
+      val create : Signal.t I.t -> start:Signal.t -> Signal.t t
     end
 
     val create
