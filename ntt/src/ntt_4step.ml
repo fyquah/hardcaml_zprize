@@ -337,6 +337,7 @@ struct
       type 'a t =
         { data_out : 'a Axi512.Stream.Source.t
         ; data_in_dest : 'a Axi512.Stream.Dest.t
+        ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml ~rtlmangle:true]
     end
@@ -470,6 +471,7 @@ struct
           ; tstrb = ones (512 / 8)
           }
       ; data_in_dest = { tready = load_sm.tready }
+      ; done_ = cores.done_
       }
     ;;
 

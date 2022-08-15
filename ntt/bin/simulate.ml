@@ -4,9 +4,23 @@ let command_kernel =
   Command.basic
     ~summary:"Simulate kernel operation"
     [%map_open.Command
-      let () = return () in
+      let verbose = flag "-verbose" no_arg ~doc:"Print detailed results"
+      and input_coefs = flag "-inputs" (optional string) ~doc:"Input coefficients"
+      and logn = anon ("LOGN" %: int) in
       fun () ->
-        let waves = Ntts_r_fun_test.Test_kernel.run ~verbose:true () in
+        let module Test =
+          Ntts_r_fun_test.Test_kernel.Make (struct
+            let logn = logn
+          end)
+        in
+        let input_coefs =
+          match input_coefs with
+          | None -> Test.random_input_coefs ()
+          | Some filename ->
+            let coefs = In_channel.read_lines filename in
+            List.map coefs ~f:(fun z -> Z.of_string z)
+        in
+        let waves = Test.run ~verbose input_coefs in
         Hardcaml_waveterm_interactive.run waves]
 ;;
 
