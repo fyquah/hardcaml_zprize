@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <optional>
 #include <random>
 #include <stdint.h>
@@ -23,14 +24,14 @@ load_input(vec64& data, const std::string& filename)
   uint64_t x;
   std::ifstream fin(filename);
 
-  if (fin.is_open()) {
+  if (!fin.is_open()) {
     error_message.append("Failed to open input_file \"");
     error_message.append(filename);
     error_message.append("\" Aborting!");
     throw std::runtime_error(error_message);
   }
 
-  while (fin >> x) {
+  while (fin >> std::hex >> x) {
     if (i >= data.size()) {
       error_message.append("Expecting exactly ");
       error_message.append(std::to_string(data.size()));
@@ -46,7 +47,9 @@ load_input(vec64& data, const std::string& filename)
     error_message.append(std::to_string(data.size()));
     error_message.append(" elements, in input file ");
     error_message.append(filename);
-    error_message.append(", but only got?");
+    error_message.append(", but only got ");
+    error_message.append(std::to_string(i));
+    error_message.append("?");
     throw std::runtime_error(error_message);
   }
 }
@@ -57,7 +60,7 @@ store_output(const vec64& data, const std::string& filename)
   std::string error_message;
   std::ofstream fout(filename);
 
-  if (fout.is_open()) {
+  if (!fout.is_open()) {
     error_message.append("Failed to open output_file \"");
     error_message.append(filename);
     error_message.append("\" Aborting!");
@@ -65,7 +68,7 @@ store_output(const vec64& data, const std::string& filename)
   }
 
   for (uint64_t x : data) {
-    fout << x;
+    fout << "0x" << std::hex << std::setw(16) << std::setfill('0') << x << "\n";
   }
 
   fout.close();
