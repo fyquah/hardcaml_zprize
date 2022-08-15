@@ -177,4 +177,31 @@ end) : sig
       -> Scope.t
       -> Signal.t Interface.Create_fn(I)(O).t
   end
+
+  module Kernel_for_vitis : sig
+    module Axi512 = Hardcaml_axi.Axi512
+
+    module I : sig
+      type 'a t =
+        { ap_clk : 'a
+        ; ap_rst_n : 'a
+        ; controller_to_compute : 'a Axi512.Stream.Source.t
+        ; compute_to_controller_dest : 'a Axi512.Stream.Dest.t
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O : sig
+      type 'a t =
+        { compute_to_controller : 'a Axi512.Stream.Source.t
+        ; controller_to_compute_dest : 'a Axi512.Stream.Dest.t
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    val create
+      :  build_mode:Build_mode.t
+      -> Scope.t
+      -> Signal.t Interface.Create_fn(I)(O).t
+  end
 end

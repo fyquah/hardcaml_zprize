@@ -12,13 +12,15 @@ let command_kernel =
             let logn = logn
           end)
         in
-        let module Kernel = Ntt_4step.Kernel in
-        let module Circuit = Circuit.With_interface (Kernel.I) (Kernel.O) in
+        let module Kernel_for_vitis = Ntt_4step.Kernel_for_vitis in
+        let module Circuit =
+          Circuit.With_interface (Kernel_for_vitis.I) (Kernel_for_vitis.O)
+        in
         let scope = Scope.create ~flatten_design:false () in
         let circ =
           Circuit.create_exn
-            ~name:"ntt_kernel"
-            (Kernel.create ~build_mode:Synthesis scope)
+            ~name:"krnl_ntt"
+            (Kernel_for_vitis.create ~build_mode:Synthesis scope)
         in
         Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
 ;;

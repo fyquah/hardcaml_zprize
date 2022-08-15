@@ -480,4 +480,49 @@ struct
       Hier.hierarchical ~name:"kernel" ~scope (create ~build_mode)
     ;;
   end
+
+  module Kernel_for_vitis = struct
+    module Axi512 = Hardcaml_axi.Axi512
+
+    module I = struct
+      type 'a t =
+        { ap_clk : 'a
+        ; ap_rst_n : 'a
+        ; controller_to_compute : 'a Axi512.Stream.Source.t [@rtlmangle true]
+        ; compute_to_controller_dest : 'a Axi512.Stream.Dest.t
+              [@rtlprefix "compute_to_controller_"]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O = struct
+      type 'a t =
+        { compute_to_controller : 'a Axi512.Stream.Source.t [@rtlmangle true]
+        ; controller_to_compute_dest : 'a Axi512.Stream.Dest.t
+              [@rtlprefix "controller_to_compute_"]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    let create
+        ~build_mode
+        scope
+        { I.ap_clk; ap_rst_n; controller_to_compute; compute_to_controller_dest }
+      =
+      let start = wire 1 in
+      let { Kernel.O.data_out; data_in_dest; done_ } =
+        Kernel.hierarchy
+          ~build_mode
+          scope
+          { clock = ap_clk
+          ; clear = ~:ap_rst_n
+          ; data_in = controller_to_compute
+          ; data_out_dest = compute_to_controller_dest
+          ; start
+          }
+      in
+      start <== (done_ &: controller_to_compute.tvalid);
+      { O.compute_to_controller = data_out; controller_to_compute_dest = data_in_dest }
+    ;;
+  end
 end
