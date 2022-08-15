@@ -5,7 +5,8 @@ rm -f \
      *.protoinst \
      simulate.log \
      *.log \
-     xrt.ini
+     xrt.ini \
+     *.exe
 
 # Generated from xrt
 rm -f summary.csv xrt.run_summary

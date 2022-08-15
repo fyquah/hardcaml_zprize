@@ -1,6 +1,6 @@
 # Copied from the build directories
 emconfig.json
-host.exe
+test_random.exe
 
 # This file will be generated from a template
 xrt.ini
