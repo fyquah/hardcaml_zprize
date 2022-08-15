@@ -20,5 +20,6 @@ sed -e "s#CURRENT_DIRECTORY#$PWD#g" xrt.template.ini >xrt.ini
 
 diff "$OUTPUT_FILENAME" "$EXPECTED_OUTPUT_FILENAME"
 
-# if the diff returns 0, it means it is is empty and the test succeeded.
+# if the diff returns 0, it means it is is empty and the test succeeded. since
+# we have "set -euo pipefail", if diff exits 1, we don't reach here.
 echo "Test succeeded!"
