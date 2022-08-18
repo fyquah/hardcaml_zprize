@@ -4,6 +4,7 @@
 
 module Stream = Stream
 module Lite = Lite
+module type Config = Config.S
 
 module Make (X : Config.S) = struct
   module Stream = Stream.Make (X)
