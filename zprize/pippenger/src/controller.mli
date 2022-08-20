@@ -3,14 +3,7 @@
 open! Base
 open Hardcaml
 
-module type Config = sig
-  val window_size_bits : int
-  val num_windows : int
-  val affine_point_bits : int
-  val pipeline_depth : int
-end
-
-module Make (Config : Config) : sig
+module Make (Config : Config.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a

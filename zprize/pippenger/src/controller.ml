@@ -1,14 +1,7 @@
 open! Base
 open! Hardcaml
 
-module type Config = sig
-  val window_size_bits : int
-  val num_windows : int
-  val affine_point_bits : int
-  val pipeline_depth : int
-end
-
-module Make (Config : Config) = struct
+module Make (Config : Config.S) = struct
   open Signal
   open Config
 
@@ -25,10 +18,6 @@ module Make (Config : Config) = struct
         ; scalar_match : 'a [@bits window_size_bits]
         }
       [@@deriving sexp_of, hardcaml]
-    end
-
-    module O = struct
-      type 'a t = { matches : 'a } [@@deriving sexp_of, hardcaml]
     end
 
     let create _scope (i : _ I.t) =
@@ -87,8 +76,10 @@ module Make (Config : Config) = struct
     let sm = Always.State_machine.create (module State) spec in
     let window = Var.reg spec ~width:log_num_windows in
     let pipe_shift = Var.reg spec ~width:num_windows in
-    let _pipes =
-      Array.init num_windows ~f:(fun index ->
+    let scalar_count = Var.reg spec ~width:log_num_scalars in
+    ignore (scalar_count.value -- "SCLR_CNT" : Signal.t);
+    let pipes =
+      List.init num_windows ~f:(fun index ->
           Bucket_pipeline_model.create
             scope
             { Bucket_pipeline_model.I.clock = i.clock
@@ -98,14 +89,41 @@ module Make (Config : Config) = struct
             ; scalar_match = zero window_size_bits
             })
     in
+    let _current_scalar_is_in_pipelines = mux window.value pipes in
+    let processing_stalled_points = Var.reg spec ~width:1 in
+    let all_windows_have_stalled_points = gnd in
     ignore (sm.current -- "STATE" : Signal.t);
     Always.(
       compile
         [ pipe_shift <--. 0
         ; sm.switch
             [ Start, [ window <--. 0; when_ i.start [ sm.set_next P0 ] ]
-            ; P0, [ when_ i.scalar_valid [ sm.set_next P0 ] ]
-            ; P1, [ sm.set_next P1 ]
+            ; ( P0
+              , [ when_
+                    i.scalar_valid
+                    [ when_
+                        (window.value ==:. 0)
+                        [ (* Choose what to process. *)
+                          if_
+                            all_windows_have_stalled_points
+                            [ processing_stalled_points <-- vdd ]
+                            [ processing_stalled_points <-- gnd ]
+                        ]
+                    ; sm.set_next P1
+                    ]
+                ] )
+            ; ( P1
+              , [ window <-- window.value +:. 1
+                ; when_
+                    (window.value ==:. num_windows - 1)
+                    [ scalar_count <-- scalar_count.value +:. 1
+                    ; window <--. 0
+                    ; sm.set_next P0
+                    ; when_
+                        (scalar_count.value ==: ones log_num_scalars)
+                        [ sm.set_next Start ]
+                    ]
+                ] )
             ]
         ]);
     { O.done_ = sm.is Start
