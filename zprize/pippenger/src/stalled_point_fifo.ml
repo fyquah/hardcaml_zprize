@@ -1,10 +1,12 @@
 open! Base
 open! Hardcaml
+open Signal
 
 module Make (Config : Config.S) = struct
   open Config
 
   let log_num_windows = Int.ceil_log2 num_windows
+  let stall_fifo_depth = 1 lsl log_stall_fifo_depth
 
   module I = struct
     type 'a t =
@@ -28,6 +30,20 @@ module Make (Config : Config.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
   end
+
+  let create_window _scope (i : _ I.t) ~window =
+    let read_address = zero log_stall_fifo_depth in
+    let write_address = zero log_stall_fifo_depth in
+    let write_enable = gnd in
+    let write_data = zero window_size_bits in
+    let scalar =
+      memory
+        stall_fifo_depth
+        ~write_port:{ write_clock = i.clock; write_address; write_enable; write_data }
+        ~read_address
+    in
+    ()
+  ;;
 
   let create _scope (_i : _ I.t) = ()
 end
