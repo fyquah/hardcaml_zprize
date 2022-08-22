@@ -9,4 +9,6 @@ end
 
 module type Config = sig
   module type S = S
+
+  module Zprize : S
 end

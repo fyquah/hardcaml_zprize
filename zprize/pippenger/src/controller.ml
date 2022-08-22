@@ -1,6 +1,13 @@
 open! Base
 open! Hardcaml
 
+(* XX aray: For the initial version, we are going to make a slightely simpler design
+   which runs at coefficient per cycle.  We practically require 2 cycles.
+
+   We will have to fix this.  If the controller is fast enough anyway, we could do
+   this with an enable and job done.  If not, then I think extending the design should be fairly easy.
+*)
+
 module Make (Config : Config.S) = struct
   open Signal
   open Config
@@ -35,6 +42,8 @@ module Make (Config : Config.S) = struct
     ;;
   end
 
+  module Stalled_point_fifo = Stalled_point_fifo.Make (Config)
+
   module I = struct
     type 'a t =
       { clock : 'a
@@ -63,8 +72,9 @@ module Make (Config : Config.S) = struct
   module State = struct
     type t =
       | Start
-      | P0
-      | P1
+      | Choose_mode
+      | Scalars
+      | Stalled
     [@@deriving sexp_of, compare, enumerate]
   end
 
@@ -75,10 +85,11 @@ module Make (Config : Config.S) = struct
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
     let window = Var.reg spec ~width:log_num_windows in
+    let scalar = mux window.value (Array.to_list i.scalar) in
     let pipe_shift = Var.reg spec ~width:num_windows in
     let scalar_count = Var.reg spec ~width:log_num_scalars in
     ignore (scalar_count.value -- "SCLR_CNT" : Signal.t);
-    let pipes =
+    let _pipes =
       List.init num_windows ~f:(fun index ->
           Bucket_pipeline_model.create
             scope
@@ -89,40 +100,65 @@ module Make (Config : Config.S) = struct
             ; scalar_match = zero window_size_bits
             })
     in
-    let _current_scalar_is_in_pipelines = mux window.value pipes in
+    let push_stalled = Var.wire ~default:gnd in
+    let pop_stalled = Var.wire ~default:gnd in
+    let stalled =
+      Stalled_point_fifo.hierarchy
+        scope
+        { Stalled_point_fifo.I.clock = i.clock
+        ; clear = i.clear
+        ; push = push_stalled.value
+        ; scalar
+        ; window = window.value
+        ; affine_point = i.affine_point
+        ; pop = pop_stalled.value
+        }
+    in
     let processing_stalled_points = Var.reg spec ~width:1 in
-    let all_windows_have_stalled_points = gnd in
+    let bubble = Var.wire ~default:gnd in
     ignore (sm.current -- "STATE" : Signal.t);
     Always.(
       compile
         [ pipe_shift <--. 0
+        ; (* XXX *)
+          push_stalled <-- gnd
+        ; pop_stalled <-- gnd
         ; sm.switch
-            [ Start, [ window <--. 0; when_ i.start [ sm.set_next P0 ] ]
-            ; ( P0
-              , [ when_
-                    i.scalar_valid
-                    [ when_
-                        (window.value ==:. 0)
-                        [ (* Choose what to process. *)
-                          if_
-                            all_windows_have_stalled_points
-                            [ processing_stalled_points <-- vdd ]
-                            [ processing_stalled_points <-- gnd ]
+            [ ( Start
+              , [ scalar_count <--. 0
+                ; window <--. 0
+                ; when_ i.start [ sm.set_next Choose_mode ]
+                ] )
+            ; ( Choose_mode
+              , [ if_
+                    (scalar_count.value ==: ones log_num_scalars)
+                    [ sm.set_next Start ]
+                    [ scalar_count <-- scalar_count.value +:. 1
+                    ; when_
+                        i.scalar_valid
+                        [ if_
+                            (stalled.all_windows_have_stall
+                            |: stalled.some_windows_are_full)
+                            [ processing_stalled_points <-- vdd; sm.set_next Stalled ]
+                            [ if_
+                                i.scalar_valid
+                                [ processing_stalled_points <-- gnd; sm.set_next Scalars ]
+                                [ bubble <-- vdd ]
+                            ]
                         ]
-                    ; sm.set_next P1
                     ]
                 ] )
-            ; ( P1
+            ; ( Scalars
               , [ window <-- window.value +:. 1
                 ; when_
                     (window.value ==:. num_windows - 1)
-                    [ scalar_count <-- scalar_count.value +:. 1
-                    ; window <--. 0
-                    ; sm.set_next P0
-                    ; when_
-                        (scalar_count.value ==: ones log_num_scalars)
-                        [ sm.set_next Start ]
-                    ]
+                    [ window <--. 0; sm.set_next Choose_mode ]
+                ] )
+            ; ( Stalled
+              , [ window <-- window.value +:. 1
+                ; when_
+                    (window.value ==:. num_windows - 1)
+                    [ window <--. 0; sm.set_next Choose_mode ]
                 ] )
             ]
         ]);
@@ -131,7 +167,7 @@ module Make (Config : Config.S) = struct
     ; bucket = zero window_size_bits
     ; window = window.value
     ; adder_affine_point = zero affine_point_bits
-    ; bubble = gnd
+    ; bubble = bubble.value
     ; execute = gnd
     }
   ;;
