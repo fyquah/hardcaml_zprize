@@ -34,7 +34,7 @@ module Twisted_edwards_curve = struct
     let c_E = d * c_C * c_D in
     let c_F = c_B - c_E in
     let c_G = c_B + c_E in
-    let x3 = c_A * c_F * (((x1 + y1) * (x2 * y2)) - c_C - c_D) in
+    let x3 = c_A * c_F * (((x1 + y1) * (x2 + y2)) - c_C - c_D) in
     let y3 = c_A * c_G * (c_D - (a * c_C)) in
     let z3 = c_F * c_G in
     { x = x3; y = y3; z = z3 }
@@ -77,17 +77,12 @@ let twisted_edwards_affine_to_montgomery_affine ({ x; y } : Twisted_edwards_curv
     : Montgomery_curve.affine
   =
   let open Modulo_ops in
-  let ( * ) = modulo_mult in
-  { x = (one + y) * modulo_inverse (one - y)
-  ; y = (one + y) * modulo_inverse ((one - y) * x)
-  }
+  { x = (one + y) / (one - y); y = (one + y) / ((one - y) * x) }
 ;;
 
 let montgomery_affine_to_twisted_edwards_affine { Montgomery_curve.x = u; y = v } =
   let open Modulo_ops in
-  { Twisted_edwards_curve.x = u * modulo_inverse v
-  ; y = (u - one) * modulo_inverse (u + one)
-  }
+  { Twisted_edwards_curve.x = u / v; y = (u - one) / (u + one) }
 ;;
 
 let weierstrass_affine_to_montgomery_affine
@@ -130,14 +125,24 @@ let twisted_edwards_params_to_montgomery_params ({ a; d } : Twisted_edwards_curv
   { c_A; c_B }
 ;;
 
+let cubed x =
+  let open Modulo_ops in
+  x * x * x
+;;
+
+let square x =
+  let open Modulo_ops in
+  x * x
+;;
+
 let montgomery_params_to_weierstrass_params
     ~alpha
     ({ c_A; c_B } : Montgomery_curve.params)
     : Weierstrass_curve.params
   =
   let open Modulo_ops in
-  let a = (of_int 3 - (c_A * c_A)) / (of_int 3 * (c_B * c_B)) in
-  let b = ((of_int 2 * (c_A * c_A * c_A)) - (of_int 9 * c_A)) / (of_int 27 * c_B * c_B) in
+  let a = (of_int 3 - square c_A) / (of_int 3 * square c_B) in
+  let b = ((of_int 2 * cubed c_A) - (of_int 9 * c_A)) / (of_int 27 * cubed c_B) in
   Weierstrass_curve.create_params ~a ~b ~alpha
 ;;
 
@@ -206,7 +211,7 @@ let%expect_test "" =
       [%message (obtained : Ark_bls12_377_g1.affine) (expected : Ark_bls12_377_g1.affine)];
     assert (Ark_bls12_377_g1.equal_affine obtained expected)
   in
-  let a = Ark_bls12_377_g1.mul ~by:2 (Ark_bls12_377_g1.subgroup_generator ()) in
-  let b = Ark_bls12_377_g1.subgroup_generator () in
-  test a b
+  test
+    (Ark_bls12_377_g1.mul ~by:2 (Ark_bls12_377_g1.subgroup_generator ()))
+    (Ark_bls12_377_g1.subgroup_generator ())
 ;;
