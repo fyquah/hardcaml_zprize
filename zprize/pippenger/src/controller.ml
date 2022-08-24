@@ -11,38 +11,11 @@ open! Hardcaml
 module Make (Config : Config.S) = struct
   open Signal
   open Config
+  module Bucket_pipeline = Bucket_pipeline.Make (Config)
 
-  let pipeline_depth_per_window = (pipeline_depth + num_windows - 1) / num_windows
   let log_num_windows = Int.ceil_log2 num_windows
 
-  module Bucket_pipeline_model = struct
-    module I = struct
-      type 'a t =
-        { clock : 'a
-        ; clear : 'a
-        ; scalar_in : 'a [@bits window_size_bits]
-        ; shift : 'a
-        ; scalar_match : 'a [@bits window_size_bits]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    let create _scope (i : _ I.t) =
-      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
-      let rec build_pipe n d pipe =
-        if n = pipeline_depth_per_window
-        then pipe
-        else (
-          let d = reg spec ~enable:i.shift d in
-          build_pipe (n + 1) d (d :: pipe))
-      in
-      let stored = build_pipe 0 i.scalar_in [] in
-      List.map stored ~f:(fun d -> d ==: i.scalar_match)
-      |> tree ~arity:6 ~f:(reduce ~f:( |: ))
-    ;;
-  end
-
-  module Stalled_point_fifo = Stalled_point_fifo.Make (Config)
+  module Stalled_point_fifos = Stalled_point_fifos.Make (Config)
 
   module I = struct
     type 'a t =
@@ -60,8 +33,8 @@ module Make (Config : Config.S) = struct
     type 'a t =
       { done_ : 'a
       ; scalar_read : 'a
-      ; bucket : 'a [@bits window_size_bits]
       ; window : 'a [@bits log_num_windows]
+      ; bucket : 'a [@bits window_size_bits]
       ; adder_affine_point : 'a [@bits affine_point_bits]
       ; bubble : 'a
       ; execute : 'a
@@ -87,25 +60,37 @@ module Make (Config : Config.S) = struct
     let window = Var.reg spec ~width:log_num_windows in
     let scalar = mux window.value (Array.to_list i.scalar) in
     let pipe_shift = Var.reg spec ~width:num_windows in
-    let scalar_count = Var.reg spec ~width:log_num_scalars in
-    ignore (scalar_count.value -- "SCLR_CNT" : Signal.t);
-    let _pipes =
-      List.init num_windows ~f:(fun index ->
-          Bucket_pipeline_model.create
-            scope
-            { Bucket_pipeline_model.I.clock = i.clock
-            ; clear = i.clear
-            ; scalar_in = i.scalar.(index)
-            ; shift = pipe_shift.value.:(index)
-            ; scalar_match = zero window_size_bits
-            })
+    ignore (pipe_shift.value -- "PIPE_SHIFT" : Signal.t);
+    let pipe_shift_next =
+      let s = pipe_shift.value in
+      lsbs s @: msb s
     in
+    let scalar_count = Var.reg spec ~width:log_num_scalars in
+    let processing_stalled_points = Var.wire ~default:gnd in
+    let processing_scalars = Var.wire ~default:gnd in
+    ignore (scalar_count.value -- "SCLR_CNT" : Signal.t);
+    let is_in_pipeline = wire 1 in
+    let pipes =
+      List.init num_windows ~f:(fun window ->
+        Bucket_pipeline.hierarchy
+          ~window
+          scope
+          { Bucket_pipeline.I.clock = i.clock
+          ; clear = i.clear
+          ; scalar_in = mux2 is_in_pipeline (zero window_size_bits) i.scalar.(window)
+          ; shift = pipe_shift.value.:(window)
+          ; scalar_match = i.scalar.(window)
+          })
+    in
+    is_in_pipeline
+    <== mux window.value (List.map pipes ~f:(fun o -> o.is_in_pipeline))
+        -- "is_in_pipeline_window";
     let push_stalled = Var.wire ~default:gnd in
     let pop_stalled = Var.wire ~default:gnd in
     let stalled =
-      Stalled_point_fifo.hierarchy
+      Stalled_point_fifos.hierarchy
         scope
-        { Stalled_point_fifo.I.clock = i.clock
+        { Stalled_point_fifos.I.clock = i.clock
         ; clear = i.clear
         ; push = push_stalled.value
         ; scalar
@@ -114,19 +99,21 @@ module Make (Config : Config.S) = struct
         ; pop = pop_stalled.value
         }
     in
-    let processing_stalled_points = Var.reg spec ~width:1 in
     let bubble = Var.wire ~default:gnd in
+    let window_next = window.value +:. 1 in
+    let scalar_read = Var.wire ~default:gnd in
+    let execute = Var.wire ~default:gnd in
     ignore (sm.current -- "STATE" : Signal.t);
     Always.(
       compile
-        [ pipe_shift <--. 0
-        ; (* XXX *)
-          push_stalled <-- gnd
+        [ push_stalled <-- gnd
         ; pop_stalled <-- gnd
+        ; pipe_shift <-- pipe_shift_next
         ; sm.switch
             [ ( Start
               , [ scalar_count <--. 0
                 ; window <--. 0
+                ; pipe_shift <--. 1
                 ; when_ i.start [ sm.set_next Choose_mode ]
                 ] )
             ; ( Choose_mode
@@ -134,28 +121,38 @@ module Make (Config : Config.S) = struct
                     (scalar_count.value ==: ones log_num_scalars)
                     [ sm.set_next Start ]
                     [ scalar_count <-- scalar_count.value +:. 1
-                    ; when_
-                        i.scalar_valid
+                    ; window <-- window_next
+                    ; processing_stalled_points <-- gnd
+                    ; processing_scalars <-- gnd
+                    ; if_
+                        (stalled.all_windows_have_stall |: stalled.some_windows_are_full)
+                        [ processing_stalled_points <-- vdd
+                        ; execute <-- vdd
+                        ; sm.set_next Stalled
+                        ]
                         [ if_
-                            (stalled.all_windows_have_stall
-                            |: stalled.some_windows_are_full)
-                            [ processing_stalled_points <-- vdd; sm.set_next Stalled ]
-                            [ if_
-                                i.scalar_valid
-                                [ processing_stalled_points <-- gnd; sm.set_next Scalars ]
-                                [ bubble <-- vdd ]
+                            i.scalar_valid
+                            [ execute <-- vdd
+                            ; processing_scalars <-- vdd
+                            ; sm.set_next Scalars
                             ]
+                            [ bubble <-- vdd ]
                         ]
                     ]
                 ] )
             ; ( Scalars
-              , [ window <-- window.value +:. 1
+              , [ window <-- window_next
+                ; execute <-- is_in_pipeline
+                ; bubble <-- ~:is_in_pipeline
+                ; processing_scalars <-- vdd
                 ; when_
                     (window.value ==:. num_windows - 1)
-                    [ window <--. 0; sm.set_next Choose_mode ]
+                    [ window <--. 0; scalar_read <--. 1; sm.set_next Choose_mode ]
                 ] )
             ; ( Stalled
-              , [ window <-- window.value +:. 1
+              , [ window <-- window_next
+                ; processing_stalled_points <-- vdd
+                ; execute <-- vdd
                 ; when_
                     (window.value ==:. num_windows - 1)
                     [ window <--. 0; sm.set_next Choose_mode ]
@@ -163,12 +160,140 @@ module Make (Config : Config.S) = struct
             ]
         ]);
     { O.done_ = sm.is Start
-    ; scalar_read = gnd
-    ; bucket = zero window_size_bits
+    ; scalar_read = scalar_read.value
     ; window = window.value
-    ; adder_affine_point = zero affine_point_bits
+    ; bucket = mux window.value (Array.to_list i.scalar)
+    ; adder_affine_point =
+        mux2
+          (reg spec processing_stalled_points.value)
+          stalled.affine_point_out
+          (reg spec i.affine_point)
     ; bubble = bubble.value
-    ; execute = gnd
+    ; execute = execute.value
     }
+  ;;
+
+  (* We can issue every other cycle. There are a few things we need to check/calculate.
+
+     1. Have we got stalled points to execute? Go to 2.1
+        Are scalars ready? Go to 2.2
+        Otherwise - go to 2.3
+
+     2.1 Execute stalled points - 1st starts on this cycle, then complete all windows
+
+     2.2 Execute Scalars - 1st starts on this cycle, then complete all windows
+
+     2.3 1 cycle bubble - go to 1
+
+     States:
+     -------------------------------------
+
+     Start [-> Choose_mode]
+
+     Choose_mode [-> Execute_stalled point or Execute_scalar or Wait_mode or Start]
+
+         - check if stalled fifo is ready, check if there is an available scalar
+ 
+     Wait_mode [-> Choose_mode]
+
+     Execute_stalled_point [-> Wait_stalled_point or Choose_mode]
+
+     Wait_stalled_point [-> Execute_stalled_point]
+
+     Execute_scalar [-> Wait_scalar or Choose_mode]
+
+     Wait_scalar [-> Execute_scalar]
+
+  *)
+
+  module State2 = struct
+    type t =
+      | Start
+      | Choose_mode
+      | Wait_mode
+      | Execute_scalar
+      | Wait_scalar
+      | Execute_stalled
+      | Wait_stalled
+    [@@deriving sexp_of, compare, enumerate]
+  end
+
+  let create2 scope (i : _ I.t) =
+    let ( -- ) = Scope.naming scope in
+    let stalled = Stalled_point_fifos.O.Of_signal.wires () in
+    let pipes =
+      List.init num_windows ~f:(fun _ -> Bucket_pipeline.O.Of_signal.wires ())
+    in
+    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+    let sm = Always.State_machine.create (module State2) spec in
+    let window = Var.reg spec ~width:log_num_windows in
+    let window_next = window.value +:. 1 in
+    let scalar = mux window.value (Array.to_list i.scalar) in
+    let scalar_count = Var.reg spec ~width:log_num_scalars in
+    let scalar_count_next = scalar_count.value +:. 1 in
+    ignore (sm.current -- "STATE" : Signal.t);
+    let on_last_window =
+      Always.(
+        when_
+          (window.value ==:. num_windows - 1)
+          [ window <--. 0; scalar_count <-- scalar_count_next; sm.set_next Choose_mode ])
+    in
+    Always.(
+      compile
+        [ sm.switch
+            [ Start, [ window <--. 0; when_ i.start [ sm.set_next Choose_mode ] ]
+            ; ( Choose_mode
+              , [ if_
+                    (stalled.all_windows_have_stall |: stalled.some_windows_are_full)
+                    [ (* process stalled coefficients in each window *)
+                      sm.set_next Execute_stalled
+                    ]
+                  @@ elif
+                       i.scalar_valid
+                       [ (* process an input scalar across all windows *)
+                         sm.set_next Execute_scalar
+                       ]
+                       [ (* nothing to do - wait and try again *) sm.set_next Wait_mode ]
+                ] )
+            ; Wait_mode, [ sm.set_next Choose_mode ]
+            ; Execute_scalar, [ sm.set_next Wait_scalar ]
+            ; ( Wait_scalar
+              , [ window <-- window_next; sm.set_next Execute_scalar; on_last_window ] )
+            ; Execute_stalled, [ sm.set_next Wait_stalled ]
+            ; ( Wait_stalled
+              , [ window <-- window_next; sm.set_next Execute_stalled; on_last_window ] )
+            ]
+        ]);
+    List.iter2_exn
+      pipes
+      (List.init num_windows ~f:(fun window ->
+         Bucket_pipeline.hierarchy
+           ~window
+           scope
+           { Bucket_pipeline.I.clock = i.clock
+           ; clear = i.clear
+           ; scalar_in = mux2 is_in_pipeline (zero window_size_bits) i.scalar.(window)
+           ; shift = gnd
+           ; scalar_match = i.scalar.(window)
+           }))
+      ~f:Bucket_pipeline.O.Of_signal.assign;
+    Stalled_point_fifos.O.Of_signal.assign
+      stalled
+      (Stalled_point_fifos.hierarchy
+         scope
+         { Stalled_point_fifos.I.clock = i.clock
+         ; clear = i.clear
+         ; push = gnd
+         ; scalar
+         ; window = window.value
+         ; affine_point = i.affine_point
+         ; pop = gnd
+         });
+    O.Of_signal.of_int 0
+  ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"ctrl" ~scope create
   ;;
 end

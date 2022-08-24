@@ -2,7 +2,7 @@ open! Core
 open Hardcaml
 open Hardcaml_waveterm
 module Config = Pippenger.Config.Zprize
-module Fifo = Pippenger.Stalled_point_fifo.Make (Config)
+module Fifo = Pippenger.Stalled_point_fifos.Make (Config)
 module Sim = Cyclesim.With_interface (Fifo.I) (Fifo.O)
 
 let ( <-. ) a b = a := Bits.of_int ~width:(Bits.width !a) b

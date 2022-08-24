@@ -95,7 +95,7 @@ module Make (Config : Config.S) = struct
   let create scope (i : _ I.t) =
     let stalled_windows =
       List.init num_windows ~f:(fun window_index ->
-          hierarchy_window scope i ~window_index)
+        hierarchy_window scope i ~window_index)
     in
     let current_stalled_window = O_window.Of_signal.mux i.window stalled_windows in
     let affine_point_out =

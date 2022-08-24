@@ -20,8 +20,8 @@ module Make (Config : Config.S) : sig
     type 'a t =
       { done_ : 'a
       ; scalar_read : 'a
-      ; bucket : 'a
       ; window : 'a
+      ; bucket : 'a
       ; adder_affine_point : 'a
       ; bubble : 'a
       ; execute : 'a
@@ -30,4 +30,6 @@ module Make (Config : Config.S) : sig
   end
 
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val create2 : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
