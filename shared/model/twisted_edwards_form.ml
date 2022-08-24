@@ -20,11 +20,12 @@ module Twisted_edwards_curve = struct
     }
 
   type extended =
-    { x : Z.t
-    ; y : Z.t
-    ; z : Z.t
-    ; t : Z.t
+    { x : Util.z
+    ; y : Util.z
+    ; z : Util.z
+    ; t : Util.z
     }
+  [@@deriving sexp_of]
 
   let affine_to_extended ~z ({ x; y } : affine) : extended =
     { x = modulo_mult x z; y = modulo_mult y z; z; t = modulo_mult (modulo_mult x y) z }
@@ -40,7 +41,7 @@ module Twisted_edwards_curve = struct
     { x = x / z; y = y / z }
   ;;
 
-  let add_not_equal
+  let _add_not_equal
       { a; d = _ }
       ({ x = x1; y = y1; z = z1; t = t1 } : extended)
       ({ x = x2; y = y2; t = t2 } : affine_with_t)
@@ -56,6 +57,28 @@ module Twisted_edwards_curve = struct
     let c_F = ((x1 - y1) * (x2 + y2)) + c_B - c_A in
     let c_G = c_B + (a * c_A) in
     let c_H = c_D - c_C in
+    let x3 = c_E * c_F in
+    let y3 = c_G * c_H in
+    let t3 = c_E * c_H in
+    let z3 = c_F * c_G in
+    { x = x3; y = y3; z = z3; t = t3 }
+  ;;
+
+  let add_unified
+      { a; d }
+      ({ x = x1; y = y1; z = z1; t = t1 } : extended)
+      ({ x = x2; y = y2; t = t2 } : affine_with_t)
+      : extended
+    =
+    let open Modulo_ops in
+    let c_A = x1 * x2 in
+    let c_B = y1 * y2 in
+    let c_C = t1 * d * t2 in
+    let c_D = z1 in
+    let c_E = ((x1 + y1) * (x2 + y2)) - c_A - c_B in
+    let c_F = c_D - c_C in
+    let c_G = c_D + c_C in
+    let c_H = c_B - (a * c_A) in
     let x3 = c_E * c_F in
     let y3 = c_G * c_H in
     let t3 = c_E * c_H in
@@ -212,9 +235,13 @@ let%expect_test "Modulo square root" =
 ;;
 
 let%expect_test "Params" =
+  Stdio.print_s [%message (p : Util.z)];
+  [%expect
+    {|
+    (p
+     0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001) |}];
   let bls12_377_params =
-    let alpha = Util.modulo_add Util.p Z.minus_one in
-    Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha
+    Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha:Z.minus_one
   in
   Stdio.print_s [%message (bls12_377_params : Weierstrass_curve.params)];
   [%expect
@@ -223,8 +250,7 @@ let%expect_test "Params" =
      ((a 0x0) (b 0x1)
       (s
        0x19d47d415b5ff60a87a8b7bbab25eb6427dd58ca38e47030efd1e6310ac7bf3079221bf2b4bd72c5106e9e70fcc6156)
-      (alpha
-       0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000000))) |}];
+      (alpha 0x-1))) |}];
   let bls12_377_twisted_edwards_params =
     weierstrass_params_to_twisted_edwards_params bls12_377_params
   in
@@ -259,11 +285,11 @@ let%expect_test "" =
           bls12_377_params
           { x = Ark_bls12_377_g1.x b; y = Ark_bls12_377_g1.y b }
       in
-      let z = Util.random_z ~lo_incl:Z.zero ~hi_incl:Z.(Util.p - one) in
+      (* let z = Util.random_z ~lo_incl:Z.zero ~hi_incl:Z.(Util.p - one) in *)
       let (res : Weierstrass_curve.affine) =
-        Twisted_edwards_curve.add_not_equal
+        Twisted_edwards_curve.add_unified
           bls12_377_twisted_edwards_params
-          (Twisted_edwards_curve.affine_to_extended ~z a)
+          (Twisted_edwards_curve.affine_to_extended ~z:Z.one a)
           (Twisted_edwards_curve.affine_to_affine_with_t b)
         |> Twisted_edwards_curve.extended_to_affine
         |> twisted_edwards_affine_to_weierstrass_affine bls12_377_twisted_edwards_params
@@ -281,13 +307,13 @@ let%expect_test "" =
             (expected : Ark_bls12_377_g1.affine)]
   in
   test
-    (Ark_bls12_377_g1.mul ~by:2 (Ark_bls12_377_g1.subgroup_generator ()))
-    (Ark_bls12_377_g1.subgroup_generator ());
+    (Ark_bls12_377_g1.mul ~by:3 (Ark_bls12_377_g1.subgroup_generator ()))
+    (Ark_bls12_377_g1.mul ~by:3 (Ark_bls12_377_g1.subgroup_generator ()));
   [%expect
     {|
     ((x
-      0x1252b781171f507db36291b433a1f911a46543890a20ca9712e11f66a5d216e63d817bd8d96cef715abc604dcf6ec2e)
+      0x10c65c0fb9e6c6ef4cbb27fdc55a07e474df11c564bd91e3fa162c32b7fc3dabba5fc508cfdd8938fb4a30f7de5ad9c)
      (y
-      0x14a00fa77c727e8987cc438b51bbe012c823a19955ae692c54ce572a61f0ea1fe5cd981533df419fd1330d1f6e6d802)
+      0x149a58ced619866b242313876fe2df3188f33b77566a9ddc966ff4d4d5c42d515be862c348f51cc91f1c45a74110ba6)
      (infinity false)) |}]
 ;;
