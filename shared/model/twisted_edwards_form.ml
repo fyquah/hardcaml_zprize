@@ -3,41 +3,64 @@ open Util
 
 module Twisted_edwards_curve = struct
   type params =
-    { a : Z.t
-    ; d : Z.t
+    { a : Util.z
+    ; d : Util.z
     }
+  [@@deriving sexp_of]
 
   type affine =
     { x : Z.t
     ; y : Z.t
     }
 
-  type projective =
+  type affine_with_t =
+    { x : Z.t
+    ; y : Z.t
+    ; t : Z.t
+    }
+
+  type extended =
     { x : Z.t
     ; y : Z.t
     ; z : Z.t
+    ; t : Z.t
     }
 
-  let affine_to_projective ({ x; y } : affine) : projective = { x; y; z = Z.one }
+  let affine_to_extended ~z ({ x; y } : affine) : extended =
+    { x = modulo_mult x z; y = modulo_mult y z; z; t = modulo_mult (modulo_mult x y) z }
+  ;;
 
-  let projective_to_affine { x; y; z } : affine =
+  let affine_to_affine_with_t ({ x; y } : affine) : affine_with_t =
+    { x; y; t = modulo_mult x y }
+  ;;
+
+  let extended_to_affine { x; y; z; t } : affine =
     let open Modulo_ops in
+    assert (equal (x / z * (y / z)) (t / z));
     { x = x / z; y = y / z }
   ;;
 
-  let add_not_equal { a; d } { x = x1; y = y1; z = z1 } { x = x2; y = y2; z = z2 } =
+  let add_not_equal
+      { a; d = _ }
+      ({ x = x1; y = y1; z = z1; t = t1 } : extended)
+      ({ x = x2; y = y2; t = t2 } : affine_with_t)
+      : extended
+    =
+    (* https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#addition-madd-2008-hwcd-2 *)
     let open Modulo_ops in
-    let c_A = z1 * z2 in
-    let c_B = c_A * c_A in
-    let c_C = x1 * x2 in
-    let c_D = y1 * y2 in
-    let c_E = d * c_C * c_D in
-    let c_F = c_B - c_E in
-    let c_G = c_B + c_E in
-    let x3 = c_A * c_F * (((x1 + y1) * (x2 + y2)) - c_C - c_D) in
-    let y3 = c_A * c_G * (c_D - (a * c_C)) in
+    let c_A = x1 * x2 in
+    let c_B = y1 * y2 in
+    let c_C = z1 * t2 in
+    let c_D = t1 in
+    let c_E = c_D + c_C in
+    let c_F = ((x1 - y1) * (x2 + y2)) + c_B - c_A in
+    let c_G = c_B + (a * c_A) in
+    let c_H = c_D - c_C in
+    let x3 = c_E * c_F in
+    let y3 = c_G * c_H in
+    let t3 = c_E * c_H in
     let z3 = c_F * c_G in
-    { x = x3; y = y3; z = z3 }
+    { x = x3; y = y3; z = z3; t = t3 }
   ;;
 end
 
@@ -178,43 +201,20 @@ let _twisted_edward_params_to_weierstrass_params ~alpha p =
     (twisted_edwards_params_to_montgomery_params p)
 ;;
 
-let%expect_test "Proof that 3 has a square root" =
-  Stdio.printf "%s" (Z.to_string (modulo_pow Z.(of_int 3) Z.((p - of_int 1) / of_int 2)));
-  [%expect {| 1 |}]
-;;
-
-let%expect_test "" =
-  Stdio.printf "%s" (Z.to_string (Z.( mod ) Util.p (Z.of_int 4)));
-  [%expect {| 1 |}]
-;;
-
-let%expect_test "" =
-  Stdio.printf "%s" (Z.to_string (Z.( mod ) Util.p (Z.of_int 4)));
-  [%expect {| 1 |}]
-;;
-
 let%expect_test "Modulo square root" =
   let y = Z.of_int 3 in
   let x = modulo_square_root y in
   Stdio.print_s (sexp_of_z x);
   [%expect
-    {| 0x32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc01 |}];
+    {| 0x17b62f01197dc4c6cf996f256d489ac9333ccbfe8c0adeaef1096c9bdf2e3d8e89faab521e38583e9033db52f652400 |}];
   Stdio.printf "%s" (Z.to_string (Util.modulo_mult x x));
-  [%expect {| 3 |}];
-  let x = modulo_pow (Z.of_int 3) (Z.of_int 3) in
-  Stdio.printf "%s" (Z.to_string x);
-  [%expect {| 27 |}];
-  Stdio.printf "%s" (Z.to_string Util.p);
-  [%expect
-    {| 258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 |}];
-  Stdio.printf "%s" (Z.to_string (Util.half Z.(p + one)));
-  [%expect
-    {| 129332213006484547005326366847446766768196756377457330269942131333360234174170411387484444069786680062220160729089 |}]
+  [%expect {| 3 |}]
 ;;
 
 let%expect_test "Params" =
   let bls12_377_params =
-    Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha:Z.minus_one
+    let alpha = Util.modulo_add Util.p Z.minus_one in
+    Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha
   in
   Stdio.print_s [%message (bls12_377_params : Weierstrass_curve.params)];
   [%expect
@@ -222,23 +222,27 @@ let%expect_test "Params" =
     (bls12_377_params
      ((a 0x0) (b 0x1)
       (s
-       0x10f272020f118a1dc07a44b1eeea84d7a504665d66cc8c0ff643cca95ccc0d0f793b8504b428d43401d618f0339eab)
-      (alpha 0x-1))) |}];
+       0x19d47d415b5ff60a87a8b7bbab25eb6427dd58ca38e47030efd1e6310ac7bf3079221bf2b4bd72c5106e9e70fcc6156)
+      (alpha
+       0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000000))) |}];
+  let bls12_377_twisted_edwards_params =
+    weierstrass_params_to_twisted_edwards_params bls12_377_params
+  in
   Stdio.print_s
-    [%message
-      (Util.modulo_mult
-         (Util.modulo_inverse bls12_377_params.s)
-         (Util.modulo_inverse bls12_377_params.s)
-        : Util.z)];
+    [%message (bls12_377_twisted_edwards_params : Twisted_edwards_curve.params)];
   [%expect
     {|
-    ( "Util.modulo_mult (Util.modulo_inverse bls12_377_params.s)\
-     \n  (Util.modulo_inverse bls12_377_params.s)" 0x3) |}]
+    (bls12_377_twisted_edwards_params
+     ((a
+       0x1488b9a0b6aa7ae13b828244107ca1e0c44bf8cd08c4846bf2dcb63c1dc7fb1ba33f82613c70b074cfdbb6a5eca47fc)
+      (d
+       0x65aeac0c5a693cb282dd9c2b997f1d0dde1a663068cb485fc596cbf82cc84e5cd7651e1c38f4f9380b0495a135b7ff))) |}]
 ;;
 
 let%expect_test "" =
   let bls12_377_params =
-    Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha:Z.minus_one
+    let alpha = Util.modulo_add Util.p Z.minus_one in
+    Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha
   in
   let bls12_377_twisted_edwards_params =
     weierstrass_params_to_twisted_edwards_params bls12_377_params
@@ -255,12 +259,13 @@ let%expect_test "" =
           bls12_377_params
           { x = Ark_bls12_377_g1.x b; y = Ark_bls12_377_g1.y b }
       in
+      let z = Util.random_z ~lo_incl:Z.zero ~hi_incl:Z.(Util.p - one) in
       let (res : Weierstrass_curve.affine) =
         Twisted_edwards_curve.add_not_equal
           bls12_377_twisted_edwards_params
-          (Twisted_edwards_curve.affine_to_projective a)
-          (Twisted_edwards_curve.affine_to_projective b)
-        |> Twisted_edwards_curve.projective_to_affine
+          (Twisted_edwards_curve.affine_to_extended ~z a)
+          (Twisted_edwards_curve.affine_to_affine_with_t b)
+        |> Twisted_edwards_curve.extended_to_affine
         |> twisted_edwards_affine_to_weierstrass_affine bls12_377_twisted_edwards_params
       in
       Ark_bls12_377_g1.create ~x:res.x ~y:res.y ~infinity:false
