@@ -55,11 +55,12 @@ end
 
 module Weierstrass_curve = struct
   type params =
-    { a : Z.t
-    ; b : Z.t
-    ; s : Z.t
-    ; alpha : Z.t
+    { a : Util.z
+    ; b : Util.z
+    ; s : Util.z
+    ; alpha : Util.z
     }
+  [@@deriving sexp_of]
 
   let create_params ~a ~b ~alpha =
     let open Modulo_ops in
@@ -177,6 +178,64 @@ let _twisted_edward_params_to_weierstrass_params ~alpha p =
     (twisted_edwards_params_to_montgomery_params p)
 ;;
 
+let%expect_test "Proof that 3 has a square root" =
+  Stdio.printf "%s" (Z.to_string (modulo_pow Z.(of_int 3) Z.((p - of_int 1) / of_int 2)));
+  [%expect {| 1 |}]
+;;
+
+let%expect_test "" =
+  Stdio.printf "%s" (Z.to_string (Z.( mod ) Util.p (Z.of_int 4)));
+  [%expect {| 1 |}]
+;;
+
+let%expect_test "" =
+  Stdio.printf "%s" (Z.to_string (Z.( mod ) Util.p (Z.of_int 4)));
+  [%expect {| 1 |}]
+;;
+
+let%expect_test "Modulo square root" =
+  let y = Z.of_int 3 in
+  let x = modulo_square_root y in
+  Stdio.print_s (sexp_of_z x);
+  [%expect
+    {| 0x32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc01 |}];
+  Stdio.printf "%s" (Z.to_string (Util.modulo_mult x x));
+  [%expect {| 3 |}];
+  let x = modulo_pow (Z.of_int 3) (Z.of_int 3) in
+  Stdio.printf "%s" (Z.to_string x);
+  [%expect {| 27 |}];
+  Stdio.printf "%s" (Z.to_string Util.p);
+  [%expect
+    {| 258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 |}];
+  Stdio.printf "%s" (Z.to_string (Util.half Z.(p + one)));
+  [%expect
+    {| 129332213006484547005326366847446766768196756377457330269942131333360234174170411387484444069786680062220160729089 |}]
+;;
+
+let%expect_test "Params" =
+  let bls12_377_params =
+    Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha:Z.minus_one
+  in
+  Stdio.print_s [%message (bls12_377_params : Weierstrass_curve.params)];
+  [%expect
+    {|
+    (bls12_377_params
+     ((a 0x0) (b 0x1)
+      (s
+       0x10f272020f118a1dc07a44b1eeea84d7a504665d66cc8c0ff643cca95ccc0d0f793b8504b428d43401d618f0339eab)
+      (alpha 0x-1))) |}];
+  Stdio.print_s
+    [%message
+      (Util.modulo_mult
+         (Util.modulo_inverse bls12_377_params.s)
+         (Util.modulo_inverse bls12_377_params.s)
+        : Util.z)];
+  [%expect
+    {|
+    ( "Util.modulo_mult (Util.modulo_inverse bls12_377_params.s)\
+     \n  (Util.modulo_inverse bls12_377_params.s)" 0x3) |}]
+;;
+
 let%expect_test "" =
   let bls12_377_params =
     Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha:Z.minus_one
@@ -207,11 +266,23 @@ let%expect_test "" =
       Ark_bls12_377_g1.create ~x:res.x ~y:res.y ~infinity:false
     in
     let expected = Ark_bls12_377_g1.add a b in
-    Stdio.print_s
-      [%message (obtained : Ark_bls12_377_g1.affine) (expected : Ark_bls12_377_g1.affine)];
-    assert (Ark_bls12_377_g1.equal_affine obtained expected)
+    if Ark_bls12_377_g1.equal_affine obtained expected
+    then Stdio.print_s ([%sexp_of: Ark_bls12_377_g1.affine] obtained)
+    else
+      raise_s
+        [%message
+          "Obtained and expected mismatches"
+            (obtained : Ark_bls12_377_g1.affine)
+            (expected : Ark_bls12_377_g1.affine)]
   in
   test
     (Ark_bls12_377_g1.mul ~by:2 (Ark_bls12_377_g1.subgroup_generator ()))
-    (Ark_bls12_377_g1.subgroup_generator ())
+    (Ark_bls12_377_g1.subgroup_generator ());
+  [%expect
+    {|
+    ((x
+      0x1252b781171f507db36291b433a1f911a46543890a20ca9712e11f66a5d216e63d817bd8d96cef715abc604dcf6ec2e)
+     (y
+      0x14a00fa77c727e8987cc438b51bbe012c823a19955ae692c54ce572a61f0ea1fe5cd981533df419fd1330d1f6e6d802)
+     (infinity false)) |}]
 ;;

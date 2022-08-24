@@ -1,6 +1,8 @@
 open Base
 module Extended_euclidean = Snarks_r_fun.Extended_euclidean
 
+type z = Z.t
+
 let sexp_of_z z = Sexp.Atom ("0x" ^ Z.format "x" z)
 let half x = Z.div x (Z.of_int 2)
 let p = Ark_bls12_377_g1.modulus ()
@@ -29,18 +31,14 @@ let rec modulo_pow base exponent =
   else if Z.equal exponent Z.one
   then base
   else (
-    let partial = modulo_pow base (half exponent) in
     let is_exponent_odd = Z.equal Z.one (Z.( land ) Z.one exponent) in
+    let partial = modulo_pow base (half exponent) in
     if is_exponent_odd
     then modulo_mult (modulo_mult partial partial) base
     else modulo_mult partial partial)
 ;;
 
-let modulo_square_root x =
-  (* See https://www.staff.uni-mainz.de/pommeren/Cryptology/Asymmetric/5_NTh/SqRprim.pdf *)
-  let m = p in
-  modulo_pow x (half Z.(m + one))
-;;
+let modulo_square_root a = fst (Option.value_exn (Toneli_shank.tonelli_shank ~p a))
 
 module Modulo_ops = struct
   include Z
