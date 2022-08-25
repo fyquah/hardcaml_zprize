@@ -22,13 +22,14 @@ module Core (Config : Config.S) = struct
     type 'a t = { is_in_pipeline : 'a } [@@deriving sexp_of, hardcaml]
   end
 
-  let create _scope (i : _ I.t) =
+  let create scope (i : _ I.t) =
+    let ( -- ) = Scope.naming scope in
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let rec build_pipe n d pipe =
       if n = pipeline_depth_per_window
       then pipe
       else (
-        let d = reg spec ~enable:i.shift d in
+        let d = reg spec ~enable:i.shift d -- ("scl$" ^ Int.to_string n) in
         build_pipe (n + 1) d (d :: pipe))
     in
     let stored = build_pipe 0 i.scalar_in [] in
@@ -58,6 +59,7 @@ module Make (Config : Config.S) = struct
       ; scalar_in : 'a array [@bits window_size_bits] [@length num_windows]
       ; stalled_scalar : 'a [@bits window_size_bits]
       ; process_stalled : 'a
+      ; bubble : 'a
       ; shift : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -79,7 +81,10 @@ module Make (Config : Config.S) = struct
             { Core.I.clock = i.clock
             ; clear = i.clear
             ; scalar_in =
-                mux2 i.process_stalled (zero window_size_bits) i.scalar_in.(window_index)
+                mux2
+                  (i.bubble |: i.process_stalled)
+                  (zero window_size_bits)
+                  i.scalar_in.(window_index)
             ; shift = i.window ==:. window_index &: i.shift
             ; scalar_match =
                 mux2 i.process_stalled i.stalled_scalar i.scalar_in.(window_index)

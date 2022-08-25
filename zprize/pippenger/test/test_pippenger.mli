@@ -13,6 +13,7 @@ end
 
 val test_with_stalls : Bits.t Msm_input.t array
 val test_no_stalls : Bits.t Msm_input.t array
+val test_1_stall : Bits.t Msm_input.t array
 
 val test
   :  ?auto_label_hierarchical_ports:bool

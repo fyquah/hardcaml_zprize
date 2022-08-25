@@ -122,6 +122,8 @@ module Make (Config : Config.S) = struct
             else scalar_read <-- gnd)
           ])
     in
+    let executing_stalled = Var.wire ~default:gnd in
+    let executing_scalar = Var.wire ~default:gnd in
     Always.(
       compile
         [ sm.switch
@@ -139,12 +141,14 @@ module Make (Config : Config.S) = struct
                   @@ elif
                        (stalled.all_windows_have_stall |: stalled.some_windows_are_full)
                        [ (* process stalled coefficients in each window *)
-                         sm.set_next Execute_stalled
+                         executing_stalled <-- vdd
+                       ; sm.set_next Execute_stalled
                        ]
                   @@ elif
                        i.scalar_valid
                        [ (* process an input scalar across all windows *)
-                         sm.set_next Execute_scalar
+                         executing_scalar <-- vdd
+                       ; sm.set_next Execute_scalar
                        ]
                        [ (* nothing to do - wait and try again *)
                          sm.set_next Bubble_mode
@@ -153,27 +157,29 @@ module Make (Config : Config.S) = struct
             ; ( Bubble_mode
               , [ bubble <-- vdd; shift_pipeline <-- vdd; sm.set_next Choose_mode ] )
             ; ( Execute_scalar
-              , [ shift_pipeline <-- vdd
+              , [ executing_scalar <-- vdd
+                ; shift_pipeline <-- vdd
                 ; bubble <-- (is_in_pipeline |: (scalar ==:. 0))
                 ; push_stalled_point <-- (is_in_pipeline &: (scalar <>:. 0))
                 ; window <-- window_next
                 ; sm.set_next Wait_scalar
                 ; on_last_window ~processing_scalars:true
                 ] )
-            ; Wait_scalar, [ sm.set_next Execute_scalar ]
+            ; Wait_scalar, [ executing_scalar <-- vdd; sm.set_next Execute_scalar ]
             ; ( Execute_stalled
-              , [ shift_pipeline <-- vdd
+              , [ executing_stalled <-- vdd
+                ; shift_pipeline <-- vdd
                 ; bubble <-- (is_in_pipeline |: (stalled.scalar_out ==:. 0))
                 ; pop_stalled_point <-- ~:(bubble.value)
                 ; window <-- window_next
                 ; sm.set_next Wait_stalled
                 ; on_last_window ~processing_scalars:false
                 ] )
-            ; Wait_stalled, [ sm.set_next Execute_stalled ]
+            ; Wait_stalled, [ executing_stalled <-- vdd; sm.set_next Execute_stalled ]
             ]
         ]);
-    let executing_stalled = sm.is Execute_stalled -- "exec_stalled" in
-    let executing_scalar = sm.is Execute_scalar -- "exec_scalar" in
+    let executing_stalled = executing_stalled.value -- "exec_stalled" in
+    let executing_scalar = executing_scalar.value -- "exec_scalar" in
     Bucket_pipeline.O.Of_signal.assign
       pipes
       (Bucket_pipeline.hierarchy
@@ -184,6 +190,7 @@ module Make (Config : Config.S) = struct
          ; scalar_in = i.scalar
          ; stalled_scalar = stalled.scalar_out
          ; process_stalled = executing_stalled
+         ; bubble = is_in_pipeline
          ; shift = shift_pipeline.value
          });
     Stalled_point_fifos.O.Of_signal.assign
@@ -201,7 +208,7 @@ module Make (Config : Config.S) = struct
     { O.done_ = sm.is Start
     ; scalar_read = scalar_read.value
     ; window = window.value
-    ; bucket = mux2 executing_stalled stalled.scalar_out scalar
+    ; bucket = mux2 executing_scalar scalar stalled.scalar_out
     ; adder_affine_point = mux2 executing_scalar i.affine_point stalled.affine_point_out
     ; bubble = bubble.value
     ; execute = shift_pipeline.value

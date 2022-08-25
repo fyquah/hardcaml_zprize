@@ -30,6 +30,7 @@ module Make (Config : Config.S) : sig
       ; scalar_in : 'a array
       ; stalled_scalar : 'a
       ; process_stalled : 'a
+      ; bubble : 'a
       ; shift : 'a
       }
     [@@deriving sexp_of, hardcaml]
