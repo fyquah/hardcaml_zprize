@@ -25,6 +25,7 @@ module Make (Config : Config.S) = struct
     type 'a t =
       { all_windows_have_stall : 'a
       ; some_windows_are_full : 'a
+      ; all_windows_are_empty : 'a
       ; affine_point_out : 'a [@bits affine_point_bits]
       ; scalar_out : 'a [@bits window_size_bits]
       }
@@ -45,12 +46,14 @@ module Make (Config : Config.S) = struct
 
   module Var = Always.Variable
 
-  let create_window _scope (i : _ I.t) ~window_index =
+  let create_window scope (i : _ I.t) ~window_index =
+    let ( -- ) = Scope.naming scope in
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let enable = i.window ==:. window_index in
     let read_address = Var.reg spec ~width:log_stall_fifo_depth in
     let write_address = Var.reg spec ~width:log_stall_fifo_depth in
     let level = Var.reg spec ~width:(log_stall_fifo_depth + 1) in
+    ignore (level.value -- "LEVEL" : Signal.t);
     let push = i.push &: enable in
     let pop = i.pop &: enable in
     let scalar =
@@ -95,7 +98,7 @@ module Make (Config : Config.S) = struct
   let create scope (i : _ I.t) =
     let stalled_windows =
       List.init num_windows ~f:(fun window_index ->
-        hierarchy_window scope i ~window_index)
+          hierarchy_window scope i ~window_index)
     in
     let current_stalled_window = O_window.Of_signal.mux i.window stalled_windows in
     let affine_point_out =
@@ -112,7 +115,7 @@ module Make (Config : Config.S) = struct
          ~read_ports:
            [| { read_clock = i.clock
               ; read_address = i.window @: current_stalled_window.read_address
-              ; read_enable = i.pop
+              ; read_enable = vdd
               }
            |]
          ()).(0)
@@ -121,6 +124,8 @@ module Make (Config : Config.S) = struct
         List.map stalled_windows ~f:(fun w -> w.not_empty) |> reduce ~f:( &: )
     ; some_windows_are_full =
         List.map stalled_windows ~f:(fun w -> w.full) |> reduce ~f:( |: )
+    ; all_windows_are_empty =
+        List.map stalled_windows ~f:(fun w -> w.empty) |> reduce ~f:( &: )
     ; affine_point_out
     ; scalar_out = current_stalled_window.scalar
     }

@@ -11,6 +11,7 @@ module Make (Config : Config.S) : sig
       ; start : 'a
       ; scalar : 'a array
       ; scalar_valid : 'a
+      ; last_scalar : 'a
       ; affine_point : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -29,7 +30,12 @@ module Make (Config : Config.S) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
+  module State : sig
+    type t
+
+    val names : string list
+  end
+
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-  val create2 : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
