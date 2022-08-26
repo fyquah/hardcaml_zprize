@@ -285,11 +285,11 @@ let%expect_test "" =
           bls12_377_params
           { x = Ark_bls12_377_g1.x b; y = Ark_bls12_377_g1.y b }
       in
-      (* let z = Util.random_z ~lo_incl:Z.zero ~hi_incl:Z.(Util.p - one) in *)
       let (res : Weierstrass_curve.affine) =
+        let z = Util.random_z ~lo_incl:Z.zero ~hi_incl:Z.(Util.p - one) in
         Twisted_edwards_curve.add_unified
           bls12_377_twisted_edwards_params
-          (Twisted_edwards_curve.affine_to_extended ~z:Z.one a)
+          (Twisted_edwards_curve.affine_to_extended ~z a)
           (Twisted_edwards_curve.affine_to_affine_with_t b)
         |> Twisted_edwards_curve.extended_to_affine
         |> twisted_edwards_affine_to_weierstrass_affine bls12_377_twisted_edwards_params
@@ -307,13 +307,13 @@ let%expect_test "" =
             (expected : Ark_bls12_377_g1.affine)]
   in
   test
-    (Ark_bls12_377_g1.mul ~by:3 (Ark_bls12_377_g1.subgroup_generator ()))
+    (Ark_bls12_377_g1.mul ~by:120 (Ark_bls12_377_g1.subgroup_generator ()))
     (Ark_bls12_377_g1.mul ~by:3 (Ark_bls12_377_g1.subgroup_generator ()));
   [%expect
     {|
     ((x
-      0x10c65c0fb9e6c6ef4cbb27fdc55a07e474df11c564bd91e3fa162c32b7fc3dabba5fc508cfdd8938fb4a30f7de5ad9c)
+      0x180640c09dd2a1f8a2ad648710067e6ac48b07fa23db4bd60579706b5e5ba6c38bf1c9d58aa48818cfdf07fd5767150)
      (y
-      0x149a58ced619866b242313876fe2df3188f33b77566a9ddc966ff4d4d5c42d515be862c348f51cc91f1c45a74110ba6)
+      0x3ee1310eb124d9c189de356f1225ff8b1aa920b87afa927a2b2e9e1f232b0624fabbbfeb22442cb35decae0b701852)
      (infinity false)) |}]
 ;;
