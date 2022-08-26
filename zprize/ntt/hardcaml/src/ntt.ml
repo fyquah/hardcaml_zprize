@@ -12,6 +12,7 @@ module Gf = Gf_bits.Make (Hardcaml.Signal)
 module Make (P : Size) = struct
   let logn = P.logn
   let n = 1 lsl logn
+  let datapath_latency = 2
 
   module Controller = struct
     module I = struct
@@ -77,7 +78,7 @@ module Make (P : Size) = struct
       let start_twiddles = Var.reg spec ~width:1 in
       let first_stage = Var.reg spec ~width:1 in
       let last_stage = Var.reg spec ~width:1 in
-      let sync_cycles = 1 in
+      let sync_cycles = datapath_latency + 1 in
       let sync_count = Var.reg spec ~width:(max 1 (Int.ceil_log2 sync_cycles)) in
       let flip = Var.wire ~default:gnd in
       let read_write_enable = Var.wire ~default:gnd in
@@ -205,8 +206,9 @@ module Make (P : Size) = struct
       (* XXX aray: The pipeline below is timed for 1 cycle ram latency, and 0 cycles twiddle latency *)
       let w = wire Gf.num_bits -- "twiddle" in
       w <== reg spec (twiddle_factor i w);
-      let t = i.d2 *: w in
-      { O.q1 = i.d1 +: t; q2 = i.d1 -: t }
+      let t = reg spec (i.d2 *: w) in
+      let d1 = reg spec i.d1 in
+      { O.q1 = reg spec (d1 +: t); q2 = reg spec (d1 -: t) }
     ;;
 
     let hierarchy scope =
@@ -265,7 +267,7 @@ module Make (P : Size) = struct
           ; start_twiddles = controller.start_twiddles
           }
       in
-      let pipe = pipeline spec ~n:1 in
+      let pipe = pipeline spec ~n:(datapath_latency + 1) in
       { O.q1 = datapath.q1
       ; q2 = datapath.q2
       ; addr1_in = controller.addr1
