@@ -190,12 +190,14 @@ module Make (P : Size) = struct
       [@@deriving sexp_of, hardcaml]
     end
 
-    let ( *: ) a b = Gf.( * ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
     let ( +: ) a b = Gf.( + ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
     let ( -: ) a b = Gf.( - ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+    let mul a b = Gf.mul (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+    let ( *: ) = `Dont_use_me
+    let `Dont_use_me = ( *: )
 
     let twiddle_factor (i : _ I.t) w =
-      mux2 i.start_twiddles Gf.(to_bits one) (w *: i.omega)
+      mux2 i.start_twiddles Gf.(to_bits one) (mul w i.omega)
     ;;
 
     let create scope (i : _ I.t) =
@@ -206,7 +208,7 @@ module Make (P : Size) = struct
       (* XXX aray: The pipeline below is timed for 1 cycle ram latency, and 0 cycles twiddle latency *)
       let w = wire Gf.num_bits -- "twiddle" in
       w <== reg spec (twiddle_factor i w);
-      let t = reg spec (i.d2 *: w) in
+      let t = reg spec (mul i.d2 w) in
       let d1 = reg spec i.d1 in
       { O.q1 = reg spec (d1 +: t); q2 = reg spec (d1 -: t) }
     ;;
