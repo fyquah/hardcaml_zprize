@@ -54,7 +54,7 @@ def write_makefile(args, kernels):
     kernel_names = " ".join(kernel.name for kernel in kernels)
     with open(fname, "w") as f:
 
-        if (platform = "aws"):
+        if (args.platform == "aws"):
             aws_platform = os.environ['AWS_PLATFORM']
             aws_platform_root = aws_platform.split('aws_platform')
             print(aws_platform_root)
@@ -179,7 +179,7 @@ def build_target(args):
 def pre_checks(args):
 
     # If we are running on the AWS platform make sure the user has the platform setup correctly
-    if (platform = "aws"):
+    if (args.platform == "aws"):
         if "AWS_PLATFORM" not in os.environ:
             raise Exception("env var AWS_PLATFORM was not set! Did you correctly source vitis_setup.sh?")
 
