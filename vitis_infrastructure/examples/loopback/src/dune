@@ -1,5 +1,0 @@
-(library
- (name vitis_loopback_example)
- (libraries base hardcaml hardcaml_axi)
- (preprocess
-  (pps ppx_jane ppx_deriving_hardcaml)))
