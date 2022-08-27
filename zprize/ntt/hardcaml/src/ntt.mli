@@ -16,6 +16,7 @@ module Make (P : Size) : sig
       { omega1 : 'a
       ; omega2 : 'a
       ; omega3 : 'a
+      ; omega4 : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
