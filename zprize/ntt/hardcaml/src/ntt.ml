@@ -14,7 +14,9 @@ module Make (P : Size) = struct
   let logn = P.logn
   let n = 1 lsl logn
   let multiply_latency = 3
-  let datapath_latency = 1 + multiply_latency
+  let ram_output_pipelining = 1
+  let ram_latency = 1
+  let datapath_latency = ram_latency + ram_output_pipelining + multiply_latency
 
   module Omegas = struct
     type 'a t =
@@ -265,16 +267,23 @@ module Make (P : Size) = struct
 
     let create scope (i : _ I.t) =
       let ( -- ) = Scope.naming scope in
-      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+      let spec_no_clear = Reg_spec.create ~clock:i.clock () in
       (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
       let { Twiddle_factor_stream.O.w } =
         Twiddle_factor_stream.create
           { clock = i.clock; start_twiddles = i.start_twiddles; omegas = i.omegas }
       in
       let w = w -- "twiddle_factor" in
-      let t = gf_mul ~clock:i.clock i.d2 w in
-      let d1 = pipeline spec ~n:multiply_latency i.d1 in
-      { O.q1 = reg spec (d1 +: t); q2 = reg spec (d1 -: t) }
+      let t =
+        gf_mul
+          ~clock:i.clock
+          (pipeline ~n:ram_output_pipelining spec_no_clear i.d2)
+          (pipeline ~n:ram_output_pipelining spec_no_clear w)
+      in
+      let d1 =
+        pipeline spec_no_clear ~n:(multiply_latency + ram_output_pipelining) i.d1
+      in
+      { O.q1 = reg spec_no_clear (d1 +: t); q2 = reg spec_no_clear (d1 -: t) }
     ;;
 
     let hierarchy scope =
