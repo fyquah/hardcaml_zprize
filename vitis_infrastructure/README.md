@@ -12,9 +12,12 @@ Some other things i'd like to figure out
   the xilinx IP packager, and the API is quite hard to work with
 - Supporting explicit configs for HLS kernels (which I think we can make use of)
 
-# Prerequisites
+# Prerequisites for building on AWS
 
-Source XRT setup
+Setup the Vitus enviroment and packages
+```
+source ../aws-fpga/vitus_setup.sh`
+```
 
 # Examples
 
