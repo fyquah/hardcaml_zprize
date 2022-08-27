@@ -267,18 +267,20 @@ module Make (P : Size) = struct
 
     let create scope (i : _ I.t) =
       let ( -- ) = Scope.naming scope in
+      let spec_with_clear = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let spec_no_clear = Reg_spec.create ~clock:i.clock () in
       (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
       let { Twiddle_factor_stream.O.w } =
         Twiddle_factor_stream.create
-          { clock = i.clock; start_twiddles = i.start_twiddles; omegas = i.omegas }
+          { clock = i.clock
+          ; start_twiddles =
+              pipeline ~n:ram_output_pipelining spec_with_clear i.start_twiddles
+          ; omegas = i.omegas
+          }
       in
       let w = w -- "twiddle_factor" in
       let t =
-        gf_mul
-          ~clock:i.clock
-          (pipeline ~n:ram_output_pipelining spec_no_clear i.d2)
-          (pipeline ~n:ram_output_pipelining spec_no_clear w)
+        gf_mul ~clock:i.clock (pipeline ~n:ram_output_pipelining spec_no_clear i.d2) w
       in
       let d1 =
         pipeline spec_no_clear ~n:(multiply_latency + ram_output_pipelining) i.d1
