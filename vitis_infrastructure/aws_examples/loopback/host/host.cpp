@@ -14,8 +14,13 @@
 * under the License.
 */
 #include "xcl2.hpp"
-#include <xrt/xrt_device.h>
-#include <experimental/xrt_ip.h>
+
+//#include <experimental/xrt_ip.h>
+
+//#include "experimental/xrt_bo.h"
+#include <experimental/xrt_device.h>
+#include <experimental/xrt_kernel.h>
+
 #include <vector>
 
 #define DATA_SIZE 4192
@@ -128,8 +133,12 @@ int test_register_interface(const std::string& binaryFile)
 {
     unsigned int dev_index = 0;
     auto device = xrt::device(dev_index);
+    std::cout << "Load the xclbin " << binaryFile << std::endl;
     auto xclbin_uuid = device.load_xclbin(binaryFile);
-    auto ip = xrt::ip(device, xclbin_uuid, "krnl_loopback");
+    
+
+    auto ip = xrt::kernel(device, xclbin_uuid, "krnl_loopback", xrt::kernel::cu_access_mode::exclusive);
+
 
     for (uint32_t i = 0; i < 10; i++) {
         ip.write_register(0, i);
@@ -148,6 +157,8 @@ int test_register_interface(const std::string& binaryFile)
     std::cout << "REGISTER I/O TEST PASSED!" << std::endl;
     return 0;
 }
+
+
 
 int main(int argc, char** argv) {
     if (argc != 2) {
