@@ -21,6 +21,7 @@ module Make (P : Size) = struct
       { omega1 : 'a [@bits Gf.num_bits]
       ; omega2 : 'a [@bits Gf.num_bits]
       ; omega3 : 'a [@bits Gf.num_bits]
+      ; omega4 : 'a [@bits Gf.num_bits]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -88,6 +89,7 @@ module Make (P : Size) = struct
             { Omegas.omega1 = inverse_root
             ; omega2 = inverse_root * inverse_root
             ; omega3 = inverse_root * inverse_root * inverse_root
+            ; omega4 = inverse_root * inverse_root * inverse_root * inverse_root
             }
             |> Omegas.map ~f:(fun x -> Gf.to_bits (Gf.of_z (Gf_z.to_z x))))
         |> Omegas.Of_signal.mux i.value
@@ -217,7 +219,7 @@ module Make (P : Size) = struct
       let spec = Reg_spec.create ~clock:i.clock () in
       let sm = Always.State_machine.create (module State) spec in
       let w = Always.Variable.reg ~width:Gf.num_bits spec in
-      let multiplier_output = gf_mul ~clock:i.clock w.value i.omegas.omega3 in
+      let multiplier_output = gf_mul ~clock:i.clock w.value i.omegas.omega4 in
       Always.(
         compile
           [ sm.switch
