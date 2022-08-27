@@ -8,10 +8,25 @@ module type Size = sig
 end
 
 module Gf = Gf_bits.Make (Hardcaml.Signal)
+module Gf_bits = Gf_bits.Make (Hardcaml.Signal)
 
 module Make (P : Size) = struct
   let logn = P.logn
   let n = 1 lsl logn
+  let multiply_latency = 3
+  let ram_output_pipelining = 1
+  let ram_latency = 1
+  let datapath_latency = ram_latency + ram_output_pipelining + multiply_latency
+
+  module Omegas = struct
+    type 'a t =
+      { omega1 : 'a [@bits Gf.num_bits]
+      ; omega2 : 'a [@bits Gf.num_bits]
+      ; omega3 : 'a [@bits Gf.num_bits]
+      ; omega4 : 'a [@bits Gf.num_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
 
   module Controller = struct
     module I = struct
@@ -32,7 +47,7 @@ module Make (P : Size) = struct
         ; m : 'a [@bits logn]
         ; addr1 : 'a [@bits logn]
         ; addr2 : 'a [@bits logn]
-        ; omega : 'a [@bits Gf.num_bits]
+        ; omegas : 'a Omegas.t
         ; start_twiddles : 'a
         ; first_stage : 'a
         ; last_stage : 'a
@@ -69,15 +84,22 @@ module Make (P : Size) = struct
       let k_next = k.value +: m_next in
       let addr1 = Var.reg spec ~width:logn in
       let addr2 = Var.reg spec ~width:logn in
-      let omega =
+      let omegas =
         List.init logn ~f:(fun i ->
-            Roots.inverse.(i + 1) |> Gf_z.to_z |> Gf.of_z |> Gf.to_bits)
-        |> mux i.value
+            let inverse_root = Roots.inverse.(i + 1) in
+            let open Gf_z in
+            { Omegas.omega1 = inverse_root
+            ; omega2 = inverse_root * inverse_root
+            ; omega3 = inverse_root * inverse_root * inverse_root
+            ; omega4 = inverse_root * inverse_root * inverse_root * inverse_root
+            }
+            |> Omegas.map ~f:(fun x -> Gf.to_bits (Gf.of_z (Gf_z.to_z x))))
+        |> Omegas.Of_signal.mux i.value
       in
       let start_twiddles = Var.reg spec ~width:1 in
       let first_stage = Var.reg spec ~width:1 in
       let last_stage = Var.reg spec ~width:1 in
-      let sync_cycles = 1 in
+      let sync_cycles = datapath_latency + 1 in
       let sync_count = Var.reg spec ~width:(max 1 (Int.ceil_log2 sync_cycles)) in
       let flip = Var.wire ~default:gnd in
       let read_write_enable = Var.wire ~default:gnd in
@@ -150,7 +172,7 @@ module Make (P : Size) = struct
       ; m = m.value
       ; addr1 = addr1.value
       ; addr2 = addr2.value
-      ; omega
+      ; omegas
       ; start_twiddles = start_twiddles.value
       ; first_stage = first_stage.value
       ; last_stage = last_stage.value
@@ -165,6 +187,55 @@ module Make (P : Size) = struct
     ;;
   end
 
+  let gf_mul ~clock a b =
+    let pipe x =
+      Gf.to_bits x |> Signal.pipeline (Reg_spec.create ~clock ()) ~n:1 |> Gf.of_bits
+    in
+    Gf.mul ~pipe (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  ;;
+
+  module Twiddle_factor_stream = struct
+    module I = struct
+      type 'a t =
+        { clock : 'a
+        ; start_twiddles : 'a
+        ; omegas : 'a Omegas.t
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O = struct
+      type 'a t = { w : 'a [@bits Gf.num_bits] } [@@deriving sexp_of, hardcaml]
+    end
+
+    module State = struct
+      type t =
+        | Stream_multiplier_output
+        | Omega1
+        | Omega2
+        | Omega3
+      [@@deriving compare, enumerate, sexp_of, variants]
+    end
+
+    let create (i : _ I.t) =
+      let spec = Reg_spec.create ~clock:i.clock () in
+      let sm = Always.State_machine.create (module State) spec in
+      let w = Always.Variable.reg ~width:Gf.num_bits spec in
+      let multiplier_output = gf_mul ~clock:i.clock w.value i.omegas.omega4 in
+      Always.(
+        compile
+          [ sm.switch
+              [ Stream_multiplier_output, [ w <-- multiplier_output ]
+              ; Omega1, [ w <-- i.omegas.omega1; sm.set_next Omega2 ]
+              ; Omega2, [ w <-- i.omegas.omega2; sm.set_next Omega3 ]
+              ; Omega3, [ w <-- i.omegas.omega3; sm.set_next Stream_multiplier_output ]
+              ]
+          ; when_ i.start_twiddles [ w <-- Gf.to_bits Gf.one; sm.set_next Omega1 ]
+          ]);
+      { O.w = w.value }
+    ;;
+  end
+
   (* Butterly and twiddle factor calculation *)
   module Datapath = struct
     open Signal
@@ -175,7 +246,7 @@ module Make (P : Size) = struct
         ; clear : 'a
         ; d1 : 'a [@bits Gf.num_bits]
         ; d2 : 'a [@bits Gf.num_bits]
-        ; omega : 'a [@bits Gf.num_bits]
+        ; omegas : 'a Omegas.t
         ; start_twiddles : 'a
         }
       [@@deriving sexp_of, hardcaml]
@@ -189,24 +260,32 @@ module Make (P : Size) = struct
       [@@deriving sexp_of, hardcaml]
     end
 
-    let ( *: ) a b = Gf.( * ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
     let ( +: ) a b = Gf.( + ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
     let ( -: ) a b = Gf.( - ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-
-    let twiddle_factor (i : _ I.t) w =
-      mux2 i.start_twiddles Gf.(to_bits one) (w *: i.omega)
-    ;;
+    let ( *: ) = `Dont_use_me
+    let `Dont_use_me = ( *: )
 
     let create scope (i : _ I.t) =
       let ( -- ) = Scope.naming scope in
-      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+      let spec_with_clear = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+      let spec_no_clear = Reg_spec.create ~clock:i.clock () in
       (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
-      (* XXX aray: Need to up the latency for a practical version *)
-      (* XXX aray: The pipeline below is timed for 1 cycle ram latency, and 0 cycles twiddle latency *)
-      let w = wire Gf.num_bits -- "twiddle" in
-      w <== reg spec (twiddle_factor i w);
-      let t = i.d2 *: w in
-      { O.q1 = i.d1 +: t; q2 = i.d1 -: t }
+      let { Twiddle_factor_stream.O.w } =
+        Twiddle_factor_stream.create
+          { clock = i.clock
+          ; start_twiddles =
+              pipeline ~n:ram_output_pipelining spec_with_clear i.start_twiddles
+          ; omegas = i.omegas
+          }
+      in
+      let w = w -- "twiddle_factor" in
+      let t =
+        gf_mul ~clock:i.clock (pipeline ~n:ram_output_pipelining spec_no_clear i.d2) w
+      in
+      let d1 =
+        pipeline spec_no_clear ~n:(multiply_latency + ram_output_pipelining) i.d1
+      in
+      { O.q1 = reg spec_no_clear (d1 +: t); q2 = reg spec_no_clear (d1 -: t) }
     ;;
 
     let hierarchy scope =
@@ -261,11 +340,11 @@ module Make (P : Size) = struct
           ; clear = i.clear
           ; d1 = i.d1
           ; d2 = i.d2
-          ; omega = controller.omega
+          ; omegas = controller.omegas
           ; start_twiddles = controller.start_twiddles
           }
       in
-      let pipe = pipeline spec ~n:1 in
+      let pipe = pipeline spec ~n:(datapath_latency + 1) in
       { O.q1 = datapath.q1
       ; q2 = datapath.q2
       ; addr1_in = controller.addr1

@@ -1,0 +1,5 @@
+(library
+ (name pippenger_test)
+ (libraries expect_test_helpers_core core pippenger)
+ (inline_tests)
+ (preprocess (pps ppx_jane ppx_deriving_hardcaml)))
