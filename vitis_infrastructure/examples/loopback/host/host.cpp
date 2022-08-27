@@ -157,8 +157,8 @@ int main(int argc, char** argv) {
 
     int res = 0;
     std::string binaryFile = argv[1];
-    res |= test_register_interface(binaryFile);
     res |= test_streaming(binaryFile);
+    res |= test_register_interface(binaryFile);
 
     return res;
 }

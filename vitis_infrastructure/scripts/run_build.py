@@ -4,6 +4,7 @@ import argparse
 import collections
 import distutils.dir_util
 import enum
+import glob
 import os
 import shutil
 import subprocess
@@ -42,6 +43,8 @@ Kernel = collections.namedtuple("Kernel", ["name", "type_", "has_kernel_cfg"])
 def resolve_platform(platform):
     if platform == "varium-c1100":
         return "xilinx_u55n_gen3x4_xdma_2_202110_1"
+    elif platform == "aws":
+        return "xilinx_aws-vu9p-f1_shell-v04261818_201920_3"
 
     raise RuntimeError(f"Unknown paltform {platform}")
 
@@ -69,8 +72,18 @@ def write_kernels_mk(build_dir, kernels):
             if kernel.has_kernel_cfg:
                 additional_vpp_flags += f"--config src/{kernel_name}/kernel.cfg "
 
+            kernel_src = f"$(TEMP_DIR)/{kernel_name}.xo: package_kernel.tcl src/{kernel_name}/kernel_ports.tcl gen_xo.tcl "
+
+            # Only add RTL files if they exist
+            if glob.glob(f"{kernel_name}/*.sv"):
+                kernel_src += f"src/{kernel_name}/*.sv "
+            if glob.glob(f"{kernel_name}/*.v"):
+                kernel_src += f"src/{kernel_name}/*.v "
+
+            kernel_src += "\n"
+
             if kernel.type_ == KernelType.RTL:
-                f.write(f"$(TEMP_DIR)/{kernel_name}.xo: package_kernel.tcl src/{kernel_name}/kernel_ports.tcl gen_xo.tcl src/{kernel_name}/*.sv src/{kernel_name}/*.v\n")
+                f.write(kernel_src)
                 f.write(f"\tmkdir -p $(TEMP_DIR)\n")
                 f.write(f"\t$(VIVADO) -mode batch -source gen_xo.tcl -tclargs $(TEMP_DIR)/{kernel_name}.xo $(TARGET) $(PLATFORM) $(XSA) {kernel_name}\n")
             elif kernel.type_ == KernelType.CPP:
