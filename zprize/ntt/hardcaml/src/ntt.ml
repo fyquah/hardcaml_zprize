@@ -84,7 +84,7 @@ module Make (P : Size) = struct
       let k_next = k.value +: m_next in
       let addr1 = Var.reg spec ~width:logn in
       let addr2 = Var.reg spec ~width:logn in
-      let omegas =
+      let omegas_choices =
         List.init logn ~f:(fun i ->
             let inverse_root = Roots.inverse.(i + 1) in
             let open Gf_z in
@@ -94,8 +94,9 @@ module Make (P : Size) = struct
             ; omega4 = inverse_root * inverse_root * inverse_root * inverse_root
             }
             |> Omegas.map ~f:(fun x -> Gf.to_bits (Gf.of_z (Gf_z.to_z x))))
-        |> Omegas.Of_signal.mux i.value
       in
+      let omegas_from_i_next = Omegas.Of_signal.mux i_next omegas_choices in
+      let omegas = Omegas.Of_always.reg spec in
       let start_twiddles = Var.reg spec ~width:1 in
       let first_stage = Var.reg spec ~width:1 in
       let last_stage = Var.reg spec ~width:1 in
@@ -111,6 +112,7 @@ module Make (P : Size) = struct
                 , [ when_
                       inputs.start
                       [ i <--. 0
+                      ; Omegas.Of_always.assign omegas (List.hd_exn omegas_choices)
                       ; j <--. 0
                       ; k <--. 0
                       ; m <--. 1
@@ -153,6 +155,7 @@ module Make (P : Size) = struct
                       ; addr1 <-- k_next
                       ; addr2 <-- k_next +: m.value
                       ; i <-- i_next
+                      ; Omegas.Of_always.assign omegas omegas_from_i_next
                       ; start_twiddles <--. 1
                       ; first_stage <--. 0
                       ; m <-- m_next
@@ -172,7 +175,7 @@ module Make (P : Size) = struct
       ; m = m.value
       ; addr1 = addr1.value
       ; addr2 = addr2.value
-      ; omegas
+      ; omegas = Omegas.Of_always.value omegas
       ; start_twiddles = start_twiddles.value
       ; first_stage = first_stage.value
       ; last_stage = last_stage.value
