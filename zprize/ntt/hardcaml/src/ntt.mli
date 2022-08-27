@@ -11,6 +11,15 @@ module Make (P : Size) : sig
   val n : int
   val logn : int
 
+  module Omegas : sig
+    type 'a t =
+      { omega1 : 'a
+      ; omega2 : 'a
+      ; omega3 : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
   module Controller : sig
     module I : sig
       type 'a t =
@@ -30,7 +39,7 @@ module Make (P : Size) : sig
         ; m : 'a
         ; addr1 : 'a
         ; addr2 : 'a
-        ; omega : 'a
+        ; omegas : 'a Omegas.t
         ; start_twiddles : 'a
         ; first_stage : 'a
         ; last_stage : 'a
@@ -51,7 +60,7 @@ module Make (P : Size) : sig
         ; clear : 'a
         ; d1 : 'a
         ; d2 : 'a
-        ; omega : 'a
+        ; omegas : 'a Omegas.t
         ; start_twiddles : 'a
         }
       [@@deriving sexp_of, hardcaml]
