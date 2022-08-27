@@ -40,14 +40,13 @@ let rec modulo_pow base exponent =
 
 let modulo_square_root a = snd (Option.value_exn (Toneli_shank.tonelli_shank ~p a))
 
+let generate_z ~lo_incl ~hi_incl =
+  Quickcheck.Generator.map
+    ~f:Bigint.to_zarith_bigint
+    (Bigint.gen_incl (Bigint.of_zarith_bigint lo_incl) (Bigint.of_zarith_bigint hi_incl))
+;;
+
 let random_z =
-  let generate_z ~lo_incl ~hi_incl =
-    Quickcheck.Generator.map
-      ~f:Bigint.to_zarith_bigint
-      (Bigint.gen_incl
-         (Bigint.of_zarith_bigint lo_incl)
-         (Bigint.of_zarith_bigint hi_incl))
-  in
   let random = Splittable_random.State.create Random.State.default in
   fun ~lo_incl ~hi_incl ->
     let generate = generate_z ~lo_incl ~hi_incl in
@@ -62,3 +61,13 @@ module Modulo_ops = struct
   let ( + ) = modulo_add
   let ( / ) = modulo_div
 end
+
+let cubed x =
+  let open Modulo_ops in
+  x * x * x
+;;
+
+let square x =
+  let open Modulo_ops in
+  x * x
+;;
