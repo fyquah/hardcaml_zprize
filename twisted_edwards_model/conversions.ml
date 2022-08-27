@@ -1,5 +1,5 @@
 open! Base
-open Util
+open Bls12_377_util
 
 let twisted_edwards_affine_to_montgomery_affine ({ x; y } : Twisted_edwards_curve.affine)
     : Montgomery_curve.affine

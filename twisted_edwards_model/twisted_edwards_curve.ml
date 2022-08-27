@@ -1,9 +1,9 @@
 open! Base
-open Util
+open Bls12_377_util
 
 type params =
-  { a : Util.z
-  ; d : Util.z
+  { a : z
+  ; d : z
   }
 [@@deriving sexp_of]
 
@@ -19,10 +19,10 @@ type affine_with_t =
   }
 
 type extended =
-  { x : Util.z
-  ; y : Util.z
-  ; z : Util.z
-  ; t : Util.z
+  { x : z
+  ; y : z
+  ; z : z
+  ; t : z
   }
 [@@deriving sexp_of]
 

@@ -1,11 +1,11 @@
 open! Base
-open Util
+open Bls12_377_util
 
 type params =
-  { a : Util.z
-  ; b : Util.z
-  ; s : Util.z
-  ; alpha : Util.z
+  { a : z
+  ; b : z
+  ; s : z
+  ; alpha : z
   }
 [@@deriving sexp_of]
 

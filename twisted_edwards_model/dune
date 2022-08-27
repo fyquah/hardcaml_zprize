@@ -1,5 +1,5 @@
 (library
- (name ec_ops_model_lib)
+ (name twisted_edwards_model_lib)
  (libraries ark_bls12_377_g1 base bignum hardcaml snarks_r_fun zarith)
  (inline_tests)
  (preprocess

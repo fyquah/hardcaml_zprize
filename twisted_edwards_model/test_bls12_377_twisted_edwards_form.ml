@@ -1,5 +1,5 @@
 open Core
-open Util
+open Bls12_377_util
 module C = Conversions
 
 let%expect_test "Modulo square root" =
@@ -8,12 +8,12 @@ let%expect_test "Modulo square root" =
   Stdio.print_s (sexp_of_z x);
   [%expect
     {| 0x17b62f01197dc4c6cf996f256d489ac9333ccbfe8c0adeaef1096c9bdf2e3d8e89faab521e38583e9033db52f652400 |}];
-  Stdio.printf "%s" (Z.to_string (Util.modulo_mult x x));
+  Stdio.printf "%s" (Z.to_string (modulo_mult x x));
   [%expect {| 3 |}]
 ;;
 
 let%expect_test "bls12-377 params in various forms" =
-  Stdio.print_s [%message (p : Util.z)];
+  Stdio.print_s [%message (p : z)];
   [%expect
     {|
     (p
@@ -54,7 +54,7 @@ let generate_sample choices =
 
 let%expect_test "bls12-377 equivalence with wierstrass form" =
   let bls12_377_params =
-    let alpha = Util.modulo_add Util.p Z.minus_one in
+    let alpha = modulo_add p Z.minus_one in
     Weierstrass_curve.create_params ~a:Z.zero ~b:Z.one ~alpha
   in
   let bls12_377_twisted_edwards_params =
@@ -93,7 +93,7 @@ let%expect_test "bls12-377 equivalence with wierstrass form" =
             (obtained : Ark_bls12_377_g1.affine)
             (expected : Ark_bls12_377_g1.affine)]
   in
-  let generate_fp_not_zero = Util.generate_z ~lo_incl:Z.one ~hi_incl:Z.(Util.p - one) in
+  let generate_fp_not_zero = generate_z ~lo_incl:Z.one ~hi_incl:Z.(p - one) in
   let generate_point =
     let%bind.Quickcheck.Generator by =
       (* We will not get infinity points, so scaling by zero doesn't make sense. *)
@@ -120,7 +120,7 @@ let%expect_test "bls12-377 equivalence with wierstrass form" =
     Quickcheck.Generator.return (p1, p2, z)
   in
   Quickcheck.test
-    ~sexp_of:[%sexp_of: Ark_bls12_377_g1.affine * Ark_bls12_377_g1.affine * Util.z]
+    ~sexp_of:[%sexp_of: Ark_bls12_377_g1.affine * Ark_bls12_377_g1.affine * z]
     ~trials:10_000
     generate
     ~f:(fun (p1, p2, z) -> test p1 p2 ~z)
