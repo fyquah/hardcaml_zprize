@@ -46,6 +46,12 @@ let generate_with_probability ~p ~then_ ~else_ =
   if Float.(x < p) then then_ else else_
 ;;
 
+let generate_sample choices =
+  let len = Array.length choices in
+  let%bind.Quickcheck.Generator i = Int.gen_incl 0 (len - 1) in
+  Quickcheck.Generator.return choices.(i)
+;;
+
 let%expect_test "bls12-377 equivalence with wierstrass form" =
   let bls12_377_params =
     let alpha = Util.modulo_add Util.p Z.minus_one in
@@ -89,16 +95,14 @@ let%expect_test "bls12-377 equivalence with wierstrass form" =
   in
   let generate_fp_not_zero = Util.generate_z ~lo_incl:Z.one ~hi_incl:Z.(Util.p - one) in
   let generate_point =
-    let%bind.Quickcheck.Generator by = Int.gen_incl 1 Int.max_value in
+    let%bind.Quickcheck.Generator by =
+      (* We will not get infinity points, so scaling by zero doesn't make sense. *)
+      Int.gen_incl 1 Int.max_value
+    in
     Ark_bls12_377_g1.mul (Ark_bls12_377_g1.subgroup_generator ()) ~by
     |> Quickcheck.Generator.return
   in
-  let generate_fp_special =
-    let choices = [| Z.one; Z.(p - one); Z.of_int 2 |] in
-    let len = Array.length choices in
-    let%bind.Quickcheck.Generator i = Int.gen_incl 0 (len - 1) in
-    Quickcheck.Generator.return choices.(i)
-  in
+  let generate_fp_special = generate_sample [| Z.one; Z.(p - one); Z.of_int 2 |] in
   let generate =
     let%bind.Quickcheck.Generator p1 = generate_point in
     let%bind.Quickcheck.Generator p2 =
@@ -117,7 +121,7 @@ let%expect_test "bls12-377 equivalence with wierstrass form" =
   in
   Quickcheck.test
     ~sexp_of:[%sexp_of: Ark_bls12_377_g1.affine * Ark_bls12_377_g1.affine * Util.z]
-    ~trials:1_000
+    ~trials:10_000
     generate
     ~f:(fun (p1, p2, z) -> test p1 p2 ~z)
 ;;
