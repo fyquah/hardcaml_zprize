@@ -1,0 +1,7 @@
+(rule
+  (target krnl_loopback.v)
+  (mode promote)
+  (action (run %{deps} -o %{target}))
+  (deps ../../bin/generate.exe))
+
+(rule (target stub.sv) (action (write-file %{target} "")))
