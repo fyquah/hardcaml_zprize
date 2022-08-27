@@ -56,9 +56,10 @@ def write_makefile(args, kernels):
 
         if (args.platform == "aws"):
             aws_platform = os.environ['AWS_PLATFORM']
-            aws_platform_root = aws_platform.split('aws_platform')
+            delimiter = 'aws_platform'
+            aws_platform_root = aws_platform.split(delimiter)[0] + delimiter
             print(aws_platform_root)
-            f.write(f"PLATFORM_REPO_PATHS={aws_platform_root}")
+            f.write(f"PLATFORM_REPO_PATHS={aws_platform_root}\n")
 
         f.write(f"PLATFORM={resolve_platform(args.platform)}\n")
         f.write(f"KERNEL_NAMES={kernel_names}\n")

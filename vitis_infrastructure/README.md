@@ -14,9 +14,10 @@ Some other things i'd like to figure out
 
 # Prerequisites for building on AWS
 
-Setup the Vitus enviroment and packages
+Setup the Vitus setup scripts
 ```
-source ../aws-fpga/vitus_setup.sh`
+source ../aws-fpga/vitus_setup.sh
+source ../aws-fpga/vitis_runtime_setup.sh
 ```
 
 # Examples
