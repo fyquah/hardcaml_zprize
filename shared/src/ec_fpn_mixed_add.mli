@@ -43,11 +43,12 @@ end) : sig
       ; ready_in : 'a
       ; data_out : 'a Jacobian.t
       ; error : 'a
-            (** Raised when the input points are the same - the doubler module must be
+          (** Raised when the input points are the same - the doubler module must be
          used and this result thrown away. *)
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   val create : config:Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
+  val hierarchical : config:Config.t -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
