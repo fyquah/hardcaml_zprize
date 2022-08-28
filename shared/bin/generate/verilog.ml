@@ -10,6 +10,10 @@ module Montgometry_mult377 = Montgomery_mult.With_interface (struct
   let bits = 377
 end)
 
+module Barrett_mult377 = Barrett_mult.With_interface (struct
+  let bits = 377
+end)
+
 module Barrett_reduction377 = Barrett_reduction.With_interface (struct
   let bits = 377
 end)
@@ -197,6 +201,31 @@ let command_barrett_reduction =
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
 ;;
 
+let command_barrett_mult =
+  Command.basic
+    ~summary:"Karatsuba multiplication + Barrett Reduction"
+    (let%map_open.Command filename = flag_filename in
+     fun () ->
+       let module B = Barrett_mult377 in
+       let module C = Circuit.With_interface (B.I) (B.O) in
+       let scope = Scope.create ~flatten_design:false () in
+       let database = Scope.circuit_database scope in
+       let circuit =
+         B.create
+           ~config:
+             { multiplier_config =
+                 Config_presets.For_bls12_377.montgomery_reduction_config
+                   .multiplier_config
+             ; barrett_reduction_config =
+                 Config_presets.For_bls12_377.barrett_reduction_config
+             }
+           ~p:(Ark_bls12_377_g1.modulus ())
+           scope
+         |> C.create_exn ~name:"barrett_mult"
+       in
+       Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
+;;
+
 let command_point_double =
   Command.basic
     ~summary:"point double"
@@ -301,6 +330,7 @@ let () =
   ; "karatsuba-ofman-mult", command_karatsuba_ofman_mult
   ; "montgomery-mult", command_montgomery_mult
   ; "barrett-reduction", command_barrett_reduction
+  ; "barrett-mult", command_barrett_mult
   ; "point-double", command_point_double
   ; "point-add", command_point_add
   ]
