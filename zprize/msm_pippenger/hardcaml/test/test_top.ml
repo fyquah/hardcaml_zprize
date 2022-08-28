@@ -25,7 +25,7 @@ let create_sim () =
     (Top.hierarchical ~build_mode:Simulation scope)
 ;;
 
-let num_inputs = 200
+let num_inputs = 32
 
 module Affine_point_with_t = struct
   type 'a t =

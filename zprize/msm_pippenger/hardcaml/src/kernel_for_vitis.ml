@@ -101,7 +101,7 @@ let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_de
       <-- (valid_output_bits.value <=:. output_buffer_width - Top.result_point_bits)
     ; when_
         (result_point_ready.value &: top.result_point_valid)
-        [ output_l <-- output_l.value @: top.result_point
+        [ output_l <-- sel_top (top.result_point @: output_l.value) output_buffer_width
         ; valid_output_bits <-- valid_output_bits.value +:. Top.result_point_bits
         ; when_ (valid_output_bits.value >=:. axi_bits) [ fpga_to_host.tvalid <-- vdd ]
         ]
@@ -113,6 +113,9 @@ let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_de
   in
   compile
     [ start <-- gnd
+    ; fpga_to_host.tstrb <--. 0 (* TODO fix this*)
+    ; fpga_to_host.tkeep <--. 0
+    ; fpga_to_host.tlast <--. 0
     ; when_ top.scalar_and_input_point_ready [ scalar_valid <-- gnd; last_scalar <-- gnd ]
     ; when_ fpga_to_host_dest.tready [ fpga_to_host.tvalid <-- gnd ]
     ; sm.switch
