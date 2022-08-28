@@ -126,7 +126,6 @@ module Make (Config : Config.S) = struct
     }
     =
     let ( -- ) = Scope.naming scope in
-    Datapa
     let open Always in
     (* We want to split our [scalar_bits] input scalar into an array of windows.
        The last one might be larger. *)
