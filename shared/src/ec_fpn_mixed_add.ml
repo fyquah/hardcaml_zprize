@@ -686,9 +686,4 @@ struct
     in
     { O.data_out; valid_out; error; ready_in }
   ;;
-
-  let hierarchical ~config scope i =
-    let module H = Hierarchy.In_scope (I) (O) in
-    Hierarchical.hierarchical ~name:"ec_fpn_mixed_add" ~scope (create ~config)
-  ;;
 end

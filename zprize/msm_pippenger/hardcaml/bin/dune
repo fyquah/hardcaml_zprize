@@ -1,0 +1,10 @@
+(executables
+ (names simulate)
+ (libraries
+   core
+   core_unix
+   core_unix.command_unix
+   hardcaml_waveterm.interactive
+   msm_pippenger_test)
+ (preprocess (pps ppx_jane))
+)

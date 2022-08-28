@@ -1,5 +1,4 @@
-(** After reset, takes in a stream of scalars and affine points to compute MSM
-    on.
+(** Computes the MSM over a stream of input points and scalars.
 
     After processing has finished, will return a stream of [num_buckets *
     num_windows] back to the host, with buckets in high -> low order.

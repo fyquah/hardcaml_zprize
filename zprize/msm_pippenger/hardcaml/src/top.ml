@@ -55,7 +55,6 @@ module Make (Config : Config.S) = struct
       ; last_scalar : 'a
       ; input_point : 'a [@bits input_point_bits]
       ; result_point_ready : 'a
-          (* TODO bdevlin: add a fifo so we can support backpressure reading the result *)
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -167,7 +166,8 @@ module Make (Config : Config.S) = struct
         let address_bits =
           if window = num_windows - 1 then last_window_size_bits else window_size_bits
         in
-        (* To support write before read, writes must happen on port A and reads on port B. *)
+        (* To support write before read mode in URAM, writes must happen on port
+           A and reads on port B. *)
         Dual_port_ram.create
           ~read_latency:ram_read_latency
           ~arch:Ultraram
@@ -200,11 +200,16 @@ module Make (Config : Config.S) = struct
         scope
         ~config:adder_config
         { clock
-        ; valid_in = adder_valid_in
-        ; p1 = Mixed_add.Xyzt.Of_signal.unpack (mux ctrl.window port_b_q)
+        ; valid_in = pipeline spec adder_valid_in ~n:ram_read_latency
+        ; p1 =
+            Mixed_add.Xyzt.Of_signal.unpack
+              (mux (pipeline spec ctrl.window ~n:ram_read_latency) port_b_q)
         ; p2 =
             Mixed_add.Xyt.Of_signal.unpack
-              (mux2 ctrl.bubble (ones input_point_bits) ctrl.adder_affine_point)
+              (pipeline
+                 spec
+                 (mux2 ctrl.bubble (ones input_point_bits) ctrl.adder_affine_point)
+                 ~n:ram_read_latency)
         }
     in
     (* State machine for error checking and flow control. *)
@@ -215,14 +220,10 @@ module Make (Config : Config.S) = struct
       Variable.reg spec ~width:(num_bits_to_represent num_windows)
     in
     compile
-      [ ram_port_a.write_enable <-- gnd
-      ; ram_port_b.write_enable <-- gnd
+      [ Ram_port.(Of_always.assign ram_port_a (Of_signal.of_int 0))
+      ; Ram_port.(Of_always.assign ram_port_b (Of_signal.of_int 0))
       ; sm.switch
-          [ ( Idle
-            , [ Ram_port.(Of_always.assign ram_port_a (Of_signal.of_int 0))
-              ; Ram_port.(Of_always.assign ram_port_b (Of_signal.of_int 0))
-              ; when_ start [ ram_port_a.address <--. 0; sm.set_next Init_to_identity ]
-              ] )
+          [ Idle, [ when_ start [ sm.set_next Init_to_identity ] ]
           ; ( Init_to_identity
             , [ ram_port_a.write_enable <-- vdd
               ; ram_port_a.data <-- Mixed_add.Xyzt.Of_signal.pack identity_point
@@ -269,7 +270,9 @@ module Make (Config : Config.S) = struct
                       [ ram_port_a.read_enable <-- gnd; sm.set_next Idle ]
                   ]
               ] )
-          ; Error, []
+          ; ( Error
+            , [ (* This state is sticky and can only be recovered from with a reset. *) ]
+            )
           ]
       ];
     { O.result_point =
