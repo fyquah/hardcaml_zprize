@@ -2,10 +2,12 @@ open! Base
 open Bls12_377_util
 
 let twisted_edwards_affine_to_montgomery_affine ({ x; y } : Twisted_edwards_curve.affine)
-    : Montgomery_curve.affine
+    : Montgomery_curve.affine option
   =
   let open Modulo_ops in
-  { x = (one + y) / (one - y); y = (one + y) / ((one - y) * x) }
+  if Z.equal x Z.zero
+  then None
+  else Some { x = (one + y) / (one - y); y = (one + y) / ((one - y) * x) }
 ;;
 
 let montgomery_affine_to_twisted_edwards_affine { Montgomery_curve.x = u; y = v } =
@@ -75,9 +77,11 @@ let weierstrass_params_to_montgomery_params
 ;;
 
 let twisted_edwards_affine_to_weierstrass_affine twisted_edwards_params point =
-  montgomery_affine_to_weierstrass_affine
-    (twisted_edwards_params_to_montgomery_params twisted_edwards_params)
-    (twisted_edwards_affine_to_montgomery_affine point)
+  twisted_edwards_affine_to_montgomery_affine point
+  |> Option.map
+       ~f:
+         (montgomery_affine_to_weierstrass_affine
+            (twisted_edwards_params_to_montgomery_params twisted_edwards_params))
 ;;
 
 let weierstrass_affine_to_twisted_edwards_affine weierstrass_params point =

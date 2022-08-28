@@ -8,9 +8,10 @@ type params =
 [@@deriving sexp_of]
 
 type affine =
-  { x : Z.t
-  ; y : Z.t
+  { x : z
+  ; y : z
   }
+[@@deriving sexp_of]
 
 type affine_with_t =
   { x : Z.t
@@ -26,6 +27,8 @@ type extended =
   }
 [@@deriving sexp_of]
 
+let affine_identity = { x = Z.zero; y = Z.one }
+
 let affine_to_extended ~z ({ x; y } : affine) : extended =
   { x = modulo_mult x z; y = modulo_mult y z; z; t = modulo_mult (modulo_mult x y) z }
 ;;
@@ -33,6 +36,8 @@ let affine_to_extended ~z ({ x; y } : affine) : extended =
 let affine_to_affine_with_t ({ x; y } : affine) : affine_with_t =
   { x; y; t = modulo_mult x y }
 ;;
+
+let affine_neg ({ x; y } : affine) : affine = { x; y = modulo_neg y }
 
 let extended_to_affine { x; y; z; t } : affine =
   let open Modulo_ops in
