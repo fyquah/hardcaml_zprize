@@ -62,9 +62,10 @@ let random_inputs () =
     })
 ;;
 
-let timeout = 10_000
+let timeout = 2_000
 
 let run_small_test () =
+  let cycle_cnt = ref 0 in
   let sim = create_sim () in
   let waves, sim = Waveform.create sim in
   let i, o = Cyclesim.inputs sim, Cyclesim.outputs sim in
@@ -74,18 +75,20 @@ let run_small_test () =
   i.start := Bits.vdd;
   Cyclesim.cycle sim;
   i.start := Bits.gnd;
+  cycle_cnt := 0;
   Array.iteri (random_inputs ()) ~f:(fun idx input ->
     i.input_point := Affine_point_with_t.Of_bits.pack input.affine_point_with_t;
     i.scalar := input.scalar;
     i.scalar_valid := Bits.vdd;
     if idx = num_inputs - 1 then i.last_scalar := Bits.vdd;
-    Cyclesim.cycle sim;
-    while Bits.is_gnd !(o.scalar_and_input_point_ready) do
+    while Bits.is_gnd !(o.scalar_and_input_point_ready) && !cycle_cnt < timeout do
+      Int.incr cycle_cnt;
       Cyclesim.cycle sim
-    done);
+    done;
+    Cyclesim.cycle sim);
   i.scalar_valid := Bits.gnd;
   i.last_scalar := Bits.gnd;
-  let cycle_cnt = ref 0 in
+  cycle_cnt := 0;
   let _result_points = ref [] in
   while
     Bits.is_gnd !(o.result_point_valid)

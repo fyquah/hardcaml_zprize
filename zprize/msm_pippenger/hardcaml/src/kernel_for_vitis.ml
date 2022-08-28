@@ -1,15 +1,9 @@
-open Hardcaml_axi
-
-module Axilite_control = struct
-  module Config = struct
-    let addr_bits = 6
-    let data_bits = 32
-  end
-
-  include Lite.Make (Config)
-end
-
+open Core
+open Hardcaml
+open Signal
 module Axi512 = Hardcaml_axi.Axi512
+module Config = Config.Bls12_377
+module Top = Top.Make (Config)
 
 module I = struct
   type 'a t =
@@ -17,7 +11,6 @@ module I = struct
     ; ap_rst_n : 'a
     ; host_to_fpga : 'a Axi512.Stream.Source.t [@rtlprefix "host_to_fpga_"]
     ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "fpga_to_host_"]
-    ; master_to_slave : 'a Axilite_control.Master_to_slave.t [@rtlprefix "s_axi_control_"]
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -26,20 +19,126 @@ module O = struct
   type 'a t =
     { fpga_to_host : 'a Axi512.Stream.Source.t [@rtlprefix "fpga_to_host_"]
     ; host_to_fpga_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "host_to_fpga_"]
-    ; slave_to_master : 'a Axilite_control.Slave_to_master.t [@rtlprefix "s_axi_control_"]
     }
   [@@deriving sexp_of, hardcaml]
 end
 
-let create
-  ~build_mode:_
-  _scope
-  { I.ap_clk = _
-  ; ap_rst_n = _
-  ; host_to_fpga = _
-  ; fpga_to_host_dest = _
-  ; master_to_slave = _ (* Currently not implementing the register map *)
+module State = struct
+  type t =
+    | Idle
+    | Working
+  [@@deriving sexp_of, compare, enumerate]
+end
+
+let input_bits = Config.scalar_bits + Top.input_point_bits
+let axi_bits = 512
+
+let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_dest } =
+  (* We need to decode the AXI stream input into scalars and points. *)
+  let clock = ap_clk in
+  let clear = ~:ap_rst_n in
+  let spec = Reg_spec.create ~clock ~clear () in
+  let open Always in
+  let input_buffer_width =
+    (* Buffer enough input so we can extract a point. *)
+    input_bits + axi_bits
+  in
+  let input_l = Variable.reg spec ~width:input_buffer_width in
+  let output_buffer_width =
+    Int.round_up Top.result_point_bits ~to_multiple_of:(2 * axi_bits)
+  in
+  let output_l = Variable.reg spec ~width:output_buffer_width in
+  let sm = State_machine.create (module State) spec in
+  let start = Variable.reg spec ~width:1 in
+  let scalar_valid = Variable.reg spec ~width:1 in
+  let last_scalar = Variable.reg spec ~width:1 in
+  let result_point_ready = Variable.wire ~default:gnd in
+  let input_point_and_scalar =
+    sel_bottom input_l.value (Config.scalar_bits + Top.input_point_bits)
+  in
+  let top =
+    Top.hierarchical
+      ~build_mode
+      scope
+      { clock
+      ; clear
+      ; scalar = input_point_and_scalar.:+[0, Some Config.scalar_bits]
+      ; input_point =
+          input_point_and_scalar.:+[Config.scalar_bits, Some Top.input_point_bits]
+      ; start = start.value
+      ; scalar_valid = scalar_valid.value
+      ; last_scalar = last_scalar.value
+      ; result_point_ready = result_point_ready.value
+      }
+  in
+  let valid_input_bits =
+    Variable.reg spec ~width:(num_bits_to_represent input_buffer_width)
+  in
+  let host_to_fpga_dest = Axi512.Stream.Dest.Of_always.wire zero in
+  let maybe_shift_input =
+    [ host_to_fpga_dest.tready
+      <-- (valid_input_bits.value <=:. input_buffer_width - axi_bits)
+    ; when_
+        (host_to_fpga.tvalid &: host_to_fpga_dest.tready.value)
+        [ input_l <-- sel_top (host_to_fpga.tdata @: input_l.value) input_buffer_width
+        ; valid_input_bits <-- valid_input_bits.value +:. axi_bits
+        ; when_
+            (valid_input_bits.value +:. axi_bits >=:. input_bits)
+            [ scalar_valid <-- vdd
+            ; valid_input_bits <-- valid_input_bits.value +:. axi_bits -:. input_bits
+            ; when_ host_to_fpga.tlast [ last_scalar <-- vdd ]
+            ]
+        ]
+    ]
+    |> proc
+  in
+  let fpga_to_host = Axi512.Stream.Source.Of_always.reg spec in
+  let valid_output_bits =
+    Variable.reg spec ~width:(num_bits_to_represent output_buffer_width)
+  in
+  let maybe_shift_output =
+    [ result_point_ready
+      <-- (valid_output_bits.value <=:. output_buffer_width - Top.result_point_bits)
+    ; when_
+        (result_point_ready.value &: top.result_point_valid)
+        [ output_l <-- output_l.value @: top.result_point
+        ; valid_output_bits <-- valid_output_bits.value +:. Top.result_point_bits
+        ; when_ (valid_output_bits.value >=:. axi_bits) [ fpga_to_host.tvalid <-- vdd ]
+        ]
+    ; when_
+        (fpga_to_host_dest.tready &: fpga_to_host.tvalid.value)
+        [ valid_output_bits <-- valid_output_bits.value -:. axi_bits ]
+    ]
+    |> proc
+  in
+  compile
+    [ start <-- gnd
+    ; when_ top.scalar_and_input_point_ready [ scalar_valid <-- gnd; last_scalar <-- gnd ]
+    ; when_ fpga_to_host_dest.tready [ fpga_to_host.tvalid <-- gnd ]
+    ; sm.switch
+        [ ( Idle
+          , [ valid_input_bits <--. 0
+            ; maybe_shift_input
+            ; when_
+                (host_to_fpga.tvalid &: top.scalar_and_input_point_ready)
+                [ start <-- vdd ]
+            ; sm.set_next Working
+            ] )
+        ; ( Working
+          , [ maybe_shift_input
+            ; maybe_shift_output
+            ; when_
+                (fpga_to_host.tvalid.value
+                &: fpga_to_host.tlast.value
+                &: fpga_to_host_dest.tready)
+                [ sm.set_next Idle ]
+            ] )
+        ]
+    ];
+  { O.host_to_fpga_dest = Axi512.Stream.Dest.Of_always.value host_to_fpga_dest
+  ; fpga_to_host =
+      { (Axi512.Stream.Source.Of_always.value fpga_to_host) with
+        tdata = sel_top output_l.value axi_bits
+      }
   }
-  =
-  O.Of_signal.of_int 0
 ;;

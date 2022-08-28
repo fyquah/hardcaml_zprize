@@ -28,6 +28,9 @@ module Make (Config : Config.S) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
+  val input_point_bits : int
+  val result_point_bits : int
+
   module O : sig
     type 'a t =
       { result_point : 'a

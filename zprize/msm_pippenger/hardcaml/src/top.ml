@@ -221,11 +221,12 @@ module Make (Config : Config.S) = struct
     let window_read_address =
       Variable.reg spec ~width:(num_bits_to_represent num_windows)
     in
+    let last_scalar_l = Variable.reg spec ~width:1 in
     compile
       [ Ram_port.(Of_always.assign ram_port_a (Of_signal.of_int 0))
       ; Ram_port.(Of_always.assign ram_port_b (Of_signal.of_int 0))
       ; sm.switch
-          [ Idle, [ when_ start [ sm.set_next Init_to_identity ] ]
+          [ Idle, [ last_scalar_l <-- gnd; when_ start [ sm.set_next Init_to_identity ] ]
           ; ( Init_to_identity
             , [ ram_port_a.write_enable <-- vdd
               ; ram_port_a.data <-- Mixed_add.Xyzt.Of_signal.pack identity_point
@@ -239,13 +240,16 @@ module Make (Config : Config.S) = struct
               ] )
           ; ( Working
             , [ ctrl_start <-- gnd
+              ; last_scalar_l <-- (last_scalar_l.value |: last_scalar)
               ; ram_port_a.write_enable <-- result_write_enable
               ; ram_port_a.address <-- result_bucket
               ; ram_port_a.data <-- Mixed_add.Xyzt.Of_signal.pack adder.p3
               ; ram_port_b.write_enable <-- gnd
               ; ram_port_b.address <-- ctrl.bucket
               ; ram_port_b.read_enable <-- vdd
-              ; when_ ctrl.done_ [ wait_count <--. 0; sm.set_next Wait_for_adder ]
+              ; when_
+                  (last_scalar_l.value &: ctrl.done_)
+                  [ wait_count <--. 0; sm.set_next Wait_for_adder ]
               ; when_ (result_write_enable <>: adder.valid_out) [ sm.set_next Error ]
               ] )
           ; ( Wait_for_adder
