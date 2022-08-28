@@ -38,7 +38,7 @@ let create
   ; ap_rst_n = _
   ; host_to_fpga = _
   ; fpga_to_host_dest = _
-  ; master_to_slave = _
+  ; master_to_slave = _ (* Currently not implementing the register map *)
   }
   =
   O.Of_signal.of_int 0
