@@ -23,6 +23,10 @@ module For_bls12_377 = struct
         Karatsuba_ofman_mult.Config.generate
           ~ground_multiplier:(Verilog_multiply { latency = 3 })
           [ Radix_3; Radix_3 ]
+    ; half_multiplier_config =
+        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
+        }
     ; subtracter_stages = 3
     }
   ;;
