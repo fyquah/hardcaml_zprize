@@ -70,7 +70,7 @@ module For_bls12_377 = struct
     { impl; latency }
   ;;
 
-  let barrett_reduction : Ec_fpn_ops_config.fn =
+  let barrett_reduce : Ec_fpn_ops_config.fn =
     let config = barrett_reduction_config in
     let impl ~scope ~clock ~enable mult_value y =
       assert (Option.is_none y);
@@ -95,7 +95,7 @@ module For_bls12_377 = struct
   ;;
 
   let ec_fpn_ops_with_barrett_reduction =
-    let reduce = barrett_reduction in
+    let reduce = barrett_reduce in
     { Ec_fpn_ops_config.multiply; square; reduce; p }
   ;;
 end

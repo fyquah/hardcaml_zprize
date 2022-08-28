@@ -1,0 +1,10 @@
+(library
+ (name twisted_edwards_lib)
+ (libraries
+  ark_bls12_377_g1
+  base
+  hardcaml
+  snarks_r_fun
+  twisted_edwards_model_lib)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

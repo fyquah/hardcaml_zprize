@@ -1,0 +1,6 @@
+(library
+ (name twisted_edwards_model_lib)
+ (libraries ark_bls12_377_g1 base bignum hardcaml snarks_r_fun zarith)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

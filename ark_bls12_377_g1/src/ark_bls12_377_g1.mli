@@ -20,6 +20,9 @@ val create : x:Z.t -> y:Z.t -> infinity:bool -> affine
  *)
 val add : affine -> affine -> affine
 
+(** If non infinity, then return (x, -y). Otherwise, returns infinity. *)
+val neg : affine -> affine
+
 (** Given a point p, computes (p * by)
  *
  * Raises an exception if [by] is negative.
