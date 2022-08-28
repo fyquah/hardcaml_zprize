@@ -4,6 +4,7 @@ use ark_ec::models::short_weierstrass_jacobian::GroupAffine;
 use ark_ff::PrimeField;
 use ark_ff::FpParameters;
 use ark_ff::biginteger::BigInteger384;
+use std::ops::Neg;
 
 type G1AffinePoint = GroupAffine<ark_bls12_377::g1::Parameters>;
 type BaseField = <ark_bls12_377::g1::Parameters as ModelParameters>::BaseField;
@@ -80,6 +81,12 @@ pub extern "C" fn ark_bls12_377_add(ptr_a: *mut G1AffinePoint, ptr_b: *mut G1Aff
     let a = unsafe { &*ptr_a };
     let b = unsafe { &*ptr_b };
     Box::into_raw(Box::new(*a + *b))
+}
+
+#[no_mangle]
+pub extern "C" fn ark_bls12_377_g1_neg(ptr: *mut G1AffinePoint) -> *mut G1AffinePoint {
+    let a = unsafe { &*ptr };
+    Box::into_raw(Box::new((*a).neg()))
 }
 
 #[no_mangle]
