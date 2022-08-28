@@ -11,7 +11,14 @@ module External = struct
      * *)
     let%bind.List extension = [ "so"; "dylib" ] in
     let%bind.List dir =
-      [ "."; "../"; "../../"; "../../../"; "../../../.."; "../../../../.." ]
+      [ "."
+      ; "../"
+      ; "../../"
+      ; "../../../"
+      ; "../../../.."
+      ; "../../../../.."
+      ; "../../../../../../"
+      ]
     in
     [ dir ^/ "rust/ark_bls12_377_g1/target/debug/libark_bls12_377_g1." ^ extension ]
   ;;
@@ -126,11 +133,11 @@ let mul (a : affine) ~by =
 
 let buffer_to_z arr =
   String.init (8 * 6) ~f:(fun i ->
-      let word = i / 8 in
-      let shift = i % 8 * 8 in
-      Int64.O.((CArray.get arr word lsr shift) land 0xFFL)
-      |> Int64.to_int_trunc
-      |> Char.of_int_exn)
+    let word = i / 8 in
+    let shift = i % 8 * 8 in
+    Int64.O.((CArray.get arr word lsr shift) land 0xFFL)
+    |> Int64.to_int_trunc
+    |> Char.of_int_exn)
   |> Z.of_bits
 ;;
 

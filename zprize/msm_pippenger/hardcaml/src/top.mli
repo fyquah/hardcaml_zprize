@@ -5,6 +5,10 @@
 
     Currently only supports a single controller, but later will be modified to
     support a multi-SLR parallel solution.
+
+    [start] is pulsed high for one clock cycle to initialize the bucket RAMs.
+    When input points are ready to be streamed in, [scalar_and_input_point] will
+    raise high.
 *)
 
 open Hardcaml

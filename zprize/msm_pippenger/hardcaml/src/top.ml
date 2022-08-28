@@ -125,6 +125,8 @@ module Make (Config : Config.S) = struct
     ; result_point_ready = _ (* TODO Add a fifo and use this.*)
     }
     =
+    let ( -- ) = Scope.naming scope in
+    Datapa
     let open Always in
     (* We want to split our [scalar_bits] input scalar into an array of windows.
        The last one might be larger. *)
@@ -161,6 +163,7 @@ module Make (Config : Config.S) = struct
     let ram_port_a = Ram_port.Of_always.reg spec in
     let ram_port_b = Ram_port.Of_always.reg spec in
     let sm = State_machine.create (module State) spec in
+    ignore (sm.current -- "STATE" : Signal.t);
     let port_a_q, port_b_q =
       List.init num_windows ~f:(fun window ->
         let address_bits =
