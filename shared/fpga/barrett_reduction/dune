@@ -1,0 +1,7 @@
+(rule
+ (targets barrett_reduction.v)
+ (deps ../../bin/generate/verilog.exe)
+ (mode promote)
+ (action
+  (run %{deps} barrett-reduction -o barrett_reduction.v)))
+
