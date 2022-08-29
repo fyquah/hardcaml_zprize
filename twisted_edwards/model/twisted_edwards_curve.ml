@@ -4,6 +4,7 @@ open Bls12_377_util
 type params =
   { a : z
   ; d : z
+  ; twisted_scale : z
   }
 [@@deriving sexp_of]
 
@@ -46,7 +47,7 @@ let extended_to_affine { x; y; z; t } : affine =
 ;;
 
 let _add_not_equal
-    { a; d = _ }
+    { a; d = _; twisted_scale = _ }
     ({ x = x1; y = y1; z = z1; t = t1 } : extended)
     ({ x = x2; y = y2; t = t2 } : affine_with_t)
     : extended
@@ -69,20 +70,20 @@ let _add_not_equal
 ;;
 
 let add_unified
-    { a; d }
+    { a = _; d; twisted_scale = _ }
     ({ x = x1; y = y1; z = z1; t = t1 } : extended)
     ({ x = x2; y = y2; t = t2 } : affine_with_t)
     : extended
   =
   let open Modulo_ops in
-  let c_A = x1 * x2 in
-  let c_B = y1 * y2 in
-  let c_C = t1 * d * t2 in
-  let c_D = z1 in
-  let c_E = ((x1 + y1) * (x2 + y2)) - c_A - c_B in
+  let c_A = (y1-x1) * (y2-x2) in
+  let c_B = (y1+x1) * (y2+x2) in
+  let c_C = t1 * (of_int 2) * d * t2 in
+  let c_D = (of_int 2) * z1 in
+  let c_E = c_B - c_A in
   let c_F = c_D - c_C in
   let c_G = c_D + c_C in
-  let c_H = c_B - (a * c_A) in
+  let c_H = c_B + c_A in
   let x3 = c_E * c_F in
   let y3 = c_G * c_H in
   let t3 = c_E * c_H in
