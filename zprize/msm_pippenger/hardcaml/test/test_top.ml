@@ -62,7 +62,7 @@ let random_inputs () =
     })
 ;;
 
-let timeout = 5_000
+let timeout = 10_000
 
 let run_small_test () =
   let cycle_cnt = ref 0 in
@@ -117,4 +117,4 @@ let%expect_test "Test over small input size" =
   [%expect {||}]
 ;;
 
-let waveform = run_small_test
+let waveform () = run_small_test ()
