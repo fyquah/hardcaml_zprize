@@ -1,0 +1,6 @@
+(library
+ (name modulo_ops_model)
+ (libraries ark_bls12_377_g1 base bignum core snarks_r_fun zarith)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
