@@ -1,0 +1,6 @@
+(rule
+ (target twisted_edwards_mixed_add.v)
+ (deps ../../bin/generate/verilog.exe)
+ (mode promote)
+ (action
+  (run %{deps} twisted-edwards-mixed-add -o %{target})))
