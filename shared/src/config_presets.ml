@@ -19,10 +19,10 @@ module For_bls12_377 = struct
   ;;
 
   let barrett_reduction_config =
-    { Barrett_reduction.Config.multiplier_config =
-        Karatsuba_ofman_mult.Config.generate
-          ~ground_multiplier:(Verilog_multiply { latency = 3 })
-          [ Radix_3; Radix_3 ]
+    { Barrett_reduction.Config.approx_msb_multiplier_config =
+        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+        ; ground_multiplier = Verilog_multiply { latency = 2 }
+        }
     ; half_multiplier_config =
         { level_radices = [ Radix_3; Radix_3; Radix_2 ]
         ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }

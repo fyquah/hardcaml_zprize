@@ -25,13 +25,13 @@ open Reg_with_enable
 
 module Config = struct
   type t =
-    { multiplier_config : Karatsuba_ofman_mult.Config.t
+    { approx_msb_multiplier_config : Approx_msb_multiplier.Config.t
     ; half_multiplier_config : Half_width_multiplier.Config.t
     ; subtracter_stages : int
     }
 
   let latency (config : t) =
-    (1 * Karatsuba_ofman_mult.Config.latency config.multiplier_config)
+    (1 * Approx_msb_multiplier.Config.latency config.approx_msb_multiplier_config)
     + (1 * Half_width_multiplier.Config.latency config.half_multiplier_config)
     + config.subtracter_stages
     + config.subtracter_stages
@@ -67,24 +67,21 @@ struct
 
     let create ~scope ~clock ~enable ~m ~(config : Config.t) { Stage0.a; valid } =
       assert (width a = bits * 2);
-      let multiplier_config = config.multiplier_config in
-      let latency = Karatsuba_ofman_mult.Config.latency multiplier_config in
+      let latency =
+        Approx_msb_multiplier.Config.latency config.approx_msb_multiplier_config
+      in
       let spec = Reg_spec.create ~clock () in
-      (* [a] can occupy up to [wa] bits whereas [m] and occupy [bits + 1] bits, hence
-         [a * m] can occupy [wa + logm] bits, and shifting by [k] should only occupy
-         [wa + logm - k] bits
-      *)
       let q =
-        Karatsuba_ofman_mult.hierarchical
+        Approx_msb_multiplier.hierarchical
           ~scope
-          ~config:multiplier_config
+          ~config:config.approx_msb_multiplier_config
           ~clock
           ~enable
-          (uresize (sel_top a bits) (bits + 1))
-          (`Constant m)
-        |> Fn.flip drop_bottom bits
-        |> Fn.flip sel_bottom bits
+          (Multiply_by_constant
+             (uresize (sel_top a bits) (bits + 1), Bits.of_z ~width:(bits + 1) m))
       in
+      let q = q.:[(2 * bits) - 1, bits] in
+      assert (width q = bits);
       { q
       ; a' = pipeline ~enable ~n:latency spec (sel_bottom a (bits + 2))
       ; valid = pipeline ~enable ~n:latency spec valid
