@@ -25,7 +25,7 @@ let create_sim () =
     (Top.hierarchical ~build_mode:Simulation scope)
 ;;
 
-let num_inputs = 32
+let num_inputs = 16
 
 module Affine_point_with_t = struct
   type 'a t =
@@ -45,6 +45,7 @@ module Msm_input = struct
 end
 
 let random_inputs () =
+  Random.init 0;
   Array.init num_inputs ~f:(fun _ ->
     let affine_point =
       Ark_bls12_377_g1.(mul (subgroup_generator ()) ~by:(Random.int 100))
@@ -62,7 +63,7 @@ let random_inputs () =
     })
 ;;
 
-let timeout = 10_000
+let timeout = 5_000
 
 let run_small_test () =
   let cycle_cnt = ref 0 in
