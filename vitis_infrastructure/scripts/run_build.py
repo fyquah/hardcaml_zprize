@@ -54,12 +54,6 @@ def write_makefile(args, kernels):
     kernel_names = " ".join(kernel.name for kernel in kernels)
     with open(fname, "w") as f:
 
-        if (args.platform == "aws"):
-            aws_platform = os.environ['AWS_PLATFORM']
-            delimiter = 'aws_platform'
-            aws_platform_root = aws_platform.split(delimiter)[0] + delimiter
-            print(aws_platform_root)
-            f.write(f"PLATFORM_REPO_PATHS={aws_platform_root}\n")
 
         f.write(f"PLATFORM={resolve_platform(args.platform)}\n")
         f.write(f"KERNEL_NAMES={kernel_names}\n")
@@ -179,10 +173,16 @@ def build_target(args):
 
 def pre_checks(args):
 
-    # If we are running on the AWS platform make sure the user has the platform setup correctly
+    # If we are running on the AWS platform make sure the user has the platform setup correctly, we also need to export the platform variable
     if (args.platform == "aws"):
         if "AWS_PLATFORM" not in os.environ:
             raise Exception("env var AWS_PLATFORM was not set! Did you correctly source vitis_setup.sh?")
+        else:
+            aws_platform = os.environ['AWS_PLATFORM']
+            delimiter = 'aws_platform'
+            aws_platform_root = aws_platform.split(delimiter)[0] + delimiter
+            print(f"Setting PLATFORM_REPO_PATHS = {aws_platform_root}")
+            os.environ["PLATFORM_REPO_PATHS"] = aws_platform_root
 
 
 def main():
