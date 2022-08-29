@@ -62,7 +62,7 @@ let random_inputs () =
     })
 ;;
 
-let timeout = 2_000
+let timeout = 5_000
 
 let run_small_test () =
   let cycle_cnt = ref 0 in
@@ -87,7 +87,7 @@ let run_small_test () =
     done;
     Cyclesim.cycle sim);
   i.scalar_valid := Bits.gnd;
-  i.last_scalar := Bits.gnd;
+  (* i.last_scalar := Bits.gnd; *)
   cycle_cnt := 0;
   let _result_points = ref [] in
   while
