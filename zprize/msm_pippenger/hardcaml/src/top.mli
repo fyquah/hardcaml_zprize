@@ -30,6 +30,8 @@ module Make (Config : Config.S) : sig
 
   val input_point_bits : int
   val result_point_bits : int
+  val num_windows : int
+  val num_result_points : int
 
   module O : sig
     type 'a t =

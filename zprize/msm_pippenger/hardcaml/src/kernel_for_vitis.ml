@@ -41,7 +41,8 @@ let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_de
   let open Always in
   let input_buffer_width =
     (* Buffer enough input so we can extract a point. *)
-    input_bits + axi_bits
+    (* TODO simplify this*)
+    Int.round_up input_bits ~to_multiple_of:axi_bits
   in
   let input_l = Variable.reg spec ~width:input_buffer_width in
   let output_buffer_width =

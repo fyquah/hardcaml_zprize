@@ -34,6 +34,11 @@ module Make (Config : Config.S) = struct
   (* Integer divison so the last window might be slightly larger than the others. *)
   let num_windows = scalar_bits / window_size_bits
   let last_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
+
+  let num_result_points =
+    ((num_windows - 1) lsl window_size_bits) + (1 lsl last_window_size_bits)
+  ;;
+
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
   let result_point_bits = Mixed_add.Xyzt.(fold port_widths ~init:0 ~f:( + ))
 

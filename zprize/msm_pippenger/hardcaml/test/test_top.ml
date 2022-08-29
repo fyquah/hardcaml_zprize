@@ -5,9 +5,9 @@ open Msm_pippenger
 
 module Config = struct
   let field_bits = 377
-  let scalar_bits = 10
+  let scalar_bits = 5
   let controller_log_stall_fifo_depth = 2
-  let window_size_bits = 3
+  let window_size_bits = 2
   let ram_read_latency = 1
 end
 
@@ -25,12 +25,22 @@ let create_sim () =
     (Top.hierarchical ~build_mode:Simulation scope)
 ;;
 
-let num_inputs = 16
+let num_inputs = 8
 
 module Affine_point_with_t = struct
   type 'a t =
     { x : 'a [@bits Config.field_bits]
     ; y : 'a [@bits Config.field_bits]
+    ; t : 'a [@bits Config.field_bits]
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
+module Extended = struct
+  type 'a t =
+    { x : 'a [@bits Config.field_bits]
+    ; y : 'a [@bits Config.field_bits]
+    ; z : 'a [@bits Config.field_bits]
     ; t : 'a [@bits Config.field_bits]
     }
   [@@deriving sexp_of, hardcaml]
@@ -63,7 +73,7 @@ let random_inputs () =
     })
 ;;
 
-let timeout = 5_000
+let timeout = 1_000
 
 let run_small_test () =
   let cycle_cnt = ref 0 in
@@ -88,17 +98,28 @@ let run_small_test () =
     done;
     Cyclesim.cycle sim);
   i.scalar_valid := Bits.gnd;
-  (* i.last_scalar := Bits.gnd; *)
   cycle_cnt := 0;
-  let _result_points = ref [] in
+  let result_points = ref [] in
   while
-    Bits.is_gnd !(o.result_point_valid)
-    && (not (Bits.is_vdd !(o.error)))
-    && !cycle_cnt < timeout
+    Bits.is_gnd !(o.result_point_valid) && Bits.is_gnd !(o.error) && !cycle_cnt < timeout
   do
     Cyclesim.cycle sim;
     Int.incr cycle_cnt
   done;
+  i.result_point_ready := Bits.vdd;
+  cycle_cnt := 0;
+  print_s [%message "Expecting" (Top.num_result_points : int)];
+  while List.length !result_points < Top.num_result_points && !cycle_cnt < timeout do
+    if Bits.is_vdd !(o.result_point_valid)
+    then (
+      let result_point = Extended.Of_bits.unpack !(o.result_point) in
+      result_points := result_point :: !result_points;
+      Cyclesim.cycle sim);
+    Int.incr cycle_cnt
+  done;
+  Cyclesim.cycle sim;
+  Cyclesim.cycle sim;
+  Cyclesim.cycle sim;
   waves
 ;;
 
