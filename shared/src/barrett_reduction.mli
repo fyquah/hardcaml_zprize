@@ -2,7 +2,7 @@ open Hardcaml
 
 module Config : sig
   type t =
-    { multiplier_config : Karatsuba_ofman_mult.Config.t
+    { approx_msb_multiplier_config : Approx_msb_multiplier.Config.t
     ; half_multiplier_config : Half_width_multiplier.Config.t
     ; subtracter_stages : int
     }
