@@ -47,4 +47,5 @@ end) : sig
   end
 
   val create : config:Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
+  val hierarchical : config:Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end
