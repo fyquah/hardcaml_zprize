@@ -28,7 +28,7 @@ let compute_software_model ~p ~a =
   if Z.gt a_minus_qp Z.(p - one) then Z.(a_minus_qp - p) else a_minus_qp
 ;;
 
-let config = Elliptic_curve_lib.Config_presets.For_bls12_377.barrett_reduction_config
+let config = Barrett_reduction.Config.for_bls12_377
 let p = Ark_bls12_377_g1.modulus ()
 let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((p - one) * (p - one))
 

@@ -167,9 +167,7 @@ let command_montgomery_mult =
                      (Karatsuba_ofman_mult.Config.generate
                         ~ground_multiplier
                         [ Radix_2; Radix_3; Radix_3 ]))
-             ; montgomery_reduction_config =
-                 Elliptic_curve_lib.Config_presets.For_bls12_377
-                 .montgomery_reduction_config
+             ; montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
              }
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
@@ -190,8 +188,7 @@ let command_barrett_reduction =
        let database = Scope.circuit_database scope in
        let circuit =
          B.create
-           ~config:
-             Elliptic_curve_lib.Config_presets.For_bls12_377.barrett_reduction_config
+           ~config:Barrett_reduction.Config.for_bls12_377
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
          |> C.create_exn ~name:"barrett_reduction"
@@ -212,11 +209,8 @@ let command_barrett_mult =
          B.create
            ~config:
              { multiplier_config =
-                 Elliptic_curve_lib.Config_presets.For_bls12_377
-                 .montgomery_reduction_config
-                   .multiplier_config
-             ; barrett_reduction_config =
-                 Elliptic_curve_lib.Config_presets.For_bls12_377.barrett_reduction_config
+                 Montgomery_reduction.Config.for_bls12_377.multiplier_config
+             ; barrett_reduction_config = Barrett_reduction.Config.for_bls12_377
              }
            ~p:(Ark_bls12_377_g1.modulus ())
            scope

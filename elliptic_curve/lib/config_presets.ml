@@ -4,33 +4,8 @@ open Field_ops_lib
 
 module For_bls12_377 = struct
   let p = Ark_bls12_377_g1.modulus ()
-
-  let montgomery_reduction_config =
-    { Montgomery_reduction.Config.multiplier_config =
-        Karatsuba_ofman_mult.Config.generate
-          ~ground_multiplier:(Verilog_multiply { latency = 3 })
-          [ Radix_3; Radix_3 ]
-    ; half_multiplier_config =
-        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
-        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
-        }
-    ; adder_depth = 3
-    ; subtractor_depth = 3
-    }
-  ;;
-
-  let barrett_reduction_config =
-    { Barrett_reduction.Config.approx_msb_multiplier_config =
-        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
-        ; ground_multiplier = Verilog_multiply { latency = 2 }
-        }
-    ; half_multiplier_config =
-        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
-        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
-        }
-    ; subtracter_stages = 3
-    }
-  ;;
+  let montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
+  let barrett_reduction_config = Barrett_reduction.Config.for_bls12_377
 
   let square : Ec_fpn_ops_config.fn =
     let config =

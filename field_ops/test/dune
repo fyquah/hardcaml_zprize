@@ -10,8 +10,6 @@
   hardcaml
   hardcaml_verify
   field_ops_lib
-  ; TODO(fyquah): Don't depend on [elliptic_curve_lib] here
-  elliptic_curve_lib
   unix)
  (inline_tests)
  (preprocess

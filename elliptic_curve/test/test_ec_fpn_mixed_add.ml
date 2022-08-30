@@ -2,7 +2,6 @@ open Core
 open Hardcaml
 open Elliptic_curve_lib
 open Point
-module Utils = Field_ops_test.Utils
 module Config = Ec_fpn_mixed_add.Config
 
 let () = Caller_id.set_mode Full_trace

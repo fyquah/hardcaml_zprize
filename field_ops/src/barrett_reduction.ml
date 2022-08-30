@@ -37,6 +37,19 @@ module Config = struct
     + config.subtracter_stages
     + 1
   ;;
+
+  let for_bls12_377 =
+    { approx_msb_multiplier_config =
+        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+        ; ground_multiplier = Verilog_multiply { latency = 2 }
+        }
+    ; half_multiplier_config =
+        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
+        }
+    ; subtracter_stages = 3
+    }
+  ;;
 end
 
 module With_interface (M : sig

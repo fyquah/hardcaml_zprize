@@ -152,6 +152,20 @@ module Config = struct
     + adder_depth
     + subtractor_depth
   ;;
+
+  let for_bls12_377 =
+    { multiplier_config =
+        Karatsuba_ofman_mult.Config.generate
+          ~ground_multiplier:(Verilog_multiply { latency = 3 })
+          [ Radix_3; Radix_3 ]
+    ; half_multiplier_config =
+        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
+        }
+    ; adder_depth = 3
+    ; subtractor_depth = 3
+    }
+  ;;
 end
 
 let create ~(config : Config.t) ~scope ~clock ~enable ~(p : Z.t) ~valid (xy : Signal.t) =

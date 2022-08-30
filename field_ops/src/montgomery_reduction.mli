@@ -13,6 +13,7 @@ module Config : sig
     }
 
   val latency : t -> int
+  val for_bls12_377 : t
 end
 
 val hierarchical
