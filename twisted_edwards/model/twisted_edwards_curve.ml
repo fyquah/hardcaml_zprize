@@ -75,6 +75,7 @@ let add_unified
   ({ x = x2; y = y2; t = t2 } : affine_with_t)
   : extended
   =
+  (* https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-3 *)
   let open Modulo_ops in
   let c_A = (y1 - x1) * (y2 - x2) in
   let c_B = (y1 + x1) * (y2 + x2) in
@@ -91,15 +92,28 @@ let add_unified
   { x = x3; y = y3; z = z3; t = t3 }
 ;;
 
-(* host precomputed optimization *)
+(*
+ * host precomputed optimization ------
+ *  - Represent host point (x,y,t) as (y-x,y+x,4dt)
+ *  - Represent fpga point (x,y,z,t) as (2x,2y,4z,t)
+ * Then, we get rid of all the constants from the equations (below)
+ *)
+
 (* not a real projective representation - xy != t *)
-let host_extended_representation ({ d; _ } : params) ({ x; y } : affine) : affine_with_t =
+let affine_with_t_to_host_extended_representation
+  ({ d; _ } : params)
+  ({ x; y; t } : affine_with_t)
+  : affine_with_t
+  =
   let open Modulo_ops in
-  let ({ t; _ } : affine_with_t) = affine_to_affine_with_t { x; y } in
   let x_host = (y - x) / of_int 2 in
   let y_host = (y + x) / of_int 2 in
   let t_host = of_int 4 * d * t in
   { x = x_host; y = y_host; t = t_host }
+;;
+
+let affine_to_host_extended_representation params affine : affine_with_t =
+  affine_with_t_to_host_extended_representation params (affine_to_affine_with_t affine)
 ;;
 
 let to_fpga_internal_representation ({ x; y; z; t } : extended) : extended =

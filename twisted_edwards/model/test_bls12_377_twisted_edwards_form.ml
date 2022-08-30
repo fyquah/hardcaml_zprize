@@ -83,7 +83,7 @@ let mixed_add ~z ~host_precompute ~bls12_377_twisted_edwards_params fpga_point h
   then
     Twisted_edwards_curve.add_unified_precomputed
       (Twisted_edwards_curve.affine_to_fpga_internal_representation ~z fpga_point)
-      (Twisted_edwards_curve.host_extended_representation
+      (Twisted_edwards_curve.affine_to_host_extended_representation
          bls12_377_twisted_edwards_params
          host_point)
     |> Twisted_edwards_curve.fpga_internal_representation_to_affine
