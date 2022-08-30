@@ -33,7 +33,9 @@ module Config = struct
   let latency (config : t) =
     (1 * Karatsuba_ofman_mult.Config.latency config.multiplier_config)
     + (1 * Half_width_multiplier.Config.latency config.half_multiplier_config)
-    + (2 * Modulo_subtractor_pipe.latency ~stages:config.subtracter_stages)
+    + config.subtracter_stages
+    + config.subtracter_stages
+    + 1
   ;;
 end
 
@@ -72,17 +74,19 @@ struct
          [a * m] can occupy [wa + logm] bits, and shifting by [k] should only occupy
          [wa + logm - k] bits
       *)
-      { q =
-          Karatsuba_ofman_mult.hierarchical
-            ~scope
-            ~config:multiplier_config
-            ~clock
-            ~enable
-            a
-            (`Constant m)
-          |> Fn.flip drop_bottom k
-          |> Fn.flip sel_bottom (bits + 1)
-      ; a' = pipeline ~enable ~n:latency spec (sel_bottom a (bits + 1))
+      let q =
+        Karatsuba_ofman_mult.hierarchical
+          ~scope
+          ~config:multiplier_config
+          ~clock
+          ~enable
+          (uresize (sel_top a bits) (bits + 1))
+          (`Constant m)
+        |> Fn.flip drop_bottom bits
+        |> Fn.flip sel_bottom bits
+      in
+      { q
+      ; a' = pipeline ~enable ~n:latency spec (sel_bottom a (bits + 2))
       ; valid = pipeline ~enable ~n:latency spec valid
       }
     ;;
@@ -97,22 +101,16 @@ struct
     [@@deriving sexp_of, hardcaml]
 
     let create ~clock ~scope ~enable ~p ~(config : Config.t) { Stage1.q; a'; valid } =
-      let a_minus_qp_width =
-        (* [a - qp] possible range of values ios [0, 2p) *)
-        bits + 1
-      in
       let latency = Half_width_multiplier.Config.latency config.half_multiplier_config in
       let spec = Reg_spec.create ~clock () in
-      assert (width q >= bits);
-      ignore (a_minus_qp_width : int);
+      assert (width q = bits);
       { qp =
           Half_width_multiplier.hierarchical
             ~scope
             ~clock
             ~enable
             ~config:config.half_multiplier_config
-            (Multiply_by_constant
-               (sel_bottom q a_minus_qp_width, Bits.of_z ~width:a_minus_qp_width p))
+            (Multiply_by_constant (uresize q (bits + 2), Bits.of_z ~width:(bits + 2) p))
       ; a' = pipeline ~enable ~n:latency spec a'
       ; valid = pipeline ~enable ~n:latency spec valid
       }
@@ -130,12 +128,8 @@ struct
       let spec = Reg_spec.create ~clock () in
       let stages = config.subtracter_stages in
       let latency = Modulo_subtractor_pipe.latency ~stages in
-      let a_minus_qp_width =
-        (* [a - qp] possible range of values ios [0, 2p) *)
-        bits + 1
-      in
-      assert (width a' = a_minus_qp_width);
-      assert (width qp = a_minus_qp_width);
+      assert (width a' = bits + 2);
+      assert (width qp = bits + 2);
       { a_minus_qp =
           Adder_subtractor_pipe.hierarchical
             ~stages
@@ -157,20 +151,37 @@ struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let create ~clock ~enable ~p ~(config : Config.t) { Stage3.a_minus_qp; valid } =
+    let with_valid_value { With_valid.valid = _; value } = value
+
+    let create ~scope ~clock ~enable ~p ~(config : Config.t) { Stage3.a_minus_qp; valid } =
+      assert (width a_minus_qp = bits + 2);
       let spec = Reg_spec.create ~clock () in
       let stages = config.subtracter_stages in
-      let latency = Modulo_subtractor_pipe.latency ~stages in
-      { a_mod_p =
-          Modulo_subtractor_pipe.create
-            ~clock
-            ~enable
-            ~stages
-            ~p
-            a_minus_qp
-            (of_z ~width:(Signal.width a_minus_qp) p)
-      ; valid = pipeline ~enable ~n:latency spec valid
-      }
+      let latency = Modulo_subtractor_pipe.latency ~stages + 1 in
+      let a_mod_p =
+        List.map (List.range 0 4) ~f:(fun i ->
+            let result =
+              Adder_subtractor_pipe.hierarchical
+                ~stages
+                ~scope
+                ~enable
+                ~clock
+                { lhs = a_minus_qp
+                ; rhs_list =
+                    [ { op = `Sub; term = Signal.of_z ~width:(bits + 2) Z.(of_int i * p) }
+                    ]
+                }
+              |> List.hd_exn
+            in
+            { With_valid.valid = ~:(Adder_subtractor_pipe.Single_op_output.carry result)
+            ; value = Adder_subtractor_pipe.Single_op_output.result result
+            })
+        |> List.rev
+        |> Signal.priority_select
+        |> with_valid_value
+        |> reg ~enable spec
+      in
+      { a_mod_p; valid = pipeline ~enable ~n:latency spec valid }
     ;;
   end
 
@@ -204,7 +215,7 @@ struct
       |> Stage2.map2 Stage2.port_names ~f:(fun n s -> s -- ("stage2$" ^ n))
       |> Stage3.create ~scope ~clock ~enable ~config
       |> Stage3.map2 Stage3.port_names ~f:(fun n s -> s -- ("stage3$" ^ n))
-      |> Stage4.create ~clock ~enable ~p ~config
+      |> Stage4.create ~scope ~clock ~enable ~p ~config
       |> Stage4.map2 Stage4.port_names ~f:(fun n s -> s -- ("stage4$" ^ n))
     in
     { O.valid; a_mod_p = uresize a_mod_p bits }
