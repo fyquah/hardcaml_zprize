@@ -12,6 +12,7 @@ module Config : sig
     ; reduce : fn
     ; adder_stages : int
     ; subtractor_stages : int
+    ; doubler_stages : int
     ; p : Z.t
     ; a : Z.t
     ; d : Z.t

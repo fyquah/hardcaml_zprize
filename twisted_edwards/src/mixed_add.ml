@@ -8,6 +8,7 @@ include struct
   module Ec_fpn_ops_config = Ec_fpn_ops_config
   module Modulo_adder_pipe = Modulo_adder_pipe
   module Modulo_subtractor_pipe = Modulo_subtractor_pipe
+  module Modulo_double_pipe = Modulo_double_pipe
 end
 
 module Model = Twisted_edwards_model_lib
@@ -24,6 +25,7 @@ module Config = struct
     ; reduce : fn
     ; adder_stages : int
     ; subtractor_stages : int
+    ; doubler_stages : int
     ; p : Z.t
     ; a : Z.t
     ; d : Z.t
@@ -47,6 +49,7 @@ module Config = struct
       ; reduce = barrett_reduce
       ; adder_stages = 3
       ; subtractor_stages = 3
+      ; doubler_stages = 3
       ; p = Ark_bls12_377_g1.modulus ()
       ; a
       ; d
@@ -138,6 +141,16 @@ module Make (Num_bits : Num_bits.S) = struct
     if n = 0 then x else pipeline spec ~n ~enable:vdd x
   ;;
 
+  let double_pipe ~scope ~latency ~(config : Config.t) ~clock a =
+    let spec = Reg_spec.create ~clock () in
+    let stages = config.doubler_stages in
+    Modulo_double_pipe.hierarchical ~scope ~clock ~enable:vdd ~stages ~p:config.p a
+    |> fun x ->
+    let n = latency config - Modulo_double_pipe.latency ~stages in
+    assert (n >= 0);
+    if n = 0 then x else pipeline spec ~n ~enable:vdd x
+  ;;
+
   let of_z x = Signal.of_z ~width:num_bits x
 
   module Datapath_input = struct
@@ -194,9 +207,10 @@ module Make (Num_bits : Num_bits.S) = struct
   module Stage1 = struct
     type 'a t =
       { c_A : 'a [@bits num_bits]
-      ; c_B : 'a [@bits num_bits]
-      ; c_D : 'a [@bits num_bits]
       ; t1_times_t2 : 'a [@bits num_bits]
+      ; c_D : 'a [@bits num_bits]
+      ; y1_plus_x1 : 'a [@bits num_bits]
+      ; y2_plus_x2 : 'a [@bits num_bits]
       ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -215,7 +229,7 @@ module Make (Num_bits : Num_bits.S) = struct
       =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
-      let c_A, c_B =
+      let c_A, t1_times_t2 =
         arbitrate_multiply
           ~config
           ~scope
@@ -223,21 +237,17 @@ module Make (Num_bits : Num_bits.S) = struct
           ~valid
           ~latency_without_arbitration
           (y1_minus_x1, y2_minus_x2)
-          (y1_plus_x1, y2_plus_x2)
-      in
-      let t1_times_t2, c_D =
-        arbitrate_multiply
-          ~config
-          ~scope
-          ~clock
-          ~valid
-          ~latency_without_arbitration:(Config.multiply_latency ~reduce:true)
           (p1.t, p2.t)
-          (p1.z, of_z (Modulo_ops.of_int 2))
-        (* CR rayesantharao: don't use a multiply for this! *)
       in
+      let c_D = double_pipe ~scope ~latency ~config ~clock p1.z in
       let scope = Scope.sub_scope scope "stage1" in
-      { c_A; c_B; t1_times_t2; c_D; valid = pipe valid }
+      { c_A
+      ; t1_times_t2
+      ; c_D
+      ; y1_plus_x1 = pipe y1_plus_x1
+      ; y2_plus_x2 = pipe y2_plus_x2
+      ; valid = pipe valid
+      }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
   end
@@ -258,10 +268,15 @@ module Make (Num_bits : Num_bits.S) = struct
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
 
-    let create ~config ~scope ~clock { Stage1.t1_times_t2; c_B; c_A; c_D; valid } =
+    let create
+      ~config
+      ~scope
+      ~clock
+      { Stage1.t1_times_t2; c_A; y1_plus_x1; y2_plus_x2; c_D; valid }
+      =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
-      let c_C, _ =
+      let c_C, c_B =
         let k = Modulo_ops.(config.d * of_int 2) in
         arbitrate_multiply
           ~config
@@ -270,11 +285,10 @@ module Make (Num_bits : Num_bits.S) = struct
           ~valid
           ~latency_without_arbitration
           (t1_times_t2, of_z k)
-          (c_A, of_z config.a)
-        (* CR rayesantharao: This is useless *)
+          (y1_plus_x1, y2_plus_x2)
       in
       let scope = Scope.sub_scope scope "stage2" in
-      { c_A = pipe c_A; c_B = pipe c_B; c_C; c_D = pipe c_D; valid = pipe valid }
+      { c_A = pipe c_A; c_B; c_C; c_D = pipe c_D; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
   end
