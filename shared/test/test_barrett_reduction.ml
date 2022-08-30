@@ -3,8 +3,6 @@ open! Hardcaml
 open! Snarks_r_fun
 open! Bits
 
-let debug = false
-
 module Barrett_reduction377 = Barrett_reduction.With_interface (struct
   let bits = 377
 end)
@@ -27,40 +25,16 @@ let compute_software_model ~p ~a =
   let q = Z.((a * m) asr k) in
   let qp = Z.(q * p) in
   let a_minus_qp = Z.(a - qp) in
-  if debug
-  then
-    Stdio.print_s
-      [%message (m : Utils.z) (q : Utils.z) (qp : Utils.z) (a_minus_qp : Utils.z)];
   if Z.gt a_minus_qp Z.(p - one) then Z.(a_minus_qp - p) else a_minus_qp
 ;;
 
-let%expect_test _ =
-  let config = Config_presets.For_bls12_377.barrett_reduction_config in
-  let p = Ark_bls12_377_g1.modulus () in
-  let random_bigint () =
-    Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((p - one) * (p - one))
-  in
-  Stdio.print_s [%message (p : Utils.z)];
-  [%expect
-    {|
-    (p
-     0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001) |}];
-  let test_cases =
-    List.concat
-      [ [ Z.zero
-        ; Z.one
-        ; Z.of_int 2
-        ; Z.((p - one) * (p - one))
-        ; Z.of_string
-            "0x1c1d96627014caa774cc857b5e15be00056047380b0e58c8d3a0a1cae6ca8b12a578e6418715d6078973059922e91c52e73fb7ebb5114a2e53da4dc61bf355481fb0deb8c1520f806159b6eb6a79b5e62ba2b87ad0baa6c1a6b262627243b"
-        ]
-      ; List.init 70 ~f:(fun _ -> random_bigint ())
-      ]
-  in
+let config = Config_presets.For_bls12_377.barrett_reduction_config
+let p = Ark_bls12_377_g1.modulus ()
+let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((p - one) * (p - one))
+
+let test ~debug test_cases =
   let sim = create_sim ~p ~config in
   let internal_ports = Cyclesim.internal_ports sim in
-  if debug then Stdio.print_s ([%sexp_of: string list] (List.map ~f:fst internal_ports));
-  [%expect {| |}];
   let dump_stage_if_valid prefix =
     if debug
     then (
@@ -74,9 +48,9 @@ let%expect_test _ =
             String.is_prefix ~prefix key && not (String.equal valid_port_name key))
         |> List.iter ~f:(fun (port_name, value) ->
                Stdio.printf
-                 "%s: %s\n"
+                 "%s: 0x%s\n"
                  port_name
-                 (Z.to_string (Bits.to_z ~signedness:Unsigned !value))))
+                 (Z.format "x" (Bits.to_z ~signedness:Unsigned !value))))
   in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
@@ -113,6 +87,39 @@ let%expect_test _ =
               (from_software_model : Utils.z)])
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]
-  |> Stdio.print_s;
+  |> Stdio.print_s
+;;
+
+let%expect_test "Randomized test" =
+  let test_cases =
+    List.concat
+      [ [ Z.zero
+        ; Z.one
+        ; Z.of_int 2
+        ; Z.((p - one) * (p - one))
+        ; Z.of_string
+            "0x1c1d96627014caa774cc857b5e15be00056047380b0e58c8d3a0a1cae6ca8b12a578e6418715d6078973059922e91c52e73fb7ebb5114a2e53da4dc61bf355481fb0deb8c1520f806159b6eb6a79b5e62ba2b87ad0baa6c1a6b262627243b"
+        ]
+      ; List.init 1_000 ~f:(fun _ -> random_bigint ())
+      ]
+  in
+  test ~debug:false test_cases;
   [%expect {| (Ok ()) |}]
+;;
+
+let%expect_test "regression test case" =
+  test
+    ~debug:true
+    [ Z.of_string
+        "0x23f04030049c70b3af409d4e14d17998374719db49d47e2e06bc9941322d341174df4376adb5561bd14a16d0df7feabe089bb711aa0ae8be84588f7d94c61b839ca85c9342b57d9995bca4d2bac7254be5efd39871d55ca4d6fa019a30013"
+    ];
+  [%expect
+    {|
+    stage1$q: 0x156275e4da06f626ede27db2023ab34cd9eeb0d02b5600ba8e6e7f4af2038e3248e9a25a29f0c32868684817ebf818e
+    stage1$a': 0x3e089bb711aa0ae8be84588f7d94c61b839ca85c9342b57d9995bca4d2bac7254be5efd39871d55ca4d6fa019a30013
+    stage2$qp: 0x53e7147cb5a217720d136c6bd6eee22baa20b2afe4f8467b89efc1fedf3650e6f97e1890e59f8cfa2104817ebf818e
+    stage2$a': 0x3e089bb711aa0ae8be84588f7d94c61b839ca85c9342b57d9995bca4d2bac7254be5efd39871d55ca4d6fa019a30013
+    stage3$a_minus_qp: 0x38ca2a6f464fe9719db321c8c025d7f8c8fa9d3194f33115e0f6c084e4c76216dc4e0e4a8a17dc8d02c6b1e9ae37e85
+    stage4$a_mod_p: 0x302e1ac4dadcc18d65269bb2bfcb095849f5ed17650bf32028a7a8da39e6213fae265c48a17dc7c61aeb1e9ae37e83
+    (Ok ()) |}]
 ;;
