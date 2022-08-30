@@ -1,6 +1,6 @@
 open! Core
 open! Hardcaml
-open! Snarks_r_fun
+open! Field_ops_lib
 
 (* TODO(fyquah): Add some waveform tests once I figure out how to install
  * hardcaml_waveterm on my M1 mac :)

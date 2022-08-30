@@ -1,5 +1,5 @@
 open Hardcaml
-open Snarks_r_fun
+open Field_ops_lib
 module Config = Ec_fpn_dbl.Config
 module Jacobian = Point.Jacobian
 

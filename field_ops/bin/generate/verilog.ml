@@ -1,6 +1,6 @@
 open Core
 open Hardcaml
-open Snarks_r_fun
+open Field_ops_lib
 
 module Karatsuba_ofman_mult377 = Karatsuba_ofman_mult.With_interface (struct
   let bits = 377
@@ -267,7 +267,7 @@ let command_point_add =
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
        let p = Ark_bls12_377_g1.modulus () in
-       let reduce : Snarks_r_fun.Ec_fpn_mixed_add.Config.fn =
+       let reduce : Field_ops_lib.Ec_fpn_mixed_add.Config.fn =
          let config =
            { Montgomery_reduction.Config.multiplier_config =
                Karatsuba_ofman_mult.Config.generate
@@ -286,7 +286,7 @@ let command_point_add =
          in
          { impl; latency }
        in
-       let square : Snarks_r_fun.Ec_fpn_mixed_add.Config.fn =
+       let square : Field_ops_lib.Ec_fpn_mixed_add.Config.fn =
          let config =
            { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
            ; ground_multiplier
@@ -299,7 +299,7 @@ let command_point_add =
          in
          { impl; latency }
        in
-       let multiply : Snarks_r_fun.Ec_fpn_mixed_add.Config.fn =
+       let multiply : Field_ops_lib.Ec_fpn_mixed_add.Config.fn =
          let config =
            Karatsuba_ofman_mult.Config.generate
              ~ground_multiplier

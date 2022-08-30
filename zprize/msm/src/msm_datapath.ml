@@ -5,7 +5,7 @@ open Hardcaml_xilinx
 open Signal
 
 include struct
-  open Snarks_r_fun
+  open Field_ops_lib
   module Ec_fpn_dbl = Ec_fpn_dbl
 end
 

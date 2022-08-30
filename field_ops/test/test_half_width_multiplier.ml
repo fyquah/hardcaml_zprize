@@ -1,6 +1,6 @@
 open! Base
 open! Hardcaml
-open! Snarks_r_fun
+open! Field_ops_lib
 open! Bits
 
 module Half_width_multiplier_377 = Half_width_multiplier.With_interface_multiply (struct

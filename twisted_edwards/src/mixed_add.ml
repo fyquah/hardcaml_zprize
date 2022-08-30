@@ -3,7 +3,7 @@ open Hardcaml
 open Signal
 
 include struct
-  open Snarks_r_fun
+  open Field_ops_lib
   module Arbitrate = Arbitrate
   module Ec_fpn_ops_config = Ec_fpn_ops_config
   module Modulo_adder_pipe = Modulo_adder_pipe
@@ -15,7 +15,7 @@ module Model = Twisted_edwards_model_lib
 module Modulo_ops = Model.Bls12_377_util.Modulo_ops
 
 module Config = struct
-  type fn = Snarks_r_fun.Ec_fpn_ops_config.fn =
+  type fn = Field_ops_lib.Ec_fpn_ops_config.fn =
     { latency : int
     ; impl : scope:Scope.t -> clock:t -> enable:t -> t -> t option -> t
     }
@@ -41,7 +41,7 @@ module Config = struct
 
   module For_bls12_377 = struct
     let with_barrett_reduction : t Lazy.t =
-      let open Snarks_r_fun.Config_presets.For_bls12_377 in
+      let open Field_ops_lib.Config_presets.For_bls12_377 in
       let%map.Lazy { Model.Twisted_edwards_curve.a; d; _ } =
         Model.Bls12_377_params.twisted_edwards
       in
@@ -82,13 +82,13 @@ module Make (Num_bits : Num_bits.S) = struct
   end
 
   let arbitrate_multiply
-    ~(config : Config.t)
-    ~scope
-    ~clock
-    ~valid
-    ~latency_without_arbitration
-    (x1, y1)
-    (x2, y2)
+      ~(config : Config.t)
+      ~scope
+      ~clock
+      ~valid
+      ~latency_without_arbitration
+      (x1, y1)
+      (x2, y2)
     =
     let enable = vdd in
     assert (width y1 = width y2);
@@ -222,10 +222,10 @@ module Make (Num_bits : Num_bits.S) = struct
     let latency (config : Config.t) = latency_without_arbitration config + 1
 
     let create
-      ~config
-      ~scope
-      ~clock
-      { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; y2_plus_x2; y2_minus_x2; valid }
+        ~config
+        ~scope
+        ~clock
+        { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; y2_plus_x2; y2_minus_x2; valid }
       =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
@@ -269,10 +269,10 @@ module Make (Num_bits : Num_bits.S) = struct
     let latency (config : Config.t) = latency_without_arbitration config + 1
 
     let create
-      ~config
-      ~scope
-      ~clock
-      { Stage1.t1_times_t2; c_A; y1_plus_x1; y2_plus_x2; c_D; valid }
+        ~config
+        ~scope
+        ~clock
+        { Stage1.t1_times_t2; c_A; y1_plus_x1; y2_plus_x2; c_D; valid }
       =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in

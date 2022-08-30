@@ -1,5 +1,5 @@
 (library
- (name snarks_r_fun_test)
+ (name field_ops_test)
  (libraries
   ark_bls12_377_g1
   base
@@ -9,7 +9,7 @@
   ctypes.foreign
   hardcaml
   hardcaml_verify
-  snarks_r_fun
+  field_ops_lib
   unix)
  (inline_tests)
  (preprocess

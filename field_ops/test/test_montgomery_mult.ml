@@ -1,6 +1,6 @@
 open! Core
 open! Hardcaml
-open! Snarks_r_fun
+open! Field_ops_lib
 
 module Montgomery_mult377 = Montgomery_mult.With_interface (struct
   let bits = 377

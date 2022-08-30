@@ -1,5 +1,5 @@
 (executables
  (names print_ark_bls12_377_g1)
- (libraries base hardcaml snarks_r_fun snarks_r_fun_test)
+ (libraries base hardcaml field_ops_lib field_ops_test)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))

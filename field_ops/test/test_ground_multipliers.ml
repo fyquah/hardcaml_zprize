@@ -1,6 +1,6 @@
 open Core
 open Hardcaml
-open Snarks_r_fun.Ground_multiplier.For_testing
+open Field_ops_lib.Ground_multiplier.For_testing
 
 let generate_z ~width =
   Quickcheck.Generator.map

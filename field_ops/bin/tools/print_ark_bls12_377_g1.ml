@@ -3,7 +3,7 @@
 *)
 
 open Core
-open Snarks_r_fun_test
+open Field_ops_test
 
 type affine = Ark_bls12_377_g1.affine [@@deriving sexp_of, equal]
 

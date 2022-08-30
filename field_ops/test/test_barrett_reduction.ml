@@ -1,6 +1,6 @@
 open! Base
 open! Hardcaml
-open! Snarks_r_fun
+open! Field_ops_lib
 open! Bits
 
 module Barrett_reduction377 = Barrett_reduction.With_interface (struct

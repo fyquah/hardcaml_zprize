@@ -1,6 +1,6 @@
 open! Core
 open! Hardcaml
-open! Snarks_r_fun
+open! Field_ops_lib
 
 module Adder377 = Modulo_adder_pipe.With_interface (struct
   let bits = 377

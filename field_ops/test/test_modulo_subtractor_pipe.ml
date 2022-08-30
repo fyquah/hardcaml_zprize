@@ -2,7 +2,7 @@
 
 open! Core
 open! Hardcaml
-open! Snarks_r_fun
+open! Field_ops_lib
 
 module Subtracter377 = Modulo_subtractor_pipe.With_interface (struct
   let bits = 377

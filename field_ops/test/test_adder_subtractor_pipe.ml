@@ -1,7 +1,7 @@
 open Core
 open Hardcaml_verify
 open Comb_gates
-open Snarks_r_fun
+open Field_ops_lib
 
 (* Unfortunately, writing proofs for including the carries/borrow in the final
  * comparison would increase the runtime of this proof substantially. But

@@ -1,5 +1,5 @@
 open Hardcaml
-open Snarks_r_fun
+open Field_ops_lib
 
 type 'a t = 'a Point.Affine.t =
   { x : 'a

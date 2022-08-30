@@ -1,6 +1,6 @@
 open Core
-module Extended_euclidean = Snarks_r_fun.Extended_euclidean
-module Point = Snarks_r_fun.Point
+module Extended_euclidean = Field_ops_lib.Extended_euclidean
+module Point = Field_ops_lib.Point
 
 let a_big_prime =
   Z.of_string

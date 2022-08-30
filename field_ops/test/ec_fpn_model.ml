@@ -1,5 +1,5 @@
 open Core
-open Snarks_r_fun
+open Field_ops_lib
 
 let mod' ~p x =
   let open Z in

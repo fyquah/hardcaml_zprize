@@ -1,5 +1,5 @@
 open Core
-open Snarks_r_fun
+open Field_ops_lib
 open Test_ec_fpn_dbl
 
 module Montgomery_mult = Montgomery_mult.With_interface (struct

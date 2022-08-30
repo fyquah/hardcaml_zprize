@@ -50,7 +50,7 @@ let sexp_of_t = Bytes.Hexdump.sexp_of_t
 let%expect_test "" =
   let generate =
     let generate_z =
-      Snarks_r_fun_test.Utils.generate_z
+      Field_ops_test.Utils.generate_z
         ~lo_incl:Z.zero
         ~hi_incl:Z.(sub (Ark_bls12_377_g1.modulus ()) one)
     in

@@ -4,7 +4,7 @@
   base
   core_unix.command_unix
   hardcaml
-  snarks_r_fun
-  snarks_r_fun_test)
+  field_ops_lib
+  field_ops_test)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))

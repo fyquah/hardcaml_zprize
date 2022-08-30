@@ -1,5 +1,5 @@
 open Core
-open Snarks_r_fun
+open Field_ops_lib
 open Test_ec_fpn_mixed_add
 
 let config = Config_presets.For_bls12_377.ec_fpn_ops_with_montgomery_reduction

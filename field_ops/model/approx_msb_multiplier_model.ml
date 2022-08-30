@@ -1,5 +1,5 @@
 open Base
-module Radix = Snarks_r_fun.Radix
+module Radix = Field_ops_lib.Radix
 
 let p = Ark_bls12_377_g1.modulus ()
 let k = 2 * 377

@@ -1,5 +1,5 @@
 open Core
-module Point = Snarks_r_fun.Point
+module Point = Field_ops_lib.Point
 
 val a_big_prime : Z.t
 val sexp_of_z : Z.t -> Sexp.t
