@@ -81,7 +81,7 @@ let test_random ~radices =
     (let%bind.Quickcheck.Generator a = generate_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one) in
      let%bind.Quickcheck.Generator b = generate_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one) in
      Quickcheck.Generator.return Z.(a * b))
-    ~trials:10_000
+    ~trials:100_000
     ~f:(test ~radices)
 ;;
 

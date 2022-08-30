@@ -18,14 +18,42 @@ let calc_k radix w =
   | Radix.Radix_3 -> Float.to_int (Float.( * ) (Float.of_int w) 0.33)
 ;;
 
-let rec estimated_upper_bound_error ~full_multiply_threshold w =
-  if w <= full_multiply_threshold
-  then Z.zero
-  else (
-    let k = calc_k Radix_2 w in
+let rec estimated_upper_bound_error ~radices ~w =
+  match radices with
+  | [] -> Z.zero
+  | hd :: tl ->
+    let k = calc_k hd w in
     let k2 = k * 2 in
-    let child = estimated_upper_bound_error ~full_multiply_threshold (w / 2) in
-    Z.((one lsl k2) + ((one lsl k) * (child + child))))
+    (match hd with
+    | Radix_2 ->
+      let child = estimated_upper_bound_error ~radices:tl ~w:(w - k) in
+      Z.((one lsl k2) + ((one lsl k) * (child + child)))
+    | Radix_3 ->
+      (*
+       *  = x2y2 * 2^4k
+       *    + (x2y1 + x1y2) * 2^3k
+       *    + (x2y0 + x1y1 + x0y2) * 2^2k
+       *    + (x1y0 + x0y1) * 2^k
+       *    + x0y0
+       *
+       * Approximated by
+       *
+       *  = x2y2 * 2^4k
+       *    + (x2y1 + x1y2) * 2^3k
+       *    + (x2y0 + x1y1 + x0y2) * 2^2k  <-- use approximation recursively here.
+       *
+       *  The error terms are:
+       *  -    1 * 2^(2k)                        (due to x0y0)
+       *  -  2^k * (2^(2k) + 2^(2k))             (due to (x1y0 + x0y1) * 2^k)
+       *  - 2^2k * (recur() + recur() + recur())
+       *)
+      let t0 = Z.((one lsl k2) lsl 0) in
+      let t1 = Z.(((one lsl k2) + (one lsl k2)) lsl k) in
+      let t2 =
+        let child = estimated_upper_bound_error ~radices:tl ~w:(w - k2) in
+        Z.((child + child + child) lsl k2)
+      in
+      Z.(t0 + t1 + t2))
 ;;
 
 let ceil_div x b =
@@ -33,15 +61,15 @@ let ceil_div x b =
   if Z.(equal (x mod b) zero) then d else Z.(d + one)
 ;;
 
+let estimate_delta_error_2_to_n radices =
+  ceil_div (estimated_upper_bound_error ~radices ~w:378) Z.(one lsl 377)
+;;
+
 let%expect_test "Delta error" =
   Stdio.printf
-    "Delta error = 0x%s\n"
-    (Z.format
-       "x"
-       (ceil_div
-          (estimated_upper_bound_error ~full_multiply_threshold:23 378)
-          Z.(one lsl 377)));
-  [%expect {| Delta error = 0x1 |}]
+    "Delta error = %s * (2^377)\n"
+    (Z.to_string (estimate_delta_error_2_to_n [ Radix_3; Radix_3; Radix_2 ]));
+  [%expect {| Delta error = 1 * (2^377) |}]
 ;;
 
 let split_top_and_btm ~k a =
@@ -76,7 +104,6 @@ let rec approx_msb_multiply ~radices:arg_radices ~w a b =
       let ua_mult_ub = Z.((ua * ub) lsl k2) in
       Z.(ua_mult_ub + ub_mult_la + ua_mult_lb)
     | Radix_3 ->
-      let k = calc_k Radix_3 w in
       let k2 = k * 2 in
       let k3 = k * 3 in
       let k4 = k * 4 in
