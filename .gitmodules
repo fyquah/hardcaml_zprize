@@ -1,4 +1,0 @@
-[submodule "aws-fpga"]
-	path = aws-fpga
-	url = https://github.com/aws/aws-fpga.git
-	ignore = dirty
