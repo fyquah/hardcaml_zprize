@@ -79,13 +79,13 @@ module Make (Num_bits : Num_bits.S) = struct
   end
 
   let arbitrate_multiply
-      ~(config : Config.t)
-      ~scope
-      ~clock
-      ~valid
-      ~latency_without_arbitration
-      (x1, y1)
-      (x2, y2)
+    ~(config : Config.t)
+    ~scope
+    ~clock
+    ~valid
+    ~latency_without_arbitration
+    (x1, y1)
+    (x2, y2)
     =
     let enable = vdd in
     assert (width y1 = width y2);
@@ -181,7 +181,7 @@ module Make (Num_bits : Num_bits.S) = struct
       let scope = Scope.sub_scope scope "stage0" in
       { y1_plus_x1
       ; y1_minus_x1
-      ; y2_plus_x2 
+      ; y2_plus_x2
       ; y2_minus_x2
       ; p1 = Xyzt.map ~f:pipe p1
       ; p2 = Xyt.map ~f:pipe p2
@@ -207,8 +207,12 @@ module Make (Num_bits : Num_bits.S) = struct
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
 
-    let create ~config ~scope ~clock 
-        { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; y2_plus_x2; y2_minus_x2; valid } =
+    let create
+      ~config
+      ~scope
+      ~clock
+      { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; y2_plus_x2; y2_minus_x2; valid }
+      =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       let c_A, c_B =
@@ -229,15 +233,11 @@ module Make (Num_bits : Num_bits.S) = struct
           ~valid
           ~latency_without_arbitration:(Config.multiply_latency ~reduce:true)
           (p1.t, p2.t)
-          (p1.z, of_z (Modulo_ops.of_int 2)) (* CR rayesantharao: don't use a multiply for this! *)
+          (p1.z, of_z (Modulo_ops.of_int 2))
+        (* CR rayesantharao: don't use a multiply for this! *)
       in
       let scope = Scope.sub_scope scope "stage1" in
-      { c_A
-      ; c_B
-      ; t1_times_t2
-      ; c_D
-      ; valid = pipe valid
-      }
+      { c_A; c_B; t1_times_t2; c_D; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
   end
@@ -258,16 +258,11 @@ module Make (Num_bits : Num_bits.S) = struct
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
 
-    let create
-        ~config
-        ~scope
-        ~clock
-        { Stage1.t1_times_t2; c_B; c_A; c_D; valid }
-      =
+    let create ~config ~scope ~clock { Stage1.t1_times_t2; c_B; c_A; c_D; valid } =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       let c_C, _ =
-        let k = Modulo_ops.(config.d * (of_int 2)) in
+        let k = Modulo_ops.(config.d * of_int 2) in
         arbitrate_multiply
           ~config
           ~scope
@@ -275,15 +270,11 @@ module Make (Num_bits : Num_bits.S) = struct
           ~valid
           ~latency_without_arbitration
           (t1_times_t2, of_z k)
-          (c_A, of_z config.a) (* CR rayesantharao: This is useless *)
+          (c_A, of_z config.a)
+        (* CR rayesantharao: This is useless *)
       in
       let scope = Scope.sub_scope scope "stage2" in
-      { c_A = pipe c_A
-      ; c_B = pipe c_B
-      ; c_C
-      ; c_D = pipe c_D
-      ; valid = pipe valid
-      }
+      { c_A = pipe c_A; c_B = pipe c_B; c_C; c_D = pipe c_D; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
   end
@@ -301,23 +292,11 @@ module Make (Num_bits : Num_bits.S) = struct
     let latency_without_arbitration (config : Config.t) = config.adder_stages
     let latency (config : Config.t) = latency_without_arbitration config
 
-    let create
-        ~config
-        ~scope
-        ~clock
-        { Stage2.c_A
-        ; c_B
-        ; c_C
-        ; c_D
-        ; valid
-        }
-      =
+    let create ~config ~scope ~clock { Stage2.c_A; c_B; c_C; c_D; valid } =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
-      let c_E =
-        sub_pipe ~scope ~latency ~config ~clock c_B c_A
-      in
+      let c_E = sub_pipe ~scope ~latency ~config ~clock c_B c_A in
       let c_F = sub_pipe ~scope ~latency ~config ~clock c_D c_C in
       let c_G = add_pipe ~scope ~latency ~config ~clock c_D c_C in
       let c_H = add_pipe ~scope ~latency ~config ~clock c_B c_A in
