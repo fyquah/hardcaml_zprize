@@ -52,9 +52,7 @@ let rec create_recursive
       | Multiply (a, b) -> a, b
       | Square a -> a, a
     in
-    let res = Ground_multiplier.create ~clock ~enable ~config:ground_multiplier a b in
-    let k2 = 2 * calc_k Radix_2 (Multiplier_input.width input) in
-    drop_bottom res k2 @: zero k2
+    Ground_multiplier.create ~clock ~enable ~config:ground_multiplier a b
   | radix :: remaining_level_radices ->
     create_level
       ~scope
