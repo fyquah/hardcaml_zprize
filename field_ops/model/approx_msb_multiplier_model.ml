@@ -88,10 +88,7 @@ let split3 ~k a =
 
 let rec approx_msb_multiply ~radices:arg_radices ~w a b =
   match arg_radices with
-  | [] ->
-    let k = calc_k Radix_2 w in
-    let k2 = k * 2 in
-    Z.(((a * b) asr k2) lsl k2)
+  | [] -> Z.(a * b)
   | hd :: tl ->
     let k = calc_k hd w in
     (match hd with
