@@ -1,8 +1,10 @@
 open Core
-open Field_ops_lib
 open Test_ec_fpn_dbl
 
-let config = Config_presets.For_bls12_377.ec_fpn_ops_with_barrett_reduction
+let config =
+  Elliptic_curve_lib.Config_presets.For_bls12_377.ec_fpn_ops_with_barrett_reduction
+;;
+
 let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =

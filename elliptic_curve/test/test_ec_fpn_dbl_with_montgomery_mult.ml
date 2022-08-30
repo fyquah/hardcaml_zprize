@@ -1,8 +1,8 @@
 open Core
-open Field_ops_lib
+open Elliptic_curve_lib
 open Test_ec_fpn_dbl
 
-module Montgomery_mult = Montgomery_mult.With_interface (struct
+module Montgomery_mult = Field_ops_lib.Montgomery_mult.With_interface (struct
   let bits = 377
 end)
 

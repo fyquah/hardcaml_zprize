@@ -1,6 +1,6 @@
 open Core
 module Extended_euclidean = Field_ops_lib.Extended_euclidean
-module Point = Field_ops_lib.Point
+module Point = Elliptic_curve_lib.Point
 
 let a_big_prime =
   Z.of_string

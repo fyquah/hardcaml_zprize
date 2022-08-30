@@ -1,8 +1,9 @@
 open Core
 open Hardcaml
-open Field_ops_lib
+open Elliptic_curve_lib
 module Config = Ec_fpn_dbl.Config
 module Jacobian = Point.Jacobian
+module Utils = Field_ops_test.Utils
 
 module Ec_fpn_dbl = Ec_fpn_dbl.With_interface (struct
   let bits = 377

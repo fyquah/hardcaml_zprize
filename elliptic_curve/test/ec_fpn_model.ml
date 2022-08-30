@@ -1,5 +1,5 @@
 open Core
-open Field_ops_lib
+open Elliptic_curve_lib
 
 let mod' ~p x =
   let open Z in
@@ -12,7 +12,7 @@ let make_multiply_op ~montgomery ~p =
   if montgomery
   then (
     let r = one lsl log2up p in
-    let r' = Utils.modulo_inverse ~p r in
+    let r' = Field_ops_test.Utils.modulo_inverse ~p r in
     Staged.stage (fun a b -> mod_p (a * b * r')))
   else Staged.stage (fun a b -> mod_p (a * b))
 ;;

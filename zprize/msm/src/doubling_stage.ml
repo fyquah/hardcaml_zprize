@@ -1,9 +1,9 @@
 open Hardcaml
 open Signal
-open Field_ops_lib
 
 include struct
-  open Field_ops_lib
+  open Elliptic_curve_lib
+  module Config_presets = Config_presets
   module Ec_fpn_dbl = Ec_fpn_dbl
 end
 

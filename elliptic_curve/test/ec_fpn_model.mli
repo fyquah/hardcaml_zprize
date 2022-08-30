@@ -1,6 +1,6 @@
 (** Slow models for eliptic curve operations. *)
 
-open Field_ops_lib
+open Elliptic_curve_lib
 
 val point_double
   :  montgomery:bool

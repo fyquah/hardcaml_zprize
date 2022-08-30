@@ -72,7 +72,7 @@ let%expect_test _ =
     { Montgomery_mult.Config.multiplier_config =
         `Multiplier Test_karatsuba_ofman_mult.config_four_stages
     ; montgomery_reduction_config =
-        Config_presets.For_bls12_377.montgomery_reduction_config
+        Elliptic_curve_lib.Config_presets.For_bls12_377.montgomery_reduction_config
     }
   in
   let test_cases =

@@ -1,9 +1,9 @@
 open Hardcaml
 open Signal
-open Field_ops_lib
+open Elliptic_curve_lib
 
 include struct
-  open Field_ops_lib
+  open Elliptic_curve_lib
   module Ec_fpn_mixed_add = Ec_fpn_mixed_add
 end
 

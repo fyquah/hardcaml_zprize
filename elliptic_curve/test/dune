@@ -1,5 +1,5 @@
 (library
- (name field_ops_test)
+ (name elliptic_curve_test)
  (libraries
   ark_bls12_377_g1
   base
@@ -9,9 +9,9 @@
   ctypes.foreign
   hardcaml
   hardcaml_verify
-  field_ops_lib
-  ; TODO(fyquah): Don't depend on [elliptic_curve_lib] here
   elliptic_curve_lib
+  field_ops_lib
+  field_ops_test
   unix)
  (inline_tests)
  (preprocess

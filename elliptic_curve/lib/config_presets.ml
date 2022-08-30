@@ -1,5 +1,6 @@
 open Base
 open Hardcaml
+open Field_ops_lib
 
 module For_bls12_377 = struct
   let p = Ark_bls12_377_g1.modulus ()

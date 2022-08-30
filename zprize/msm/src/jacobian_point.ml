@@ -1,5 +1,5 @@
 open Hardcaml
-open Field_ops_lib
+open Elliptic_curve_lib
 
 module T = struct
   type 'a t = 'a Point.Jacobian.t =

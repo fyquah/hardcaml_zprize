@@ -4,6 +4,7 @@
   ark_bls12_377_g1
   base
   hardcaml
+  elliptic_curve_lib
   field_ops_lib
   twisted_edwards_model_lib)
  (preprocess

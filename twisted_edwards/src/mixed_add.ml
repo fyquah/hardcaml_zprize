@@ -5,17 +5,22 @@ open Signal
 include struct
   open Field_ops_lib
   module Arbitrate = Arbitrate
-  module Ec_fpn_ops_config = Ec_fpn_ops_config
   module Modulo_adder_pipe = Modulo_adder_pipe
   module Modulo_subtractor_pipe = Modulo_subtractor_pipe
   module Modulo_double_pipe = Modulo_double_pipe
+end
+
+include struct
+  open Elliptic_curve_lib
+  module Config_presets = Config_presets
+  module Ec_fpn_ops_config = Ec_fpn_ops_config
 end
 
 module Model = Twisted_edwards_model_lib
 module Modulo_ops = Model.Bls12_377_util.Modulo_ops
 
 module Config = struct
-  type fn = Field_ops_lib.Ec_fpn_ops_config.fn =
+  type fn = Ec_fpn_ops_config.fn =
     { latency : int
     ; impl : scope:Scope.t -> clock:t -> enable:t -> t -> t option -> t
     }
@@ -41,7 +46,7 @@ module Config = struct
 
   module For_bls12_377 = struct
     let with_barrett_reduction : t Lazy.t =
-      let open Field_ops_lib.Config_presets.For_bls12_377 in
+      let open Config_presets.For_bls12_377 in
       let%map.Lazy { Model.Twisted_edwards_curve.a; d; _ } =
         Model.Bls12_377_params.twisted_edwards
       in

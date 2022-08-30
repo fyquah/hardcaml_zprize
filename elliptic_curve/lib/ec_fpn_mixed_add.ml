@@ -1,6 +1,7 @@
 open! Base
 open! Hardcaml
 open! Signal
+open! Field_ops_lib
 open! Reg_with_enable
 open! Point
 

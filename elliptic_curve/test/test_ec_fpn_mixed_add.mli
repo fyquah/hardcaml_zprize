@@ -1,5 +1,5 @@
 open Hardcaml
-open Field_ops_lib
+open Elliptic_curve_lib
 open Point
 module Config = Ec_fpn_mixed_add.Config
 

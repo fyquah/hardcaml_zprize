@@ -18,7 +18,7 @@ module Barrett_reduction377 = Barrett_reduction.With_interface (struct
   let bits = 377
 end)
 
-module Ec_fpn_dbl = Ec_fpn_dbl.With_interface (struct
+module Ec_fpn_dbl = Elliptic_curve_lib.Ec_fpn_dbl.With_interface (struct
   let bits = 377
 end)
 
@@ -172,7 +172,8 @@ let command_montgomery_mult =
                         ~ground_multiplier
                         [ Radix_2; Radix_3; Radix_3 ]))
              ; montgomery_reduction_config =
-                 Config_presets.For_bls12_377.montgomery_reduction_config
+                 Elliptic_curve_lib.Config_presets.For_bls12_377
+                 .montgomery_reduction_config
              }
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
@@ -193,7 +194,8 @@ let command_barrett_reduction =
        let database = Scope.circuit_database scope in
        let circuit =
          B.create
-           ~config:Config_presets.For_bls12_377.barrett_reduction_config
+           ~config:
+             Elliptic_curve_lib.Config_presets.For_bls12_377.barrett_reduction_config
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
          |> C.create_exn ~name:"barrett_reduction"
@@ -214,10 +216,11 @@ let command_barrett_mult =
          B.create
            ~config:
              { multiplier_config =
-                 Config_presets.For_bls12_377.montgomery_reduction_config
+                 Elliptic_curve_lib.Config_presets.For_bls12_377
+                 .montgomery_reduction_config
                    .multiplier_config
              ; barrett_reduction_config =
-                 Config_presets.For_bls12_377.barrett_reduction_config
+                 Elliptic_curve_lib.Config_presets.For_bls12_377.barrett_reduction_config
              }
            ~p:(Ark_bls12_377_g1.modulus ())
            scope
@@ -236,13 +239,16 @@ let command_point_double =
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
        let circuit =
-         let config = Config_presets.For_bls12_377.ec_fpn_ops_with_montgomery_reduction in
+         let config =
+           Elliptic_curve_lib.Config_presets.For_bls12_377
+           .ec_fpn_ops_with_montgomery_reduction
+         in
          M.create ~config scope |> C.create_exn ~name:"point_double"
        in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
 ;;
 
-module Ec_fpn_mixed_add = Ec_fpn_mixed_add.With_interface (struct
+module Ec_fpn_mixed_add = Elliptic_curve_lib.Ec_fpn_mixed_add.With_interface (struct
   let bits = 377
 end)
 
@@ -267,7 +273,7 @@ let command_point_add =
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
        let p = Ark_bls12_377_g1.modulus () in
-       let reduce : Field_ops_lib.Ec_fpn_mixed_add.Config.fn =
+       let reduce : Elliptic_curve_lib.Ec_fpn_mixed_add.Config.fn =
          let config =
            { Montgomery_reduction.Config.multiplier_config =
                Karatsuba_ofman_mult.Config.generate
@@ -286,7 +292,7 @@ let command_point_add =
          in
          { impl; latency }
        in
-       let square : Field_ops_lib.Ec_fpn_mixed_add.Config.fn =
+       let square : Elliptic_curve_lib.Ec_fpn_mixed_add.Config.fn =
          let config =
            { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
            ; ground_multiplier
@@ -299,7 +305,7 @@ let command_point_add =
          in
          { impl; latency }
        in
-       let multiply : Field_ops_lib.Ec_fpn_mixed_add.Config.fn =
+       let multiply : Elliptic_curve_lib.Ec_fpn_mixed_add.Config.fn =
          let config =
            Karatsuba_ofman_mult.Config.generate
              ~ground_multiplier

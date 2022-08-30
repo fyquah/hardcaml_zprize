@@ -2,7 +2,7 @@ open Hardcaml
 open Signal
 
 module Config : sig
-  type fn = Field_ops_lib.Ec_fpn_ops_config.fn =
+  type fn = Elliptic_curve_lib.Ec_fpn_ops_config.fn =
     { latency : int
     ; impl : scope:Scope.t -> clock:t -> enable:t -> t -> t option -> t
     }

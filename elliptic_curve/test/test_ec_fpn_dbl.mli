@@ -1,5 +1,5 @@
 open Hardcaml
-open Field_ops_lib
+open Elliptic_curve_lib
 module Config = Ec_fpn_dbl.Config
 module Jacobian = Point.Jacobian
 

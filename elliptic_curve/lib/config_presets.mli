@@ -1,3 +1,5 @@
+open Field_ops_lib
+
 module For_bls12_377 : sig
   val multiply : Ec_fpn_ops_config.fn
   val montgomery_reduce : Ec_fpn_ops_config.fn
