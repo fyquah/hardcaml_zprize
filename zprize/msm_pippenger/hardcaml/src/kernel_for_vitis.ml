@@ -39,15 +39,9 @@ let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_de
   let clear = ~:ap_rst_n in
   let spec = Reg_spec.create ~clock ~clear () in
   let open Always in
-  let input_buffer_width =
-    (* Buffer enough input so we can extract a point. *)
-    (* TODO simplify this*)
-    Int.round_up input_bits ~to_multiple_of:axi_bits
-  in
+  let input_buffer_width = Int.round_up input_bits ~to_multiple_of:axi_bits in
   let input_l = Variable.reg spec ~width:input_buffer_width in
-  let output_buffer_width =
-    Int.round_up Top.result_point_bits ~to_multiple_of:(2 * axi_bits)
-  in
+  let output_buffer_width = Int.round_up Top.result_point_bits ~to_multiple_of:axi_bits in
   let output_l = Variable.reg spec ~width:output_buffer_width in
   let sm = State_machine.create (module State) spec in
   let start = Variable.reg spec ~width:1 in
@@ -78,7 +72,7 @@ let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_de
   let host_to_fpga_dest = Axi512.Stream.Dest.Of_always.wire zero in
   let maybe_shift_input =
     [ host_to_fpga_dest.tready
-      <-- (valid_input_bits.value <=:. input_buffer_width - axi_bits)
+      <-- (valid_input_bits.value +:. axi_bits <=:. input_buffer_width)
     ; when_
         (host_to_fpga.tvalid &: host_to_fpga_dest.tready.value)
         [ input_l <-- sel_top (host_to_fpga.tdata @: input_l.value) input_buffer_width
@@ -86,7 +80,7 @@ let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_de
         ; when_
             (valid_input_bits.value +:. axi_bits >=:. input_bits)
             [ scalar_valid <-- vdd
-            ; valid_input_bits <-- valid_input_bits.value +:. axi_bits -:. input_bits
+            ; valid_input_bits <--. 0
             ; when_ host_to_fpga.tlast [ last_scalar <-- vdd ]
             ]
         ]
@@ -99,23 +93,28 @@ let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_de
   in
   let maybe_shift_output =
     [ result_point_ready
-      <-- (valid_output_bits.value <=:. output_buffer_width - Top.result_point_bits)
+      <-- (fpga_to_host.tvalid.value
+          &: fpga_to_host_dest.tready
+          |: ~:(fpga_to_host.tvalid.value))
     ; when_
         (result_point_ready.value &: top.result_point_valid)
-        [ output_l <-- sel_top (top.result_point @: output_l.value) output_buffer_width
-        ; valid_output_bits <-- valid_output_bits.value +:. Top.result_point_bits
-        ; when_ (valid_output_bits.value >=:. axi_bits) [ fpga_to_host.tvalid <-- vdd ]
+        [ output_l <-- uresize top.result_point output_buffer_width
+        ; valid_output_bits <--. Top.result_point_bits
+        ; fpga_to_host.tvalid <-- vdd
         ]
     ; when_
         (fpga_to_host_dest.tready &: fpga_to_host.tvalid.value)
-        [ valid_output_bits <-- valid_output_bits.value -:. axi_bits ]
+        [ valid_output_bits <-- valid_output_bits.value -:. axi_bits
+        ; output_l <-- srl output_l.value axi_bits
+        ; fpga_to_host.tvalid <-- (valid_output_bits.value >=:. axi_bits)
+        ]
     ]
     |> proc
   in
   compile
     [ start <-- gnd
-    ; fpga_to_host.tstrb <--. 0 (* TODO fix this*)
-    ; fpga_to_host.tkeep <--. 0
+    ; fpga_to_host.tstrb <--. -1
+    ; fpga_to_host.tkeep <--. -1
     ; fpga_to_host.tlast <--. 0
     ; when_ top.scalar_and_input_point_ready [ scalar_valid <-- gnd; last_scalar <-- gnd ]
     ; when_ fpga_to_host_dest.tready [ fpga_to_host.tvalid <-- gnd ]
@@ -142,7 +141,7 @@ let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_de
   { O.host_to_fpga_dest = Axi512.Stream.Dest.Of_always.value host_to_fpga_dest
   ; fpga_to_host =
       { (Axi512.Stream.Source.Of_always.value fpga_to_host) with
-        tdata = sel_top output_l.value axi_bits
+        tdata = sel_bottom output_l.value axi_bits
       }
   }
 ;;
