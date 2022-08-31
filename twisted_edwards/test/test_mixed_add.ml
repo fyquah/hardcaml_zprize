@@ -113,7 +113,7 @@ module Make
           then (
             (* convert back out of the internal fpga representation *)
             let twisted_edwards_p3 =
-              Model.Twisted_edwards_curve.from_fpga_internal_representation
+              Model.Twisted_edwards_curve.from_fpga_bucket_representation
                 { Model.Twisted_edwards_curve.x = p3.x; y = p3.y; z = p3.z; t = p3.t }
             in
             { Xyzt.x = twisted_edwards_p3.x
@@ -131,7 +131,7 @@ module Make
         then (
           (* convert p1 to internal fpga representation and p2 to host precompute representation *)
           let twisted_edwards_p1 =
-            Model.Twisted_edwards_curve.to_fpga_internal_representation
+            Model.Twisted_edwards_curve.to_fpga_bucket_representation
               { Model.Twisted_edwards_curve.x = p1.x; y = p1.y; z = p1.z; t = p1.t }
           in
           let twisted_edwards_p2 =

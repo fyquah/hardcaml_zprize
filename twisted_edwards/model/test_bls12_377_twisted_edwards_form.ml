@@ -76,32 +76,64 @@ let generate_point =
   |> Quickcheck.Generator.return
 ;;
 
-let mixed_add ~z ~host_precompute ~bls12_377_twisted_edwards_params fpga_point host_point =
+module Compute_type = struct
+  type t =
+    | Normal_mixed_add
+    | Precomputed_mixed_add
+    | Precomputed_full_add_bucket
+    | Precomputed_full_add_running
+    | Precomputed_full_add_triangle
+end
+
+let mixed_add
+  ~z
+  ~(compute_type : Compute_type.t)
+  ~bls12_377_twisted_edwards_params
+  fpga_point
+  host_point
+  =
   let fpga_point = ark_bls12_377_g1_to_twisted_edewards_affine fpga_point in
   let host_point = ark_bls12_377_g1_to_twisted_edewards_affine host_point in
-  if host_precompute
-  then
+  match compute_type with
+  | Precomputed_mixed_add ->
     Twisted_edwards_curve.add_unified_precomputed
-      (Twisted_edwards_curve.affine_to_fpga_internal_representation ~z fpga_point)
-      (Twisted_edwards_curve.affine_to_host_extended_representation
+      (Twisted_edwards_curve.affine_to_fpga_bucket_representation ~z fpga_point)
+      (Twisted_edwards_curve.affine_to_host_affine_with_t_representation
          bls12_377_twisted_edwards_params
          host_point)
-    |> Twisted_edwards_curve.fpga_internal_representation_to_affine
-  else
+    |> Twisted_edwards_curve.fpga_bucket_representation_to_affine
+  | Normal_mixed_add ->
     Twisted_edwards_curve.add_unified
       bls12_377_twisted_edwards_params
       (Twisted_edwards_curve.affine_to_extended ~z fpga_point)
       (Twisted_edwards_curve.affine_to_affine_with_t host_point)
     |> Twisted_edwards_curve.extended_to_affine
+  | Precomputed_full_add_bucket ->
+    Twisted_edwards_curve.add_full
+      (Twisted_edwards_curve.affine_to_fpga_bucket_representation ~z fpga_point)
+      (Twisted_edwards_curve.affine_to_host_extended_representation
+         bls12_377_twisted_edwards_params
+         host_point)
+    |> Twisted_edwards_curve.fpga_bucket_representation_to_affine
+  | Precomputed_full_add_running ->
+    let running_sum = fpga_point in
+    let bucket_sum = host_point in
+    Twisted_edwards_curve.add_full
+      (Twisted_edwards_curve.affine_to_fpga_running_representation
+         ~z
+         bls12_377_twisted_edwards_params
+         running_sum)
+      (Twisted_edwards_curve.affine_to_fpga_bucket_representation ~z bucket_sum)
+    |> Twisted_edwards_curve.fpga_running_representation_to_affine
+         bls12_377_twisted_edwards_params
+  | Precomputed_full_add_triangle -> raise_s [%message "unimplemented"]
 ;;
 
-let randomized_additive_inverse_test ~host_precompute =
+let randomized_additive_inverse_test ~compute_type =
   let bls12_377_twisted_edwards_params = Lazy.force Bls12_377_params.twisted_edwards in
   let test ~z p1 =
     let p2 = Ark_bls12_377_g1.neg p1 in
-    let obtained =
-      mixed_add ~z ~host_precompute ~bls12_377_twisted_edwards_params p1 p2
-    in
+    let obtained = mixed_add ~z ~compute_type ~bls12_377_twisted_edwards_params p1 p2 in
     assert (Z.equal obtained.x Z.zero)
   in
   let generate =
@@ -117,27 +149,34 @@ let randomized_additive_inverse_test ~host_precompute =
 ;;
 
 let%expect_test "Verify that res_extended.x = 0 (ignore y) where res_extended = p + -p \
-                 (no host precompute)"
+                 (normal mixed add, no host precompute)"
   =
-  randomized_additive_inverse_test ~host_precompute:false
+  randomized_additive_inverse_test ~compute_type:Normal_mixed_add
 ;;
 
 let%expect_test "Verify that res_extended.x = 0 (ignore y) where res_extended = p + -p \
-                 (with host precompute)"
+                 (mixed add, with host precompute)"
   =
-  randomized_additive_inverse_test ~host_precompute:true
+  randomized_additive_inverse_test ~compute_type:Precomputed_mixed_add
 ;;
 
-let randomized_sum_test ~host_precompute =
+let%expect_test "Verify that res_extended.x = 0 (ignore y) where res_extended = p + -p \
+                 (full adder, bucket sums)"
+  =
+  randomized_additive_inverse_test ~compute_type:Precomputed_full_add_bucket
+;;
+
+let%expect_test "Verify that res_extended.x = 0 (ignore y) where res_extended = p + -p \
+                 (full adder, running sums)"
+  =
+  randomized_additive_inverse_test ~compute_type:Precomputed_full_add_running
+;;
+
+let randomized_sum_test ~compute_type =
   let bls12_377_twisted_edwards_params = Lazy.force Bls12_377_params.twisted_edwards in
   let test ~z fpga_point host_point =
     let obtained_in_twisted_edwards_form =
-      mixed_add
-        ~z
-        ~host_precompute
-        ~bls12_377_twisted_edwards_params
-        fpga_point
-        host_point
+      mixed_add ~z ~compute_type ~bls12_377_twisted_edwards_params fpga_point host_point
     in
     let obtained =
       match
@@ -204,13 +243,25 @@ let randomized_sum_test ~host_precompute =
 ;;
 
 let%expect_test "Randomized bls12-377 adding equivalence with wierstrass form addition \
-                 (no host precompute)"
+                 (normal mixed add, no precompute)"
   =
-  randomized_sum_test ~host_precompute:false
+  randomized_sum_test ~compute_type:Normal_mixed_add
 ;;
 
 let%expect_test "Randomized bls12-377 adding equivalent with wierstrass form addition \
-                 (with host precompute)"
+                 (mixed add, with host precompute)"
   =
-  randomized_sum_test ~host_precompute:true
+  randomized_sum_test ~compute_type:Precomputed_mixed_add
+;;
+
+let%expect_test "Randomized bls12-377 adding equivalent with wierstrass form addition \
+                 (full add, bucket sums)"
+  =
+  randomized_sum_test ~compute_type:Precomputed_full_add_bucket
+;;
+
+let%expect_test "Randomized bls12-377 adding equivalent with wierstrass form addition \
+                 (full add, running sums)"
+  =
+  randomized_sum_test ~compute_type:Precomputed_full_add_running
 ;;
