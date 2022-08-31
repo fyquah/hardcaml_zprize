@@ -23,17 +23,19 @@
 
 #include <vector>
 
-#define DATA_SIZE 4192
+#define NUM_INPUTS 8
 
 int test_streaming(const std::string& binaryFile)
 {
-    auto size = DATA_SIZE;
+    auto num_inputs = NUM_INPUTS;
     cl_int err;
     cl::CommandQueue q;
     cl::Context context;
     cl::Kernel krnl_mm2s, krnl_loopback, krnl_s2mm;
+
     // Allocate Memory in Host Memory
     size_t vector_size_bytes = sizeof(int) * size;
+
     std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input(size);
     std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(size);
 

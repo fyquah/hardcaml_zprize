@@ -42,11 +42,18 @@ module Make (Config : Config.S) = struct
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
   let result_point_bits = Mixed_add.Xyzt.(fold port_widths ~init:0 ~f:( + ))
 
+  (* +1 as we register all assignments to the RAM ports. *)
+  let ram_latency = ram_read_latency + 1
+
   module Controller = Controller.Make (struct
     let window_size_bits = last_window_size_bits
     let num_windows = num_windows
     let affine_point_bits = input_point_bits
-    let pipeline_depth = adder_latency
+
+    let pipeline_depth =
+      (adder_latency + ram_latency) / 2 (* TODO why do we have to /2 here*)
+    ;;
+
     let log_stall_fifo_depth = controller_log_stall_fifo_depth
   end)
 
@@ -157,15 +164,26 @@ module Make (Config : Config.S) = struct
         ; affine_point = input_point
         }
     in
+    let ctrl_affine_point_as_xyt = Adder.Xyt.Of_signal.unpack ctrl.adder_affine_point in
+    Adder.Xyt.(
+      iter2 ctrl_affine_point_as_xyt port_names ~f:(fun s n ->
+        ignore (s -- ("adder_p2$" ^ n) : Signal.t)));
     (* TODO If timing is bad we could potentially pipeline some of these per-RAM *)
-    let result_window = pipeline spec ctrl.window ~n:(ram_read_latency + adder_latency) in
-    let result_bucket = pipeline spec ctrl.bucket ~n:(ram_read_latency + adder_latency) in
+    let result_window = pipeline spec ctrl.window ~n:(ram_latency + adder_latency) in
+    let result_bucket = pipeline spec ctrl.bucket ~n:(ram_latency + adder_latency) in
     let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
     let result_write_enable =
-      pipeline spec adder_valid_in ~n:(ram_read_latency + adder_latency)
+      pipeline spec adder_valid_in ~n:(ram_latency + adder_latency)
+      -- "result_write_enable"
     in
     let ram_port_a = Ram_port.Of_always.reg spec in
     let ram_port_b = Ram_port.Of_always.reg spec in
+    Ram_port.(
+      iter2 (Of_always.value ram_port_a) port_names ~f:(fun s n ->
+        ignore (s -- ("ram_a$" ^ n) : Signal.t)));
+    Ram_port.(
+      iter2 (Of_always.value ram_port_b) port_names ~f:(fun s n ->
+        ignore (s -- ("ram_b$" ^ n) : Signal.t)));
     let sm = State_machine.create (module State) spec in
     ignore (sm.current -- "STATE" : Signal.t);
     let port_a_q, port_b_q =
@@ -202,26 +220,30 @@ module Make (Config : Config.S) = struct
           ())
       |> List.unzip
     in
+    List.iteri port_a_q ~f:(fun i port ->
+      ignore (port -- (Int.to_string i ^ "ram_a_$q") : Signal.t));
+    List.iteri port_b_q ~f:(fun i port ->
+      ignore (port -- (Int.to_string i ^ "ram_b_$q") : Signal.t));
     let adder =
       Adder.hierarchical
         scope
         ~config:adder_config
         { clock
-        ; valid_in = pipeline spec adder_valid_in ~n:ram_read_latency
+        ; valid_in = pipeline spec adder_valid_in ~n:ram_latency
         ; p1 =
             Mixed_add.Xyzt.Of_signal.unpack
-              (mux (pipeline spec ctrl.window ~n:ram_read_latency) port_b_q)
+              (mux (pipeline spec ctrl.window ~n:ram_latency) port_b_q)
         ; p2 =
-            Mixed_add.Xyt.Of_signal.unpack
-              (pipeline
-                 spec
-                 (mux2 ctrl.bubble (ones input_point_bits) ctrl.adder_affine_point)
-                 ~n:ram_read_latency)
+            Mixed_add.Xyt.Of_signal.(
+              pipeline
+                spec
+                (mux2 ctrl.bubble (of_int 0) ctrl_affine_point_as_xyt)
+                ~n:ram_latency)
         }
     in
     (* State machine for error checking and flow control. *)
     let wait_count =
-      Variable.reg spec ~width:(num_bits_to_represent (ram_read_latency + adder_latency))
+      Variable.reg spec ~width:(num_bits_to_represent (ram_latency + adder_latency))
     in
     let window_read_address =
       Variable.reg spec ~width:(num_bits_to_represent num_windows)
@@ -260,7 +282,7 @@ module Make (Config : Config.S) = struct
           ; ( Wait_for_adder
             , [ wait_count <-- wait_count.value +:. 1
               ; when_
-                  (wait_count.value ==:. ram_read_latency + adder_latency - 1)
+                  (wait_count.value ==:. ram_latency + adder_latency - 1)
                   [ window_read_address <--. 0
                   ; ram_port_a.address <--. (1 lsl window_size_bits) - 1
                   ; sm.set_next Read_result
@@ -287,10 +309,9 @@ module Make (Config : Config.S) = struct
           ]
       ];
     { O.result_point =
-        mux (pipeline spec ram_port_a.address.value ~n:ram_read_latency) port_a_q
+        mux (pipeline spec ram_port_a.address.value ~n:ram_latency) port_a_q
     ; result_point_valid =
-        sm.is Read_result
-        &: pipeline spec ram_port_a.read_enable.value ~n:ram_read_latency
+        sm.is Read_result &: pipeline spec ram_port_a.read_enable.value ~n:ram_latency
     ; scalar_and_input_point_ready = ctrl.scalar_read
     ; error = sm.is Error
     }
