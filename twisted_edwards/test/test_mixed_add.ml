@@ -8,7 +8,7 @@ include struct
 end
 
 module Model = Twisted_edwards_model_lib
-module Utils = Snarks_r_fun_test.Utils
+module Utils = Field_ops_test.Utils
 module Config = Mixed_add.Config
 
 module Mixed_add = Mixed_add.Make (struct

@@ -25,16 +25,20 @@ let%expect_test "bls12-377 params in various forms" =
     ((a 0x0) (b 0x1)
      (s
       0x19d47d415b5ff60a87a8b7bbab25eb6427dd58ca38e47030efd1e6310ac7bf3079221bf2b4bd72c5106e9e70fcc6156)
-     (alpha 0x-1)) |}];
+     (alpha 0x-1)
+     (twisted_scale
+      0x363b01df81a0405e86206f2cc504d147752b91b664d91d4c82fed217902ee874354485836fa3ccba3af539c173857b)) |}];
   let bls12_377_twisted_edwards_params = Lazy.force Bls12_377_params.twisted_edwards in
   Stdio.print_s
     ([%sexp_of: Twisted_edwards_curve.params] bls12_377_twisted_edwards_params);
   [%expect
     {|
     ((a
-      0x1488b9a0b6aa7ae13b828244107ca1e0c44bf8cd08c4846bf2dcb63c1dc7fb1ba33f82613c70b074cfdbb6a5eca47fc)
+      0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000000)
      (d
-      0x65aeac0c5a693cb282dd9c2b997f1d0dde1a663068cb485fc596cbf82cc84e5cd7651e1c38f4f9380b0495a135b7ff)) |}]
+      0xe2dcedff103e7161354a88156e4b00fe66a526a0237cfe5f683497c9afb7635d5c9307f78e160e14f2b6d4bd949004)
+     (twisted_scale
+      0x363b01df81a0405e86206f2cc504d147752b91b664d91d4c82fed217902ee874354485836fa3ccba3af539c173857b)) |}]
 ;;
 
 let generate_with_probability ~p ~then_ ~else_ =

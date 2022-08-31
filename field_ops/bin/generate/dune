@@ -1,0 +1,10 @@
+(executables
+ (names verilog)
+ (libraries
+  base
+  core_unix.command_unix
+  hardcaml
+  field_ops_lib
+  field_ops_test)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

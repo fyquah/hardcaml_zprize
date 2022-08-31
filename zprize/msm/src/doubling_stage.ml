@@ -1,9 +1,9 @@
 open Hardcaml
 open Signal
-open Snarks_r_fun
 
 include struct
-  open Snarks_r_fun
+  open Elliptic_curve_lib
+  module Config_presets = Config_presets
   module Ec_fpn_dbl = Ec_fpn_dbl
 end
 

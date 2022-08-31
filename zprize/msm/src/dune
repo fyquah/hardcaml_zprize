@@ -6,6 +6,7 @@
   hardcaml
   hardcaml_axi
   hardcaml_xilinx
-  snarks_r_fun)
+  elliptic_curve_lib
+  field_ops_lib)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))
