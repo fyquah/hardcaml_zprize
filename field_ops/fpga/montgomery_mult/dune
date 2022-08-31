@@ -1,0 +1,5 @@
+(rule
+ (targets montgomery_mult.v)
+ (deps ../../bin/generate/verilog.exe)
+ (action
+  (run %{deps} montgomery-mult -o montgomery_mult.v)))

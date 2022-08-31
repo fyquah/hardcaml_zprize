@@ -1,0 +1,8 @@
+(rule
+ (mode promote)
+ (action (with-stdout-to krnl_ntt.v (run ../../../hardcaml/bin/generate.exe kernel 9))))
+
+(rule
+ (mode promote)
+ (target stub.sv)
+ (action (write-file %{target} "")))

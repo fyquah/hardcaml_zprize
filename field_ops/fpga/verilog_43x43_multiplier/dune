@@ -1,0 +1,10 @@
+(rule
+ (targets verilog_43x43_multiplier.v)
+ (deps ../../bin/generate/verilog.exe)
+ (action
+  (run
+   %{deps}
+   verilog-43x43-multiplier
+   -latency 3
+   -o
+   verilog_43x43_multiplier.v)))

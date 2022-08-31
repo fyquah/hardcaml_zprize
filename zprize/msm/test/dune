@@ -10,6 +10,6 @@
   (language c)
   (names zprize_msm_test_stubs setup_stream))
  (inline_tests)
- (libraries zprize_msm hardcaml_waveterm snarks_r_fun snarks_r_fun_test)
+ (libraries zprize_msm hardcaml_waveterm field_ops_lib field_ops_test)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))

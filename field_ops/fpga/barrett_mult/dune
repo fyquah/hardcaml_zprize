@@ -1,0 +1,7 @@
+(rule
+ (targets barrett_mult.v)
+ (deps ../../bin/generate/verilog.exe)
+ (mode promote)
+ (action
+  (run %{deps} barrett-mult -o barrett_mult.v)))
+

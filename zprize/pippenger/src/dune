@@ -1,0 +1,4 @@
+(library
+ (name pippenger)
+ (libraries base hardcaml hardcaml_axi hardcaml_xilinx hardcaml_verify)
+ (preprocess (pps ppx_jane ppx_deriving_hardcaml)))

@@ -1,0 +1,9 @@
+(rule
+ (targets specialized_43x43_multiplier.v)
+ (deps ../../bin/generate/verilog.exe)
+ (action
+  (run
+   %{deps}
+   specialized-43x43-multiplier
+   -o
+   specialized_43x43_multiplier.v)))

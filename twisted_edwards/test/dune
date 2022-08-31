@@ -1,0 +1,13 @@
+(library
+ (name twisted_edwards_test_lib)
+ (libraries
+  ark_bls12_377_g1
+  base
+  hardcaml
+  field_ops_lib
+  field_ops_test
+  twisted_edwards_lib
+  twisted_edwards_model_lib)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

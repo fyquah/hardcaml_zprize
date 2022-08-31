@@ -1,5 +1,5 @@
 open Hardcaml
-open Snarks_r_fun
+open Elliptic_curve_lib
 
 type 'a t = 'a Point.Affine.t =
   { x : 'a

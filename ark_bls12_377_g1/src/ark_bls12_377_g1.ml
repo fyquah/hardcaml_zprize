@@ -39,6 +39,7 @@ module External = struct
     foreign "ark_bls12_377_add" (ptr affine @-> ptr affine @-> returning (ptr affine))
   ;;
 
+  let neg = foreign "ark_bls12_377_g1_neg" (ptr affine @-> returning (ptr affine))
   let mul = foreign "ark_bls12_377_mul" (ptr affine @-> int64_t @-> returning (ptr affine))
 
   let subgroup_generator =
@@ -106,6 +107,12 @@ let subgroup_generator () =
 
 let add (a : affine) (b : affine) =
   let ptr = External.add a b in
+  Caml.Gc.finalise External.free ptr;
+  ptr
+;;
+
+let neg (a : affine) =
+  let ptr = External.neg a in
   Caml.Gc.finalise External.free ptr;
   ptr
 ;;

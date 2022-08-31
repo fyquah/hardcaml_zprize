@@ -1,0 +1,6 @@
+(library
+ (name field_ops_model)
+ (libraries ark_bls12_377_g1 base bignum core field_ops_lib zarith)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
