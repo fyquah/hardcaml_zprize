@@ -14,8 +14,8 @@ let%expect_test "print constants" =
 
 let calc_k radix w =
   match radix with
-  | Radix.Radix_2 -> Float.to_int (Float.( * ) (Float.of_int w) 0.475)
-  | Radix.Radix_3 -> Float.to_int (Float.( * ) (Float.of_int w) 0.33)
+  | Radix.Radix_2 -> Float.to_int (Float.( * ) (Float.of_int w) 0.43)
+  | Radix.Radix_3 -> Float.to_int (Float.( * ) (Float.of_int w) 0.333333)
 ;;
 
 let rec estimated_upper_bound_error ~radices ~w =
@@ -69,7 +69,7 @@ let%expect_test "Delta error" =
   Stdio.printf
     "Upper bound error = %s * (2^377)\n"
     (Z.to_string (estimate_delta_error_2_to_n [ Radix_3; Radix_3; Radix_2 ]));
-  [%expect {| Upper bound error = 2 * (2^377) |}]
+  [%expect {| Upper bound error = 4 * (2^377) |}]
 ;;
 
 let split_top_and_btm ~k a =
