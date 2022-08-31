@@ -14,7 +14,7 @@ let%expect_test "print constants" =
 
 let calc_k radix w =
   match radix with
-  | Radix.Radix_2 -> Float.to_int (Float.( * ) (Float.of_int w) 0.43)
+  | Radix.Radix_2 -> Float.to_int (Float.( * ) (Float.of_int w) 0.475)
   | Radix.Radix_3 -> Float.to_int (Float.( * ) (Float.of_int w) 0.33)
 ;;
 
@@ -67,9 +67,9 @@ let estimate_delta_error_2_to_n radices =
 
 let%expect_test "Delta error" =
   Stdio.printf
-    "Delta error = %s * (2^377)\n"
+    "Upper bound error = %s * (2^377)\n"
     (Z.to_string (estimate_delta_error_2_to_n [ Radix_3; Radix_3; Radix_2 ]));
-  [%expect {| Delta error = 1 * (2^377) |}]
+  [%expect {| Upper bound error = 2 * (2^377) |}]
 ;;
 
 let split_top_and_btm ~k a =
@@ -133,7 +133,7 @@ let rec approx_msb_multiply ~radices:arg_radices ~w a b =
 ;;
 
 let%expect_test "" =
-  let a = Z.(p - one) in
+  let a = Z.((one lsl 377) - one) in
   let b = m in
   let approx = approx_msb_multiply ~radices:[ Radix_3; Radix_3; Radix_2 ] ~w:378 a b in
   let actual = Z.(a * b) in

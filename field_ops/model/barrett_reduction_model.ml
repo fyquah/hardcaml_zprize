@@ -85,18 +85,19 @@ let test_random ~radices =
     ~f:(test ~radices)
 ;;
 
-let%expect_test "Special values" =
-  test ~debug:true ~radices:[ Radix_3 ] Z.((p - one) * (p - one));
+let%expect_test "A lot of ones" =
+  test ~debug:true ~radices:[ Radix_3 ] Z.((one lsl Int.(377 + 376)) - one);
   [%expect
     {|
     ("Intermediate values"
      (a'
-      0x2ae361e5c2ce90aa50d19387f20fa27378647ec3407997c0cf3622fba094800452217cc900000000000000000000000)
+      0x7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
      (q
-      0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508bffffffffffe)
+      0x130a846866203074bb61e502c177a7b9ddd686f33bb58d035796a446c2d36816876b43bc4e2152c8fcfeac62f26d7fc)
      (qp
-      0xfffbd84467d81fded21378127fb0ec1d636df9331285ecee000000000000002e16ba885fffffff7af73ffffffffffe)
-     (a_mod_p 0x1)) |}]
+      0x3f891a764056ca2cfda10e4dcb182419b0fdac616396f34667035dbba5862197fe6d6ff41a75ff65daceac62f26d7fc)
+     (a_mod_p
+      0xaaf9cc6c707187a3afe39a4a0beb4830aa7153e7dc69ad5ba905c4d1950de652026e785e58a00898419539d0d92801)) |}]
 ;;
 
 let%expect_test "" =
