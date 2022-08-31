@@ -12,7 +12,7 @@ let command_top =
         let module Circuit = Circuit.With_interface (Top.I) (Top.O) in
         let scope = Scope.create ~flatten_design:false () in
         let circ =
-          Circuit.create_exn ~name:"ntt" (Top.hierarchical ~build_mode:Synthesis scope)
+          Circuit.create_exn ~name:"msm_pippenger_top" (Top.hierarchical ~build_mode:Synthesis scope)
         in
         Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
 ;;
@@ -29,7 +29,7 @@ let command_kernel =
         let scope = Scope.create ~flatten_design:false () in
         let circ =
           Circuit.create_exn
-            ~name:"ntt"
+            ~name:"msm_pippenger_kernel"
             (Kernel_for_vitis.create ~build_mode:Synthesis scope)
         in
         Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
