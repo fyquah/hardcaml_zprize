@@ -41,7 +41,7 @@ module Config = struct
   let for_bls12_377 =
     { approx_msb_multiplier_config =
         { level_radices = [ Radix_3; Radix_3; Radix_2 ]
-        ; ground_multiplier = Verilog_multiply { latency = 2 }
+        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
         }
     ; half_multiplier_config =
         { level_radices = [ Radix_3; Radix_3; Radix_2 ]
