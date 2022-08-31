@@ -1,5 +1,5 @@
 open Core
-module Extended_euclidean = Snarks_r_fun.Extended_euclidean
+module Extended_euclidean = Field_ops_lib.Extended_euclidean
 
 type z = Z.t
 

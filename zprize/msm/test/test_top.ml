@@ -86,7 +86,7 @@ let setup_scalar_stream ~num_tasks ~scalar_num_bits ~scalars ~batch_size =
 ;;
 
 let p = Ark_bls12_377_g1.modulus ()
-let modulo_inverse x = Snarks_r_fun_test.Utils.modulo_inverse ~p x
+let modulo_inverse x = Field_ops_test.Utils.modulo_inverse ~p x
 let modulo_multiply a b = Z.(a * b mod p)
 let c_R = Z.(one lsl log2up p)
 let c_R' = modulo_inverse c_R

@@ -4,7 +4,8 @@
   ark_bls12_377_g1
   base
   hardcaml
-  snarks_r_fun
+  elliptic_curve_lib
+  field_ops_lib
   twisted_edwards_model_lib)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))
