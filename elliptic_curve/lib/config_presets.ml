@@ -25,7 +25,7 @@ module For_bls12_377 = struct
     let config =
       Karatsuba_ofman_mult.Config.generate
         [ Radix_3; Radix_3 ]
-        ~ground_multiplier:Specialized_43_bit_multiply
+        ~ground_multiplier:(Verilog_multiply { latency = 2 })
     in
     let latency = Karatsuba_ofman_mult.Config.latency config in
     let impl ~scope ~clock ~enable x y =
