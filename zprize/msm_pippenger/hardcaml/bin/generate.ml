@@ -45,7 +45,7 @@ let command_kernel =
         let scope = Scope.create ~flatten_design:false () in
         let circ =
           Circuit.create_exn
-            ~name:"msm_pippenger_kernel"
+            ~name:"krnl_msm_pippenger"
             (Kernel_for_vitis.create ~build_mode:Synthesis scope)
         in
         Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]

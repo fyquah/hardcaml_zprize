@@ -20,11 +20,16 @@
 
 #include <vector>
 
-#define DATA_SIZE 4192
+#define NUM_POINTS 8
+#define BITS_PER_POINT 377*3
+#define DDR_BITS 512
+
+// We round up our points to the nearest multiple of the AXI stream / DDR
+#define BYTES_PER_POINT (((BITS_PER_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 
 int test_streaming(const std::string& binaryFile)
 {
-    auto size = DATA_SIZE;
+    auto size = BYTES_PER_POINT * NUM_POINTS;
     cl_int err;
     cl::CommandQueue q;
     cl::Context context;
@@ -36,7 +41,7 @@ int test_streaming(const std::string& binaryFile)
 
     // Create the test data and Software Result
     for (int i = 0; i < size; i++) {
-        source_kernel_input[i] = i;
+	source_kernel_input[i] = i;
     }
 
     // OPENCL HOST CODE AREA START
