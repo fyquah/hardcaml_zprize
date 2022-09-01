@@ -1,8 +1,7 @@
 #!/bin/bash
 
 set -x
-
-../../../scripts/run_build.py \
+../../../vitis_infrastructure/scripts/run_build.py \
 	--top-level-name msm_pippenger \
 	--platform aws \
 	--build-dir build \

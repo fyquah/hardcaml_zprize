@@ -18,16 +18,16 @@
 //#include <experimental/xrt_ip.h>
 
 //#include "experimental/xrt_bo.h"
-#include <experimental/xrt_device.h>
-#include <experimental/xrt_kernel.h>
+//#include <experimental/xrt_device.h>
+//#include <experimental/xrt_kernel.h>
 
 #include <vector>
 
-#define NUM_INPUTS 8
+#define SIZE 4096
 
 int test_streaming(const std::string& binaryFile)
 {
-    auto num_inputs = NUM_INPUTS;
+    auto size = SIZE;
     cl_int err;
     cl::CommandQueue q;
     cl::Context context;
@@ -131,36 +131,6 @@ int test_streaming(const std::string& binaryFile)
     return match;
 }
 
-int test_register_interface(const std::string& binaryFile)
-{
-    unsigned int dev_index = 0;
-    auto device = xrt::device(dev_index);
-    std::cout << "Load the xclbin " << binaryFile << std::endl;
-    auto xclbin_uuid = device.load_xclbin(binaryFile);
-    
-
-    auto ip = xrt::kernel(device, xclbin_uuid, "krnl_loopback", xrt::kernel::cu_access_mode::exclusive);
-
-
-    for (uint32_t i = 0; i < 10; i++) {
-        ip.write_register(0, i);
-        ip.write_register(4, 2 * i);
-        uint32_t foo = ip.read_register(0);
-        uint32_t bar = ip.read_register(4);
-        if (foo != i + 1 || bar != 2 * i + 1) {
-            std::cout << "Result mismatch, i = " << i
-                << ", foo = " << foo
-                << ", bar = " << bar
-                << std::endl;
-            return 1;
-        }
-    }
-
-    std::cout << "REGISTER I/O TEST PASSED!" << std::endl;
-    return 0;
-}
-
-
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -171,7 +141,6 @@ int main(int argc, char** argv) {
     int res = 0;
     std::string binaryFile = argv[1];
     res |= test_streaming(binaryFile);
-    res |= test_register_interface(binaryFile);
 
     return res;
 }
