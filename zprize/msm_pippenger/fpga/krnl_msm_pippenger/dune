@@ -1,5 +1,6 @@
 (rule
  (mode promote)
- (action (with-stdout-to krnl_msm_pippenger.v (run ../../hardcaml/bin/generate.exe kernel))))
+  ; This is generating a single SLR version of the core
+ (action (with-stdout-to krnl_msm_pippenger.v (run ../../hardcaml/bin/generate.exe kernel -scalar-bits 84))))
 
 (rule (target stub.sv) (action (write-file %{target} "")))

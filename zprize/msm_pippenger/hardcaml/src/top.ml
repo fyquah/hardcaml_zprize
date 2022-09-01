@@ -1,4 +1,5 @@
 open Base
+open Core
 open Hardcaml
 open Signal
 
@@ -41,9 +42,9 @@ module Make (Config : Config.S) = struct
 
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
   let result_point_bits = Mixed_add.Xyzt.(fold port_widths ~init:0 ~f:( + ))
-
-  (* +1 as we register all assignments to the RAM ports. *)
-  let ram_latency = ram_read_latency + 1
+  let ram_read_latency = Config.ram_read_latency
+  let ram_lookup_latency = 1
+  let ram_write_latency = 1
 
   module Controller = Controller.Make (struct
     let window_size_bits = last_window_size_bits
@@ -51,7 +52,7 @@ module Make (Config : Config.S) = struct
     let affine_point_bits = input_point_bits
 
     let pipeline_depth =
-      (adder_latency + ram_latency) / 2 (* TODO why do we have to /2 here*)
+      (adder_latency + ram_lookup_latency + ram_read_latency + ram_write_latency) / 2
     ;;
 
     let log_stall_fifo_depth = controller_log_stall_fifo_depth
@@ -76,7 +77,6 @@ module Make (Config : Config.S) = struct
       { result_point : 'a [@bits result_point_bits]
       ; result_point_valid : 'a
       ; scalar_and_input_point_ready : 'a
-      ; error : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -96,33 +96,11 @@ module Make (Config : Config.S) = struct
       | Idle
       | Init_to_identity
       | Working
-      | Wait_for_adder
       | Read_result
-      | Error
     [@@deriving sexp_of, compare, enumerate]
-
-    let names =
-      List.map all ~f:(function
-        | Idle -> "I"
-        | Init_to_identity -> "i"
-        | Working -> "W"
-        | Wait_for_adder -> "w"
-        | Read_result -> "R"
-        | Error -> "E")
-    ;;
   end
 
   let identity_point = Mixed_add.Xyzt.Of_signal.of_ints { x = 0; y = 1; t = 0; z = 1 }
-
-  module Ram_port = struct
-    type 'a t =
-      { data : 'a [@bits result_point_bits]
-      ; read_enable : 'a
-      ; write_enable : 'a
-      ; address : 'a [@bits last_window_size_bits]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
 
   let create
     ~build_mode
@@ -165,27 +143,14 @@ module Make (Config : Config.S) = struct
         }
     in
     let ctrl_affine_point_as_xyt = Adder.Xyt.Of_signal.unpack ctrl.adder_affine_point in
-    Adder.Xyt.(
-      iter2 ctrl_affine_point_as_xyt port_names ~f:(fun s n ->
-        ignore (s -- ("adder_p2$" ^ n) : Signal.t)));
     (* TODO If timing is bad we could potentially pipeline some of these per-RAM *)
-    let result_window = pipeline spec ctrl.window ~n:(ram_latency + adder_latency) in
-    let result_bucket = pipeline spec ctrl.bucket ~n:(ram_latency + adder_latency) in
     let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
-    let result_write_enable =
-      pipeline spec adder_valid_in ~n:(ram_latency + adder_latency)
-      -- "result_write_enable"
-    in
-    let ram_port_a = Ram_port.Of_always.reg spec in
-    let ram_port_b = Ram_port.Of_always.reg spec in
-    Ram_port.(
-      iter2 (Of_always.value ram_port_a) port_names ~f:(fun s n ->
-        ignore (s -- ("ram_a$" ^ n) : Signal.t)));
-    Ram_port.(
-      iter2 (Of_always.value ram_port_b) port_names ~f:(fun s n ->
-        ignore (s -- ("ram_b$" ^ n) : Signal.t)));
     let sm = State_machine.create (module State) spec in
     ignore (sm.current -- "STATE" : Signal.t);
+    let adder_p3 = wire result_point_bits in
+    let window_address = Variable.reg spec ~width:(num_bits_to_represent num_windows) in
+    let bucket_address = Variable.reg spec ~width:last_window_size_bits in
+    let adder_valid_out = wire 1 in
     let port_a_q, port_b_q =
       List.init num_windows ~f:(fun window ->
         let address_bits =
@@ -204,116 +169,159 @@ module Make (Config : Config.S) = struct
             then 1 lsl last_window_size_bits
             else 1 lsl window_size_bits)
           ~port_a:
-            { write_enable =
-                ram_port_a.write_enable.value
-                &: (result_window ==:. window |: sm.is Init_to_identity)
-            ; read_enable = ram_port_a.read_enable.value
-            ; data = ram_port_a.data.value
-            ; address = sel_bottom ram_port_a.address.value address_bits
-            }
+            (let port =
+               { Ram_port.write_enable =
+                   mux2
+                     (sm.is Init_to_identity)
+                     vdd
+                     (pipeline ~n:ram_write_latency spec adder_valid_out
+                     &: pipeline
+                          ~n:
+                            (ram_lookup_latency
+                            + ram_read_latency
+                            + adder_latency
+                            + ram_write_latency)
+                          spec
+                          (ctrl.execute &: ~:(ctrl.bubble) &: (ctrl.window ==:. window)))
+               ; read_enable = pipeline ~n:ram_lookup_latency spec (sm.is Read_result)
+               ; data =
+                   mux2
+                     (sm.is Init_to_identity)
+                     (Mixed_add.Xyzt.Of_signal.pack identity_point)
+                     (pipeline ~n:ram_write_latency spec adder_p3)
+               ; address =
+                   sel_bottom
+                     (mux2
+                        (sm.is Init_to_identity)
+                        bucket_address.value
+                        (mux2
+                           (sm.is Read_result)
+                           (pipeline ~n:ram_lookup_latency spec bucket_address.value)
+                           (pipeline
+                              ~n:
+                                (ram_lookup_latency
+                                + ram_read_latency
+                                + adder_latency
+                                + ram_write_latency)
+                              spec
+                              ctrl.bucket)))
+                     address_bits
+               }
+             in
+             Ram_port.(
+               iter2 port port_names ~f:(fun s n ->
+                 ignore (s -- ("window" ^ Int.to_string window ^ "ram_a$" ^ n) : Signal.t)));
+             port)
           ~port_b:
-            { write_enable = ram_port_b.write_enable.value
-            ; read_enable = ram_port_b.read_enable.value
-            ; data = ram_port_b.data.value
-            ; address = sel_bottom ram_port_b.address.value address_bits
-            }
+            (let port =
+               { Ram_port.write_enable = gnd
+               ; read_enable =
+                   pipeline ~n:ram_lookup_latency spec (ctrl.execute &: ~:(ctrl.bubble))
+               ; data = zero result_point_bits
+               ; address =
+                   pipeline
+                     ~n:ram_lookup_latency
+                     spec
+                     (sel_bottom ctrl.bucket address_bits)
+               }
+             in
+             Ram_port.(
+               iter2 port port_names ~f:(fun s n ->
+                 ignore (s -- ("window" ^ Int.to_string window ^ "ram_b$" ^ n) : Signal.t)));
+             port)
           ())
       |> List.unzip
     in
     List.iteri port_a_q ~f:(fun i port ->
-      ignore (port -- (Int.to_string i ^ "ram_a_$q") : Signal.t));
+      ignore (port -- ("window" ^ Int.to_string i ^ "ram_a$q") : Signal.t));
     List.iteri port_b_q ~f:(fun i port ->
-      ignore (port -- (Int.to_string i ^ "ram_b_$q") : Signal.t));
+      ignore (port -- ("window" ^ Int.to_string i ^ "ram_b$q") : Signal.t));
     let adder =
       Adder.hierarchical
         scope
         ~config:adder_config
         { clock
-        ; valid_in = pipeline spec adder_valid_in ~n:ram_latency
+        ; valid_in =
+            pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
         ; p1 =
             Mixed_add.Xyzt.Of_signal.unpack
-              (mux (pipeline spec ctrl.window ~n:ram_latency) port_b_q)
+              (mux
+                 (pipeline spec ctrl.window ~n:(ram_lookup_latency + ram_read_latency))
+                 port_b_q)
         ; p2 =
             Mixed_add.Xyt.Of_signal.(
               pipeline
                 spec
                 (mux2 ctrl.bubble (of_int 0) ctrl_affine_point_as_xyt)
-                ~n:ram_latency)
+                ~n:(ram_lookup_latency + ram_read_latency))
         }
     in
-    (* State machine for error checking and flow control. *)
+    adder_valid_out <== adder.valid_out;
+    ignore (adder_valid_out -- "adder_valid_out" : Signal.t);
+    adder_p3 <== Mixed_add.Xyzt.Of_signal.pack adder.p3;
+    (* State machine for flow control. *)
     let wait_count =
-      Variable.reg spec ~width:(num_bits_to_represent (ram_latency + adder_latency))
-    in
-    let window_read_address =
-      Variable.reg spec ~width:(num_bits_to_represent num_windows)
+      Variable.reg
+        spec
+        ~width:
+          (num_bits_to_represent
+             (ram_lookup_latency + ram_read_latency + adder_latency + ram_write_latency))
     in
     let last_scalar_l = Variable.reg spec ~width:1 in
+    let done_l = Variable.reg spec ~width:1 in
     compile
-      [ Ram_port.(Of_always.assign ram_port_a (Of_signal.of_int 0))
-      ; Ram_port.(Of_always.assign ram_port_b (Of_signal.of_int 0))
-      ; sm.switch
-          [ Idle, [ last_scalar_l <-- gnd; when_ start [ sm.set_next Init_to_identity ] ]
+      [ sm.switch
+          [ ( Idle
+            , [ done_l <-- gnd
+              ; last_scalar_l <-- gnd
+              ; bucket_address <--. 0
+              ; when_ start [ sm.set_next Init_to_identity ]
+              ] )
           ; ( Init_to_identity
-            , [ ram_port_a.write_enable <-- vdd
-              ; ram_port_a.data <-- Mixed_add.Xyzt.Of_signal.pack identity_point
+            , [ bucket_address <-- bucket_address.value +:. 1
               ; when_
-                  ram_port_a.write_enable.value
-                  [ ram_port_a.address <-- ram_port_a.address.value +:. 1
-                  ; when_
-                      (ram_port_a.address.value ==:. (1 lsl last_window_size_bits) - 1)
-                      [ ctrl_start <-- vdd; sm.set_next Working ]
-                  ]
+                  (bucket_address.value ==:. (1 lsl last_window_size_bits) - 1)
+                  [ ctrl_start <-- vdd; sm.set_next Working ]
               ] )
           ; ( Working
             , [ ctrl_start <-- gnd
               ; last_scalar_l <-- (last_scalar_l.value |: last_scalar)
-              ; ram_port_a.write_enable <-- result_write_enable
-              ; ram_port_a.address <-- result_bucket
-              ; ram_port_a.data <-- Mixed_add.Xyzt.Of_signal.pack adder.p3
-              ; ram_port_b.write_enable <-- gnd
-              ; ram_port_b.address <-- ctrl.bucket
-              ; ram_port_b.read_enable <-- vdd
+              ; when_ (last_scalar_l.value &: ctrl.done_) [ done_l <-- vdd ]
+              ; when_ done_l.value [ wait_count <-- wait_count.value +:. 1 ]
               ; when_
-                  (last_scalar_l.value &: ctrl.done_)
-                  [ wait_count <--. 0; sm.set_next Wait_for_adder ]
-              ; when_ (result_write_enable <>: adder.valid_out) [ sm.set_next Error ]
-              ] )
-          ; ( Wait_for_adder
-            , [ wait_count <-- wait_count.value +:. 1
-              ; when_
-                  (wait_count.value ==:. ram_latency + adder_latency - 1)
-                  [ window_read_address <--. 0
-                  ; ram_port_a.address <--. (1 lsl window_size_bits) - 1
+                  (* After finishing we still need for results to flush from the adder*)
+                  (wait_count.value
+                  ==:. ram_lookup_latency
+                       + adder_latency
+                       + ram_read_latency
+                       + ram_write_latency
+                       - 1)
+                  [ window_address <--. 0
+                  ; bucket_address <--. (1 lsl window_size_bits) - 1
                   ; sm.set_next Read_result
                   ]
               ] )
-          ; ( Read_result (* TODO: Could optimize logic here better*)
-            , [ ram_port_a.read_enable <-- vdd
-              ; ram_port_a.address <-- ram_port_a.address.value -:. 1
+          ; ( Read_result
+            , [ bucket_address <-- bucket_address.value -:. 1
               ; when_
-                  (ram_port_a.address.value ==:. 1)
-                  [ window_read_address <-- window_read_address.value +:. 1
+                  (bucket_address.value ==:. 1)
+                  [ window_address <-- window_address.value +:. 1
                   ; if_
-                      (window_read_address.value ==:. num_windows - 2)
-                      [ ram_port_a.address <--. (1 lsl last_window_size_bits) - 1 ]
-                      [ ram_port_a.address <--. (1 lsl window_size_bits) - 1 ]
-                  ; when_
-                      (window_read_address.value ==:. num_windows - 1)
-                      [ ram_port_a.read_enable <-- gnd; sm.set_next Idle ]
+                      (window_address.value ==:. num_windows - 2)
+                      [ bucket_address <--. (1 lsl last_window_size_bits) - 1 ]
+                      [ bucket_address <--. (1 lsl window_size_bits) - 1 ]
+                  ; when_ (window_address.value ==:. num_windows - 1) [ sm.set_next Idle ]
                   ]
               ] )
-          ; ( Error
-            , [ (* This state is sticky and can only be recovered from with a reset. *) ]
-            )
           ]
       ];
     { O.result_point =
-        mux (pipeline spec ram_port_a.address.value ~n:ram_latency) port_a_q
+        mux
+          (pipeline spec window_address.value ~n:(ram_lookup_latency + ram_read_latency))
+          port_a_q
     ; result_point_valid =
-        sm.is Read_result &: pipeline spec ram_port_a.read_enable.value ~n:ram_latency
+        pipeline spec ~n:(ram_lookup_latency + ram_read_latency) (sm.is Read_result)
     ; scalar_and_input_point_ready = ctrl.scalar_read
-    ; error = sm.is Error
     }
   ;;
 

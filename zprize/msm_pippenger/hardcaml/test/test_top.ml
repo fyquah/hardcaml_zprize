@@ -100,9 +100,7 @@ let run_small_test () =
   i.scalar_valid := Bits.gnd;
   cycle_cnt := 0;
   let result_points = ref [] in
-  while
-    Bits.is_gnd !(o.result_point_valid) && Bits.is_gnd !(o.error) && !cycle_cnt < timeout
-  do
+  while Bits.is_gnd !(o.result_point_valid) && !cycle_cnt < timeout do
     Cyclesim.cycle sim;
     Int.incr cycle_cnt
   done;
@@ -124,19 +122,18 @@ let run_small_test () =
 ;;
 
 let display_rules =
-  List.concat
-    [ I_rules.default ()
-    ; O_rules.default ()
-    ; [ Display_rule.port_name_is "STATE" ~wave_format:(Index Top.State.names)
-      ; Display_rule.default
-      ]
-    ]
+  [ Display_rule.port_name_matches
+      ~wave_format:Int
+      (Re.compile (Re.Perl.re ".*adder.*p1.*"))
+  ; Display_rule.default
+  ]
 ;;
 
 let%expect_test "Test over small input size" =
   let waves = run_small_test () in
   Waveform.expect ~display_width:50 ~display_height:40 ~display_rules waves;
-  [%expect {|
+  [%expect
+    {|
     ┌Signals───┐┌Waves───────────────────────────────┐
     │clock     ││┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───│
     │          ││    └───┘   └───┘   └───┘   └───┘   │

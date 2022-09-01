@@ -38,15 +38,8 @@ module Make (Config : Config.S) : sig
       { result_point : 'a
       ; result_point_valid : 'a
       ; scalar_and_input_point_ready : 'a
-      ; error : 'a
       }
     [@@deriving sexp_of, hardcaml]
-  end
-
-  module State : sig
-    type t
-
-    val names : string list
   end
 
   val hierarchical

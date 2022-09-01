@@ -7,7 +7,9 @@ let command_top =
       let _ = return () in
       fun () ->
         let waves = Msm_pippenger_test.Test_top.waveform () in
-        Hardcaml_waveterm_interactive.run waves]
+        Hardcaml_waveterm_interactive.run
+          ~display_rules:Msm_pippenger_test.Test_top.display_rules
+          waves]
 ;;
 
 let () =
