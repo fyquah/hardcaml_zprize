@@ -37,7 +37,7 @@ module Make (Config : Config.S) = struct
   let last_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
 
   let num_result_points =
-    ((num_windows - 1) lsl window_size_bits) + (1 lsl last_window_size_bits)
+    ((num_windows - 1) lsl window_size_bits) + (1 lsl last_window_size_bits) - num_windows
   ;;
 
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
@@ -195,7 +195,7 @@ module Make (Config : Config.S) = struct
                         (sm.is Init_to_identity)
                         bucket_address.value
                         (mux2
-                           (sm.is Read_result)
+                           (pipeline ~n:ram_lookup_latency spec (sm.is Read_result))
                            (pipeline ~n:ram_lookup_latency spec bucket_address.value)
                            (pipeline
                               ~n:
