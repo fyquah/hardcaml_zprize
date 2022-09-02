@@ -53,6 +53,7 @@ module Config = struct
   module Level = struct
     type t =
       { radix : Radix.t
+      ; pre_adder_stages : int
       ; post_adder_stages : int
       }
     [@@deriving sexp_of]
@@ -67,9 +68,6 @@ module Config = struct
     ; child_config : t
     }
 
-  (* TODO(fyquah): Consider making this configurable. *)
-  let pre_adder_stages = 1
-
   let rec latency (t : t) =
     match t with
     | Ground_multiplier ground_multiplier ->
@@ -78,7 +76,7 @@ module Config = struct
       karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
 
   and karatsubsa_ofman_stage_latency
-      { level = { post_adder_stages; radix = _ }; child_config }
+      { level = { pre_adder_stages; post_adder_stages; radix = _ }; child_config }
     =
     pre_adder_stages + latency child_config + post_adder_stages
   ;;
@@ -164,10 +162,15 @@ and create_karatsuba_ofman_stage_radix_2
     (b : Signal.t)
   =
   let ( -- ) = Scope.naming scope in
-  let { Config.child_config; level = { post_adder_stages; radix = _ } } = config in
+  let { Config.child_config; level = { pre_adder_stages; post_adder_stages; radix = _ } } =
+    config
+  in
+  let pipe_add ~stages items =
+    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
+  in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
-  let reg x = if Signal.is_const x then x else reg spec ~enable x in
+  let pipeline ~n x = if Signal.is_const x then x else pipeline ~n spec ~enable x in
   let hw = (width a + 1) / 2 in
   let w = hw * 2 in
   let top_half x =
@@ -183,17 +186,23 @@ and create_karatsuba_ofman_stage_radix_2
     in
     let a1, a0 = split2 a in
     let b1, b0 = split2 b in
-    let z0 = recurse "m0" (reg a1) (reg b1) in
-    let z2 = recurse "m2" (reg a0) (reg b0) in
-    let m1 = recurse "m1" (reg Uop.(a1 +: a0)) (reg Uop.(b1 +: b0)) in
+    let z0 =
+      recurse "m0" (pipeline ~n:pre_adder_stages a1) (pipeline ~n:pre_adder_stages b1)
+    in
+    let z2 =
+      recurse "m2" (pipeline ~n:pre_adder_stages a0) (pipeline ~n:pre_adder_stages b0)
+    in
+    let m1 =
+      recurse
+        "m1"
+        (pipe_add ~stages:pre_adder_stages [ gnd @: a1; gnd @: a0 ])
+        (pipe_add ~stages:pre_adder_stages [ gnd @: b1; gnd @: b0 ])
+    in
     { z0; m1; z2 }
   in
   let z1 = m1 -: uresize z2 (w + 2) -: uresize z0 (w + 2) in
-  Adder_subtractor_pipe.add
+  pipe_add
     ~stages:post_adder_stages
-    ~scope
-    ~enable
-    ~clock
     [ uresize z0 (2 * wa) << w; uresize z1 (2 * wa) << hw; uresize z2 (2 * wa) ]
   |> Fn.flip ( -- ) "out"
 
@@ -201,13 +210,17 @@ and create_karatsuba_ofman_stage_radix_3
     ~scope
     ~clock
     ~enable
-    ~config:{ Config.child_config; level }
+    ~config:
+      { Config.child_config; level = { radix = _; pre_adder_stages; post_adder_stages } }
     (x : Signal.t)
     (y : Signal.t)
   =
   let ( -- ) = Scope.naming scope in
   let wx = Signal.width x in
   let spec = Reg_spec.create ~clock () in
+  let pipe_add ~stages items =
+    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
+  in
   let reg x = if Signal.is_const x then x else reg spec ~enable x in
   let pipeline ~n x = if Signal.is_const x then x else pipeline ~enable spec x ~n in
   let part_width = Int.round_up ~to_multiple_of:3 (width x) / 3 in
@@ -234,12 +247,23 @@ and create_karatsuba_ofman_stage_radix_3
   in
   let recurse_on_sum_or_delta subscope (x1, x0) (y1, y0) =
     match sum_or_delta with
-    | `Sum -> recurse subscope (reg Uop.(x1 +: x0)) (reg Uop.(y1 +: y0))
+    | `Sum ->
+      recurse
+        subscope
+        (pipe_add ~stages:pre_adder_stages [ gnd @: x1; gnd @: x0 ])
+        (pipe_add ~stages:pre_adder_stages [ gnd @: y1; gnd @: y0 ])
     | `Delta ->
       let { sign = signx; value = dx } = abs_diff_and_sign x1 x0 in
       let { sign = signy; value = dy } = abs_diff_and_sign y1 y0 in
-      let sign = pipeline ~n:(Config.latency child_config + 1) (signx ^: signy) in
-      let value = recurse subscope (reg dx) (reg dy) in
+      let sign =
+        pipeline ~n:(Config.latency child_config + pre_adder_stages) (signx ^: signy)
+      in
+      let value =
+        recurse
+          subscope
+          (pipeline ~n:pre_adder_stages dx)
+          (pipeline ~n:pre_adder_stages dy)
+      in
       mux2 sign (negate value) value
   in
   let d21 = recurse_on_sum_or_delta "d21" (x2, x1) (y2, y1) in
@@ -265,11 +289,8 @@ and create_karatsuba_ofman_stage_radix_3
       let t0 = p00 in
       { t4; t3; t2; t1; t0 }
   in
-  Adder_subtractor_pipe.add
-    ~stages:level.post_adder_stages
-    ~scope
-    ~enable
-    ~clock
+  pipe_add
+    ~stages:post_adder_stages
     [ sll (uresize t4 (2 * wx)) (4 * part_width)
     ; sll (uresize t3 (2 * wx)) (3 * part_width)
     ; sll (uresize t2 (2 * wx)) (2 * part_width)
