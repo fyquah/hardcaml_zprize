@@ -5,6 +5,7 @@ module Config : sig
     type t =
       { radix : Radix.t
       ; pre_adder_stages : int
+      ; middle_adder_stages : int
       ; post_adder_stages : int
       }
     [@@deriving sexp_of]

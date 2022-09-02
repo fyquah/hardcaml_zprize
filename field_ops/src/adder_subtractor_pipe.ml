@@ -260,3 +260,18 @@ let add ?name ?instance ~stages ~scope ~enable ~clock xs =
   |> List.last_exn
   |> Single_op_output.result
 ;;
+
+let sub ?name ?instance ~stages ~scope ~enable ~clock lhs rhs_list =
+  hierarchical
+    ?name
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    { lhs
+    ; rhs_list = List.map rhs_list ~f:(fun x -> { Term_and_op.op = `Sub; term = x })
+    }
+  |> List.last_exn
+  |> Single_op_output.result
+;;

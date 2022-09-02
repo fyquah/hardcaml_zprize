@@ -72,6 +72,7 @@ let flag_multiplier_config =
       (List.init depth ~f:(fun _ ->
            { Karatsuba_ofman_mult.Config.Level.radix = Radix_2
            ; pre_adder_stages = 1
+           ; middle_adder_stages = 1
            ; post_adder_stages = 1
            }))
   in
@@ -80,6 +81,7 @@ let flag_multiplier_config =
         List.init depth ~f:(fun _ ->
             { Karatsuba_ofman_mult.Config.Level.radix = Radix_2
             ; pre_adder_stages = 1
+            ; middle_adder_stages = 1
             ; post_adder_stages = 1
             })
     ; ground_multiplier
@@ -170,14 +172,17 @@ let command_montgomery_mult =
                      { Squarer.Config.levels =
                          [ { radix = Radix_2
                            ; pre_adder_stages = 1
+                           ; middle_adder_stages = 1
                            ; post_adder_stages = 1
                            }
                          ; { radix = Radix_3
                            ; pre_adder_stages = 1
+                           ; middle_adder_stages = 1
                            ; post_adder_stages = 1
                            }
                          ; { radix = Radix_3
                            ; pre_adder_stages = 1
+                           ; middle_adder_stages = 1
                            ; post_adder_stages = 1
                            }
                          ]
@@ -187,9 +192,21 @@ let command_montgomery_mult =
                    `Multiplier
                      (Karatsuba_ofman_mult.Config.generate
                         ~ground_multiplier
-                        [ { radix = Radix_2; pre_adder_stages = 1; post_adder_stages = 1 }
-                        ; { radix = Radix_3; pre_adder_stages = 1; post_adder_stages = 1 }
-                        ; { radix = Radix_3; pre_adder_stages = 1; post_adder_stages = 1 }
+                        [ { radix = Radix_2
+                          ; pre_adder_stages = 1
+                          ; middle_adder_stages = 1
+                          ; post_adder_stages = 1
+                          }
+                        ; { radix = Radix_3
+                          ; pre_adder_stages = 1
+                          ; middle_adder_stages = 1
+                          ; post_adder_stages = 1
+                          }
+                        ; { radix = Radix_3
+                          ; pre_adder_stages = 1
+                          ; middle_adder_stages = 1
+                          ; post_adder_stages = 1
+                          }
                         ]))
              ; montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
              }

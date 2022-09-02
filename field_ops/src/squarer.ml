@@ -14,7 +14,8 @@ module Config = struct
   let latency { levels; ground_multiplier } =
     match levels with
     | [] -> Ground_multiplier.Config.latency ground_multiplier
-    | { radix = _; pre_adder_stages = _; post_adder_stages } :: tl ->
+    | { radix = _; pre_adder_stages = _; middle_adder_stages = _; post_adder_stages }
+      :: tl ->
       let slowest_multiplier =
         tl
         |> Karatsuba_ofman_mult.Config.generate ~ground_multiplier
@@ -37,7 +38,12 @@ and create_level
     ~clock
     ~enable
     ~ground_multiplier
-    ~this_level:{ Config.Level.radix; pre_adder_stages = _; post_adder_stages }
+    ~this_level:
+      { Config.Level.radix
+      ; pre_adder_stages = _
+      ; middle_adder_stages = _
+      ; post_adder_stages
+      }
     ~levels
     (x : Signal.t)
   =

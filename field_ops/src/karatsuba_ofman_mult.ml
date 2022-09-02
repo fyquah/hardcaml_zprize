@@ -54,6 +54,7 @@ module Config = struct
     type t =
       { radix : Radix.t
       ; pre_adder_stages : int
+      ; middle_adder_stages : int
       ; post_adder_stages : int
       }
     [@@deriving sexp_of]
@@ -76,9 +77,11 @@ module Config = struct
       karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
 
   and karatsubsa_ofman_stage_latency
-      { level = { pre_adder_stages; post_adder_stages; radix = _ }; child_config }
+      { level = { pre_adder_stages; post_adder_stages; radix = _; middle_adder_stages }
+      ; child_config
+      }
     =
-    pre_adder_stages + latency child_config + post_adder_stages
+    pre_adder_stages + latency child_config + middle_adder_stages + post_adder_stages
   ;;
 
   let rec generate ~ground_multiplier (levels : Level.t list) =
@@ -162,12 +165,16 @@ and create_karatsuba_ofman_stage_radix_2
     (b : Signal.t)
   =
   let ( -- ) = Scope.naming scope in
-  let { Config.child_config; level = { pre_adder_stages; post_adder_stages; radix = _ } } =
+  let { Config.child_config
+      ; level = { pre_adder_stages; middle_adder_stages; post_adder_stages; radix = _ }
+      }
+    =
     config
   in
   let pipe_add ~stages items =
     Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
   in
+  let pipe_sub ~stages = Adder_subtractor_pipe.sub ~scope ~enable ~clock ~stages in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = if Signal.is_const x then x else pipeline ~n spec ~enable x in
@@ -200,7 +207,11 @@ and create_karatsuba_ofman_stage_radix_2
     in
     { z0; m1; z2 }
   in
-  let z1 = m1 -: uresize z2 (w + 2) -: uresize z0 (w + 2) in
+  let z1 =
+    pipe_sub ~stages:middle_adder_stages m1 [ uresize z2 (w + 2); uresize z0 (w + 2) ]
+  in
+  let z0 = pipeline ~n:middle_adder_stages z0 in
+  let z2 = pipeline ~n:middle_adder_stages z2 in
   pipe_add
     ~stages:post_adder_stages
     [ uresize z0 (2 * wa) << w; uresize z1 (2 * wa) << hw; uresize z2 (2 * wa) ]
@@ -211,7 +222,9 @@ and create_karatsuba_ofman_stage_radix_3
     ~clock
     ~enable
     ~config:
-      { Config.child_config; level = { radix = _; pre_adder_stages; post_adder_stages } }
+      { Config.child_config
+      ; level = { radix = _; pre_adder_stages; middle_adder_stages; post_adder_stages }
+      }
     (x : Signal.t)
     (y : Signal.t)
   =
@@ -221,7 +234,29 @@ and create_karatsuba_ofman_stage_radix_3
   let pipe_add ~stages items =
     Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
   in
-  let pipeline ~n x = if Signal.is_const x then x else pipeline ~enable spec x ~n in
+  let pipe_add_sub ~n lhs rhs_list =
+    Adder_subtractor_pipe.hierarchical
+      ~scope
+      ~enable
+      ~clock
+      ~stages:n
+      { lhs
+      ; rhs_list =
+          List.map rhs_list ~f:(fun op_and_term ->
+              let op, term =
+                match op_and_term with
+                | `Add x -> `Add, x
+                | `Sub x -> `Sub, x
+              in
+              { Adder_subtractor_pipe.Term_and_op.op; term })
+      }
+    |> List.last_exn
+    |> Adder_subtractor_pipe.Single_op_output.result
+  in
+  let pipeline ~n x =
+    assert (n >= 0);
+    if Signal.is_const x then x else pipeline ~enable spec x ~n
+  in
   let part_width = Int.round_up ~to_multiple_of:3 (width x) / 3 in
   let split3 xs =
     match List.rev (split_lsb ~exact:false ~part_width xs) with
@@ -280,18 +315,18 @@ and create_karatsuba_ofman_stage_radix_3
   let { t4; t3; t2; t1; t0 } =
     match sum_or_delta with
     | `Sum ->
-      let t4 = p22 in
-      let t3 = d21 -: p22 -: p11 in
-      let t2 = d20 -: p22 -: p00 +: p11 in
-      let t1 = d10 -: p11 -: p00 in
-      let t0 = p00 in
+      let t4 = pipeline ~n:middle_adder_stages p22 in
+      let t3 = pipe_add_sub ~n:middle_adder_stages d21 [ `Sub p22; `Sub p11 ] in
+      let t2 = pipe_add_sub ~n:middle_adder_stages d20 [ `Sub p22; `Sub p00; `Add p11 ] in
+      let t1 = pipe_add_sub ~n:middle_adder_stages d10 [ `Sub p11; `Sub p00 ] in
+      let t0 = pipeline ~n:middle_adder_stages p00 in
       { t4; t3; t2; t1; t0 }
     | `Delta ->
-      let t4 = p22 in
-      let t3 = p22 +: p11 -: d21 in
-      let t2 = p22 +: p11 +: p00 -: d20 in
-      let t1 = p11 +: p00 -: d10 in
-      let t0 = p00 in
+      let t4 = pipeline ~n:middle_adder_stages p22 in
+      let t3 = pipe_add_sub ~n:middle_adder_stages p22 [ `Add p11; `Sub d21 ] in
+      let t2 = pipe_add_sub ~n:middle_adder_stages p22 [ `Add p11; `Add p00; `Sub d20 ] in
+      let t1 = pipe_add_sub ~n:middle_adder_stages p11 [ `Add p00; `Sub d10 ] in
+      let t0 = pipeline ~n:middle_adder_stages p00 in
       { t4; t3; t2; t1; t0 }
   in
   pipe_add
