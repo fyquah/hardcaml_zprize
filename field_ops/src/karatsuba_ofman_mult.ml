@@ -50,13 +50,20 @@ open Signal
 open Reg_with_enable
 
 module Config = struct
+  module Level = struct
+    type t =
+      { radix : Radix.t
+      ; post_adder_stages : int
+      }
+    [@@deriving sexp_of]
+  end
+
   type t =
     | Ground_multiplier of Ground_multiplier.Config.t
     | Karatsubsa_ofman_stage of karatsubsa_ofman_stage
 
   and karatsubsa_ofman_stage =
-    { post_adder_stages : int
-    ; radix : Radix.t
+    { level : Level.t
     ; child_config : t
     }
 
@@ -70,16 +77,18 @@ module Config = struct
     | Karatsubsa_ofman_stage karatsubsa_ofman_stage ->
       karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
 
-  and karatsubsa_ofman_stage_latency { post_adder_stages; child_config; radix = _ } =
+  and karatsubsa_ofman_stage_latency
+      { level = { post_adder_stages; radix = _ }; child_config }
+    =
     pre_adder_stages + latency child_config + post_adder_stages
   ;;
 
-  let rec generate ~ground_multiplier radixes =
-    match radixes with
+  let rec generate ~ground_multiplier (levels : Level.t list) =
+    match levels with
     | [] -> Ground_multiplier ground_multiplier
     | hd :: tl ->
       let child_config = generate ~ground_multiplier tl in
-      Karatsubsa_ofman_stage { post_adder_stages = 1; radix = hd; child_config }
+      Karatsubsa_ofman_stage { level = hd; child_config }
   ;;
 end
 
@@ -142,7 +151,7 @@ and create_karatsuba_ofman_stage
     x
     y
   =
-  match config.radix with
+  match config.level.radix with
   | Radix_2 -> create_karatsuba_ofman_stage_radix_2 ~scope ~clock ~enable ~config x y
   | Radix_3 -> create_karatsuba_ofman_stage_radix_3 ~scope ~clock ~enable ~config x y
 
@@ -155,7 +164,7 @@ and create_karatsuba_ofman_stage_radix_2
     (b : Signal.t)
   =
   let ( -- ) = Scope.naming scope in
-  let { Config.child_config; post_adder_stages = _; radix = _ } = config in
+  let { Config.child_config; level = { post_adder_stages; radix = _ } } = config in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
   let reg x = if Signal.is_const x then x else reg spec ~enable x in
@@ -180,15 +189,19 @@ and create_karatsuba_ofman_stage_radix_2
     { z0; m1; z2 }
   in
   let z1 = m1 -: uresize z2 (w + 2) -: uresize z0 (w + 2) in
-  (uresize z0 (2 * wa) << w) +: (uresize z1 (2 * wa) << hw) +: uresize z2 (2 * wa)
-  |> reg
+  Adder_subtractor_pipe.add
+    ~stages:post_adder_stages
+    ~scope
+    ~enable
+    ~clock
+    [ uresize z0 (2 * wa) << w; uresize z1 (2 * wa) << hw; uresize z2 (2 * wa) ]
   |> Fn.flip ( -- ) "out"
 
 and create_karatsuba_ofman_stage_radix_3
     ~scope
     ~clock
     ~enable
-    ~config:{ Config.child_config; post_adder_stages = _; radix = _ }
+    ~config:{ Config.child_config; level }
     (x : Signal.t)
     (y : Signal.t)
   =
@@ -252,12 +265,17 @@ and create_karatsuba_ofman_stage_radix_3
       let t0 = p00 in
       { t4; t3; t2; t1; t0 }
   in
-  sll (uresize t4 (2 * wx)) (4 * part_width)
-  +: sll (uresize t3 (2 * wx)) (3 * part_width)
-  +: sll (uresize t2 (2 * wx)) (2 * part_width)
-  +: sll (uresize t1 (2 * wx)) part_width
-  +: uresize t0 (2 * wx)
-  |> reg
+  Adder_subtractor_pipe.add
+    ~stages:level.post_adder_stages
+    ~scope
+    ~enable
+    ~clock
+    [ sll (uresize t4 (2 * wx)) (4 * part_width)
+    ; sll (uresize t3 (2 * wx)) (3 * part_width)
+    ; sll (uresize t2 (2 * wx)) (2 * part_width)
+    ; sll (uresize t1 (2 * wx)) part_width
+    ; uresize t0 (2 * wx)
+    ]
   |> Fn.flip ( -- ) "out"
 ;;
 

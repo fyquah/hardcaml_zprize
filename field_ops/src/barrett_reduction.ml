@@ -40,11 +40,19 @@ module Config = struct
 
   let for_bls12_377 =
     { approx_msb_multiplier_config =
-        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+        { levels =
+            [ { radix = Radix_3; post_adder_stages = 1 }
+            ; { radix = Radix_3; post_adder_stages = 1 }
+            ; { radix = Radix_2; post_adder_stages = 1 }
+            ]
         ; ground_multiplier = Hybrid_dsp_and_luts { latency = 2 }
         }
     ; half_multiplier_config =
-        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+        { levels =
+            [ { radix = Radix_3; post_adder_stages = 1 }
+            ; { radix = Radix_3; post_adder_stages = 1 }
+            ; { radix = Radix_2; post_adder_stages = 1 }
+            ]
         ; ground_multiplier = Hybrid_dsp_and_luts { latency = 2 }
         }
     ; subtracter_stages = 3

@@ -26,7 +26,9 @@ let config_single_stage =
   let open Karatsuba_ofman_mult.Config in
   let config_ground_multiplier = Ground_multiplier (Verilog_multiply { latency = 1 }) in
   Karatsubsa_ofman_stage
-    { post_adder_stages = 1; radix = Radix_2; child_config = config_ground_multiplier }
+    { level = { post_adder_stages = 3; radix = Radix_2 }
+    ; child_config = config_ground_multiplier
+    }
 ;;
 
 module Mult32 = Make (struct
@@ -174,7 +176,11 @@ let test config =
 let config_four_stages =
   Karatsuba_ofman_mult.Config.generate
     ~ground_multiplier:(Verilog_multiply { latency = 1 })
-    [ Radix_2; Radix_2; Radix_2; Radix_2 ]
+    [ { radix = Radix_2; post_adder_stages = 1 }
+    ; { radix = Radix_2; post_adder_stages = 1 }
+    ; { radix = Radix_2; post_adder_stages = 1 }
+    ; { radix = Radix_2; post_adder_stages = 1 }
+    ]
 ;;
 
 let%expect_test "Large multiplier all radix 2" =
@@ -185,7 +191,10 @@ let%expect_test "Large multiplier all radix 2" =
 let config_3_stages_with_mixed_radixes =
   Karatsuba_ofman_mult.Config.generate
     ~ground_multiplier:(Verilog_multiply { latency = 1 })
-    [ Radix_2; Radix_3; Radix_3 ]
+    [ { radix = Radix_2; post_adder_stages = 1 }
+    ; { radix = Radix_3; post_adder_stages = 1 }
+    ; { radix = Radix_3; post_adder_stages = 1 }
+    ]
 ;;
 
 let%expect_test "Large multiplier with mixed radix" =
@@ -196,7 +205,9 @@ let%expect_test "Large multiplier with mixed radix" =
 let config_2_stages_with_radix_3 =
   Karatsuba_ofman_mult.Config.generate
     ~ground_multiplier:(Verilog_multiply { latency = 1 })
-    [ Radix_3; Radix_3 ]
+    [ { radix = Radix_3; post_adder_stages = 1 }
+    ; { radix = Radix_3; post_adder_stages = 1 }
+    ]
 ;;
 
 let%expect_test "Large multiplier with only radix 3" =

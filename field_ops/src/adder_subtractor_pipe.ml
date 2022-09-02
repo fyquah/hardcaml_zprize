@@ -242,3 +242,19 @@ let create (type a) (module Comb : Comb.S with type t = a) ~stages ~pipe input =
   let module Impl = Make_implementation (Comb) in
   Impl.create ~stages ~pipe input
 ;;
+
+let add ?name ?instance ~stages ~scope ~enable ~clock xs =
+  hierarchical
+    ?name
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    { lhs = List.hd_exn xs
+    ; rhs_list =
+        List.map (List.tl_exn xs) ~f:(fun x -> { Term_and_op.op = `Add; term = x })
+    }
+  |> List.last_exn
+  |> Single_op_output.result
+;;

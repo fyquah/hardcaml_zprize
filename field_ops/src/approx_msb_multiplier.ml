@@ -3,20 +3,20 @@ open Hardcaml
 open Signal
 open Reg_with_enable
 
-let post_adder_stages = 1
-
 module Config = struct
+  module Level = Karatsuba_ofman_mult.Config.Level
+
   type t =
-    { level_radices : Radix.t list
+    { levels : Level.t list
     ; ground_multiplier : Ground_multiplier.Config.t
     }
 
-  let latency { level_radices; ground_multiplier } =
-    match level_radices with
+  let latency { levels; ground_multiplier } =
+    match levels with
     | [] -> Ground_multiplier.Config.latency ground_multiplier
-    | _ ->
+    | { radix = _; post_adder_stages } :: tl ->
       let slowest_multiplier =
-        List.tl_exn level_radices
+        tl
         |> Karatsuba_ofman_mult.Config.generate ~ground_multiplier
         |> Karatsuba_ofman_mult.Config.latency
       in
@@ -41,10 +41,10 @@ let rec create_recursive
     ~clock
     ~enable
     ~ground_multiplier
-    ~(level_radices : Radix.t list)
+    ~(levels : Config.Level.t list)
     (input : Input.t)
   =
-  match level_radices with
+  match levels with
   | [] ->
     let a, b =
       match input with
@@ -53,14 +53,14 @@ let rec create_recursive
       | Square a -> a, a
     in
     Ground_multiplier.create ~clock ~enable ~config:ground_multiplier a b
-  | radix :: remaining_level_radices ->
+  | level :: remaining_levels ->
     create_level
       ~scope
       ~clock
       ~enable
       ~ground_multiplier
-      ~remaining_level_radices
-      ~radix
+      ~remaining_levels
+      ~level
       (input : Input.t)
 
 and create_level
@@ -68,28 +68,27 @@ and create_level
     ~clock
     ~enable
     ~ground_multiplier
-    ~remaining_level_radices
-    ~radix
+    ~remaining_levels
+    ~level:{ Config.Level.radix; post_adder_stages }
     (input : Input.t)
   =
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = if is_const x then x else pipeline ~enable spec x ~n in
   let child_karatsuba_config =
-    Karatsuba_ofman_mult.Config.generate ~ground_multiplier remaining_level_radices
+    Karatsuba_ofman_mult.Config.generate ~ground_multiplier remaining_levels
   in
   let create_recursive input =
     create_recursive
       ~scope
       ~clock
       ~enable
-      ~level_radices:remaining_level_radices
+      ~levels:remaining_levels
       ~ground_multiplier
       input
     |> pipeline
          ~n:
            (Karatsuba_ofman_mult.Config.latency child_karatsuba_config
-           - Config.latency { level_radices = remaining_level_radices; ground_multiplier }
-           )
+           - Config.latency { levels = remaining_levels; ground_multiplier })
   in
   let create_full_multiplier a b =
     assert (Signal.width a = Signal.width b);
@@ -165,23 +164,27 @@ and create_level
       (* CR fyquah: Optimize out unused additions. There is a lot of zero
        * padding here..
        *)
-      pipeline
-        ~n:post_adder_stages
-        ((x2y2 @: zero k4)
-        +: uresize (Uop.(x2y1 +: x1y2) @: zero k3) (w * 2)
-        +: uresize (Uop.(x2y0 +: x1y1 +: x0y2) @: zero k2) (w * 2))
+      Adder_subtractor_pipe.add
+        ~stages:post_adder_stages
+        ~scope
+        ~enable
+        ~clock
+        [ x2y2 @: zero k4
+        ; uresize (Uop.(x2y1 +: x1y2) @: zero k3) (w * 2)
+        ; uresize (Uop.(x2y0 +: x1y1 +: x0y2) @: zero k2) (w * 2)
+        ]
     | Square _ ->
       raise_s [%message "Radix-3 not implemented in approx msb multiplication."])
 ;;
 
 let create_with_config
-    ~config:{ Config.level_radices; ground_multiplier }
+    ~config:{ Config.levels; ground_multiplier }
     ~scope
     ~clock
     ~enable
     input
   =
-  create_recursive ~level_radices ~ground_multiplier ~scope ~clock ~enable input
+  create_recursive ~levels ~ground_multiplier ~scope ~clock ~enable input
 ;;
 
 module type Width = sig
@@ -274,20 +277,16 @@ module With_interface_square (M : Width) = struct
   include Interface_1arg (M)
 
   let create
-      ~config:{ Config.level_radices; ground_multiplier }
+      ~config:{ Config.levels; ground_multiplier }
       scope
       { I.clock; enable; x; in_valid }
     =
     let spec = Reg_spec.create ~clock () in
     let y =
-      create_recursive ~scope ~clock ~enable ~level_radices ~ground_multiplier (Square x)
+      create_recursive ~scope ~clock ~enable ~levels ~ground_multiplier (Square x)
     in
     let out_valid =
-      pipeline
-        spec
-        ~enable
-        ~n:(Config.latency { level_radices; ground_multiplier })
-        in_valid
+      pipeline spec ~enable ~n:(Config.latency { levels; ground_multiplier }) in_valid
     in
     assert (width y = 2 * bits);
     { O.y; out_valid }

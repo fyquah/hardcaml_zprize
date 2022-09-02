@@ -69,11 +69,13 @@ let flag_multiplier_config =
   let full =
     Karatsuba_ofman_mult.Config.generate
       ~ground_multiplier
-      (List.init depth ~f:(Fn.const Radix.Radix_2))
+      (List.init depth ~f:(fun _ ->
+           { Karatsuba_ofman_mult.Config.Level.radix = Radix_2; post_adder_stages = 1 }))
   in
   let half =
-    { Half_width_multiplier.Config.level_radices =
-        List.init depth ~f:(Fn.const Radix.Radix_2)
+    { Half_width_multiplier.Config.levels =
+        List.init depth ~f:(fun _ ->
+            { Karatsuba_ofman_mult.Config.Level.radix = Radix_2; post_adder_stages = 1 })
     ; ground_multiplier
     }
   in
@@ -159,14 +161,21 @@ let command_montgomery_mult =
                  (if squarer
                  then
                    `Squarer
-                     { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
+                     { Squarer.Config.levels =
+                         [ { radix = Radix_2; post_adder_stages = 1 }
+                         ; { radix = Radix_3; post_adder_stages = 1 }
+                         ; { radix = Radix_3; post_adder_stages = 1 }
+                         ]
                      ; ground_multiplier
                      }
                  else
                    `Multiplier
                      (Karatsuba_ofman_mult.Config.generate
                         ~ground_multiplier
-                        [ Radix_2; Radix_3; Radix_3 ]))
+                        [ { radix = Radix_2; post_adder_stages = 1 }
+                        ; { radix = Radix_3; post_adder_stages = 1 }
+                        ; { radix = Radix_3; post_adder_stages = 1 }
+                        ]))
              ; montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
              }
            ~p:(Ark_bls12_377_g1.modulus ())

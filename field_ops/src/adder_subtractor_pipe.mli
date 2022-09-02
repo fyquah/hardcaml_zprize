@@ -68,3 +68,13 @@ val create
   -> pipe:(n:int -> 'a -> 'a)
   -> 'a Input.t
   -> 'a Single_op_output.t list
+
+val add
+  :  ?name:string
+  -> ?instance:string
+  -> stages:int
+  -> scope:Scope.t
+  -> enable:Signal.t
+  -> clock:Signal.t
+  -> Signal.t list
+  -> Signal.t

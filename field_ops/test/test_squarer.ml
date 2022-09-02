@@ -58,17 +58,25 @@ let test config =
 
 let%expect_test "Squarer with single radix-3 level" =
   test
-    { level_radices = [ Radix_2 ]; ground_multiplier = Verilog_multiply { latency = 1 } }
+    { levels = [ { radix = Radix_2; post_adder_stages = 1 } ]
+    ; ground_multiplier = Verilog_multiply { latency = 1 }
+    }
 ;;
 
 let%expect_test "Squarer with single radix-3 level" =
   test
-    { level_radices = [ Radix_3 ]; ground_multiplier = Verilog_multiply { latency = 1 } }
+    { levels = [ { radix = Radix_3; post_adder_stages = 1 } ]
+    ; ground_multiplier = Verilog_multiply { latency = 1 }
+    }
 ;;
 
 let%expect_test "Squarer with single mixed radix levels" =
   test
-    { level_radices = [ Radix_2; Radix_3; Radix_3 ]
+    { levels =
+        [ { radix = Radix_2; post_adder_stages = 1 }
+        ; { radix = Radix_3; post_adder_stages = 1 }
+        ; { radix = Radix_3; post_adder_stages = 1 }
+        ]
     ; ground_multiplier = Verilog_multiply { latency = 1 }
     }
 ;;

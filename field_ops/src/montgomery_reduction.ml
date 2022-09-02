@@ -157,9 +157,15 @@ module Config = struct
     { multiplier_config =
         Karatsuba_ofman_mult.Config.generate
           ~ground_multiplier:(Verilog_multiply { latency = 3 })
-          [ Radix_3; Radix_3 ]
+          [ { radix = Radix_3; post_adder_stages = 1 }
+          ; { radix = Radix_3; post_adder_stages = 1 }
+          ]
     ; half_multiplier_config =
-        { level_radices = [ Radix_3; Radix_3; Radix_2 ]
+        { levels =
+            [ { radix = Radix_3; post_adder_stages = 1 }
+            ; { radix = Radix_3; post_adder_stages = 1 }
+            ; { radix = Radix_2; post_adder_stages = 1 }
+            ]
         ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
         }
     ; adder_depth = 3
