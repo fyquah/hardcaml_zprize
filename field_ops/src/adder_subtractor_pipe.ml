@@ -204,16 +204,18 @@ struct
   ;;
 end
 
-let hierarchical
-    ?(name = "adder_subtractor_pipe")
-    ?instance
-    ~stages
-    ~scope
-    ~enable
-    ~clock
-    (input : _ Input.t)
-  =
+let hierarchical ?name ?instance ~stages ~scope ~enable ~clock (input : _ Input.t) =
   let bits = Input.validate_same_width (module Signal) input in
+  let name =
+    match name with
+    | Some name -> name
+    | None ->
+      if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Add)
+      then Printf.sprintf "add_pipe_%d" bits
+      else if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Sub)
+      then Printf.sprintf "sub_pipe_%d" bits
+      else Printf.sprintf "add_sub_pipe_%d" bits
+  in
   let module M =
     With_interface (struct
       let bits = bits
