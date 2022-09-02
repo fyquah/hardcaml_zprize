@@ -28,7 +28,7 @@ module For_bls12_377 = struct
   let multiply : Ec_fpn_ops_config.fn =
     let config =
       Karatsuba_ofman_mult.Config.generate
-        [ { radix = Radix_3; pre_adder_stages = 1; post_adder_stages = 10 }
+        [ { radix = Radix_3; pre_adder_stages = 2; post_adder_stages = 10 }
         ; { radix = Radix_3; pre_adder_stages = 1; post_adder_stages = 4 }
         ]
         ~ground_multiplier:(Verilog_multiply { latency = 2 })

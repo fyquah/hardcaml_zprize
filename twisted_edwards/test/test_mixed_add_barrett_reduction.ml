@@ -41,7 +41,7 @@ let%expect_test "Latency" =
     "Latency = %d\n"
     (Test_mixed_add.Mixed_add.latency
        (Lazy.force Config.For_bls12_377.with_barrett_reduction));
-  [%expect {| Latency = 144 |}]
+  [%expect {| Latency = 147 |}]
 ;;
 
 let%expect_test "Test on some test cases" =

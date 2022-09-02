@@ -9,7 +9,7 @@ let latency = Ec_fpn_dbl.latency config
 
 let%expect_test "latency" =
   Stdio.printf "latency = %d\n" latency;
-  [%expect {| latency = 146 |}]
+  [%expect {| latency = 148 |}]
 ;;
 
 let%expect_test "Test on random test cases" =

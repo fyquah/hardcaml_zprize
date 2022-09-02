@@ -221,7 +221,6 @@ and create_karatsuba_ofman_stage_radix_3
   let pipe_add ~stages items =
     Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
   in
-  let reg x = if Signal.is_const x then x else reg spec ~enable x in
   let pipeline ~n x = if Signal.is_const x then x else pipeline ~enable spec x ~n in
   let part_width = Int.round_up ~to_multiple_of:3 (width x) / 3 in
   let split3 xs =
@@ -269,9 +268,15 @@ and create_karatsuba_ofman_stage_radix_3
   let d21 = recurse_on_sum_or_delta "d21" (x2, x1) (y2, y1) in
   let d10 = recurse_on_sum_or_delta "d10" (x1, x0) (y1, y0) in
   let d20 = recurse_on_sum_or_delta "d20" (x2, x0) (y2, y0) in
-  let p22 = recurse "p22" (reg x2) (reg y2) in
-  let p11 = recurse "p11" (reg x1) (reg y1) in
-  let p00 = recurse "p00" (reg x0) (reg y0) in
+  let p22 =
+    recurse "p22" (pipeline ~n:pre_adder_stages x2) (pipeline ~n:pre_adder_stages y2)
+  in
+  let p11 =
+    recurse "p11" (pipeline ~n:pre_adder_stages x1) (pipeline ~n:pre_adder_stages y1)
+  in
+  let p00 =
+    recurse "p00" (pipeline ~n:pre_adder_stages x0) (pipeline ~n:pre_adder_stages y0)
+  in
   let { t4; t3; t2; t1; t0 } =
     match sum_or_delta with
     | `Sum ->
