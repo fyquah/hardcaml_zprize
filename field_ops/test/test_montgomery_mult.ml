@@ -160,6 +160,5 @@ let%expect_test _ =
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]
   |> Stdio.print_s;
-  [%expect {|
-    (Ok ()) |}]
+  [%expect {| (Ok ()) |}]
 ;;

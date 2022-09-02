@@ -79,7 +79,7 @@ val add
   -> Signal.t list
   -> Signal.t
 
-(** [sub ~stages ... a xs] computes a - xs[0] - xs[1] ... *)
+(** [sub ~stages ... a xs] computes [a - xs[0] - xs[1] ...] *)
 val sub
   :  ?name:string
   -> ?instance:string
