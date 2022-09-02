@@ -133,7 +133,12 @@ and create_level
       let ua_mult_lb = sll (uresize (create_recursive (Multiply (ua, lb))) w) hw in
       let ub_mult_la = sll (uresize (create_recursive (Multiply (ub, la))) w) hw in
       let la_mult_lb = uresize (create_full_multiplier la lb) w in
-      pipeline ~n:post_adder_stages (ua_mult_lb +: ub_mult_la +: la_mult_lb)
+      Adder_subtractor_pipe.add
+        ~stages:post_adder_stages
+        ~scope
+        ~enable
+        ~clock
+        [ ua_mult_lb; ub_mult_la +: la_mult_lb ]
     | Square a ->
       let ua, la = top_and_btm_half a in
       let ua_mult_la_times_2 =

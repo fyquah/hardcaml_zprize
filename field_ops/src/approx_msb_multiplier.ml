@@ -131,9 +131,15 @@ and create_level
       assert (width ua_mult_ub = w * 2);
       assert (width ua_mult_lb <= w * 2);
       assert (width ub_mult_la <= w * 2);
-      pipeline
-        ~n:post_adder_stages
-        (uresize (Uop.( +: ) ua_mult_lb ub_mult_la) (w * 2) +: uresize ua_mult_ub (w * 2))
+      Adder_subtractor_pipe.add
+        ~stages:post_adder_stages
+        ~scope
+        ~enable
+        ~clock
+        [ uresize ua_mult_lb (w * 2)
+        ; uresize ub_mult_la (w * 2)
+        ; uresize ua_mult_ub (w * 2)
+        ]
     | Square _ -> raise_s [%message "Approx MSB squaring specialization not implemented"])
   | Radix_3 ->
     (match input with
