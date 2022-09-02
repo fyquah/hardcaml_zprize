@@ -204,16 +204,18 @@ struct
   ;;
 end
 
-let hierarchical
-    ?(name = "adder_subtractor_pipe")
-    ?instance
-    ~stages
-    ~scope
-    ~enable
-    ~clock
-    (input : _ Input.t)
-  =
+let hierarchical ?name ?instance ~stages ~scope ~enable ~clock (input : _ Input.t) =
   let bits = Input.validate_same_width (module Signal) input in
+  let name =
+    match name with
+    | Some name -> name
+    | None ->
+      if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Add)
+      then Printf.sprintf "add_pipe_%d" bits
+      else if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Sub)
+      then Printf.sprintf "sub_pipe_%d" bits
+      else Printf.sprintf "add_sub_pipe_%d" bits
+  in
   let module M =
     With_interface (struct
       let bits = bits
@@ -241,4 +243,35 @@ let hierarchical
 let create (type a) (module Comb : Comb.S with type t = a) ~stages ~pipe input =
   let module Impl = Make_implementation (Comb) in
   Impl.create ~stages ~pipe input
+;;
+
+let add ?name ?instance ~stages ~scope ~enable ~clock xs =
+  hierarchical
+    ?name
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    { lhs = List.hd_exn xs
+    ; rhs_list =
+        List.map (List.tl_exn xs) ~f:(fun x -> { Term_and_op.op = `Add; term = x })
+    }
+  |> List.last_exn
+  |> Single_op_output.result
+;;
+
+let sub ?name ?instance ~stages ~scope ~enable ~clock lhs rhs_list =
+  hierarchical
+    ?name
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    { lhs
+    ; rhs_list = List.map rhs_list ~f:(fun x -> { Term_and_op.op = `Sub; term = x })
+    }
+  |> List.last_exn
+  |> Single_op_output.result
 ;;

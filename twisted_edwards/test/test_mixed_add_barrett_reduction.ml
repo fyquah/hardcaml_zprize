@@ -36,6 +36,14 @@ let xyt_neg { Mixed_add.Xyt.x; y; t } =
   }
 ;;
 
+let%expect_test "Latency" =
+  Stdio.printf
+    "Latency = %d\n"
+    (Test_mixed_add.Mixed_add.latency
+       (Lazy.force Config.For_bls12_377.with_barrett_reduction));
+  [%expect {| Latency = 186 |}]
+;;
+
 let%expect_test "Test on some test cases" =
   Random.init 123;
   let test_cases =

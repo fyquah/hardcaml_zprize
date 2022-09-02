@@ -80,9 +80,42 @@ let command_point_add =
            { Montgomery_reduction.Config.multiplier_config =
                Karatsuba_ofman_mult.Config.generate
                  ~ground_multiplier
-                 [ Radix_2; Radix_3; Radix_3 ]
+                 [ { radix = Radix_2
+                   ; pre_adder_stages = 1
+                   ; middle_adder_stages = 1
+                   ; post_adder_stages = 1
+                   }
+                 ; { radix = Radix_3
+                   ; pre_adder_stages = 1
+                   ; middle_adder_stages = 1
+                   ; post_adder_stages = 1
+                   }
+                 ; { radix = Radix_3
+                   ; pre_adder_stages = 1
+                   ; middle_adder_stages = 1
+                   ; post_adder_stages = 1
+                   }
+                 ]
            ; half_multiplier_config =
-               { level_radices = [ Radix_2; Radix_3; Radix_3 ]; ground_multiplier }
+               { levels =
+                   [ { radix = Radix_2
+                     ; pre_adder_stages = 1
+                     ; middle_adder_stages = 1
+                     ; post_adder_stages = 1
+                     }
+                   ; { radix = Radix_3
+                     ; pre_adder_stages = 1
+                     ; middle_adder_stages = 1
+                     ; post_adder_stages = 1
+                     }
+                   ; { radix = Radix_3
+                     ; pre_adder_stages = 1
+                     ; middle_adder_stages = 1
+                     ; post_adder_stages = 1
+                     }
+                   ]
+               ; ground_multiplier
+               }
            ; adder_depth
            ; subtractor_depth
            }
@@ -96,7 +129,23 @@ let command_point_add =
        in
        let square : Elliptic_curve_lib.Ec_fpn_mixed_add.Config.fn =
          let config =
-           { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
+           { Squarer.Config.levels =
+               [ { radix = Radix_2
+                 ; pre_adder_stages = 1
+                 ; middle_adder_stages = 1
+                 ; post_adder_stages = 1
+                 }
+               ; { radix = Radix_3
+                 ; pre_adder_stages = 1
+                 ; middle_adder_stages = 1
+                 ; post_adder_stages = 1
+                 }
+               ; { radix = Radix_3
+                 ; pre_adder_stages = 1
+                 ; middle_adder_stages = 1
+                 ; post_adder_stages = 1
+                 }
+               ]
            ; ground_multiplier
            }
          in
@@ -111,7 +160,22 @@ let command_point_add =
          let config =
            Karatsuba_ofman_mult.Config.generate
              ~ground_multiplier
-             [ Radix_2; Radix_3; Radix_3 ]
+             [ { radix = Radix_2
+               ; pre_adder_stages = 1
+               ; middle_adder_stages = 1
+               ; post_adder_stages = 1
+               }
+             ; { radix = Radix_3
+               ; pre_adder_stages = 1
+               ; middle_adder_stages = 1
+               ; post_adder_stages = 1
+               }
+             ; { radix = Radix_3
+               ; pre_adder_stages = 1
+               ; middle_adder_stages = 1
+               ; post_adder_stages = 1
+               }
+             ]
          in
          let latency = Karatsuba_ofman_mult.Config.latency config in
          let impl ~scope ~clock ~enable x y =
