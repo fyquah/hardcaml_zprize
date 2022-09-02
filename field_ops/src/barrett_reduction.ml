@@ -43,17 +43,25 @@ module Config = struct
         { levels =
             [ { radix = Radix_3
               ; pre_adder_stages = 1
-              ; middle_adder_stages = 1
-              ; post_adder_stages = 3
+              ; (* [middle_adder_stages] here is irrel. *)
+                middle_adder_stages = 1
+              ; (* Adding up to 390 bit results *)
+                post_adder_stages = 5
               }
             ; { radix = Radix_3
               ; pre_adder_stages = 1
-              ; middle_adder_stages = 1
+              ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
+                   is sufficient.
+                *)
+                middle_adder_stages = 1
               ; post_adder_stages = 2
               }
             ; { radix = Radix_2
               ; pre_adder_stages = 1
-              ; middle_adder_stages = 1
+              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                   is ok.
+                *)
+                middle_adder_stages = 1
               ; post_adder_stages = 1
               }
             ]
@@ -63,17 +71,24 @@ module Config = struct
         { levels =
             [ { radix = Radix_3
               ; pre_adder_stages = 1
-              ; middle_adder_stages = 1
-              ; post_adder_stages = 3
+              ; (* [middle_adder_stages] here is irrel. *)
+                middle_adder_stages = 1
+              ; post_adder_stages = 5
               }
             ; { radix = Radix_3
               ; pre_adder_stages = 1
-              ; middle_adder_stages = 1
+              ; (* intermediate results has width of 42 bits. 1 stage pipeline
+                   is sufficient.
+                *)
+                middle_adder_stages = 1
               ; post_adder_stages = 2
               }
             ; { radix = Radix_2
               ; pre_adder_stages = 1
-              ; middle_adder_stages = 1
+              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                   is ok.
+                *)
+                middle_adder_stages = 1
               ; post_adder_stages = 1
               }
             ]

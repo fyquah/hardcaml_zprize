@@ -42,7 +42,7 @@ module For_bls12_377 = struct
       Karatsuba_ofman_mult.Config.generate
         [ { radix = Radix_3
           ; pre_adder_stages = 2
-          ; middle_adder_stages = 1
+          ; middle_adder_stages = 4
           ; post_adder_stages = 10
           }
         ; { radix = Radix_3
