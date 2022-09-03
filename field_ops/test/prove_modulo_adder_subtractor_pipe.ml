@@ -13,17 +13,17 @@ let test ~op ~bits ~stages ~num_inputs =
   let eqn =
     let inputs = List.init num_inputs ~f:(fun i -> input (sprintf "x%d" i) bits) in
     let optimized =
-      Adder_subtractor_pipe.create
+      Modulo_adder_subtractor_pipe.create
         (module Comb_gates)
         ~stages
         ~pipe:(fun ~n:_ x -> x)
         { lhs = List.hd_exn inputs
         ; rhs_list =
             List.map (List.tl_exn inputs) ~f:(fun term ->
-                { Adder_subtractor_pipe.Term_and_op.term; op })
+                { Modulo_adder_subtractor_pipe.Term_and_op.term; op })
         }
       |> List.last_exn
-      |> Adder_subtractor_pipe.Single_op_output.result
+      |> Modulo_adder_subtractor_pipe.Single_op_output.result
     in
     let simple =
       List.reduce_exn
