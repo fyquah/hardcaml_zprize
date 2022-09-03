@@ -9,7 +9,23 @@ module For_bls12_377 = struct
 
   let square : Ec_fpn_ops_config.fn =
     let config =
-      { Squarer.Config.level_radices = [ Radix_3; Radix_3; Radix_2 ]
+      { Squarer.Config.levels =
+          [ { radix = Radix_3
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 1
+            ; post_adder_stages = 1
+            }
+          ; { radix = Radix_3
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 1
+            ; post_adder_stages = 1
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 1
+            ; post_adder_stages = 1
+            }
+          ]
       ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
       }
     in
@@ -24,7 +40,17 @@ module For_bls12_377 = struct
   let multiply : Ec_fpn_ops_config.fn =
     let config =
       Karatsuba_ofman_mult.Config.generate
-        [ Radix_3; Radix_3 ]
+        [ { radix = Radix_3
+          ; pre_adder_stages = 2
+          ; middle_adder_stages = 4
+          ; post_adder_stages = 10
+          }
+        ; { radix = Radix_3
+          ; pre_adder_stages = 1
+          ; middle_adder_stages = 1
+          ; post_adder_stages = 4
+          }
+        ]
         ~ground_multiplier:(Verilog_multiply { latency = 2 })
     in
     let latency = Karatsuba_ofman_mult.Config.latency config in
