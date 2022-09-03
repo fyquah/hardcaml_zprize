@@ -24,7 +24,7 @@ let create ~clock ~enable ~stages ~(p : Z.t) (a : Signal.t) (b : Signal.t) : Sig
     let spec = Reg_spec.create ~clock () in
     let pipe ~n x = if Signal.is_const x then x else pipeline spec ~enable ~n x in
     match
-      Adder_subtractor_pipe.create
+      Modulo_adder_subtractor_pipe.create
         (module Signal)
         ~stages
         ~pipe
