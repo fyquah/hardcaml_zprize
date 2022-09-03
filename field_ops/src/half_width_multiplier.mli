@@ -2,8 +2,10 @@ open Base
 open Hardcaml
 
 module Config : sig
+  module Level = Karatsuba_ofman_mult.Config.Level
+
   type t =
-    { level_radices : Radix.t list
+    { levels : Level.t list
     ; ground_multiplier : Ground_multiplier.Config.t
     }
 

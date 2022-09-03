@@ -18,6 +18,8 @@ module Barrett_reduction377 = Barrett_reduction.With_interface (struct
   let bits = 377
 end)
 
+module X = Adder_subtractor_pipe
+
 module Multiply_43x43 = struct
   module I = struct
     type 'a t =
@@ -69,11 +71,21 @@ let flag_multiplier_config =
   let full =
     Karatsuba_ofman_mult.Config.generate
       ~ground_multiplier
-      (List.init depth ~f:(Fn.const Radix.Radix_2))
+      (List.init depth ~f:(fun _ ->
+           { Karatsuba_ofman_mult.Config.Level.radix = Radix_2
+           ; pre_adder_stages = 1
+           ; middle_adder_stages = 1
+           ; post_adder_stages = 1
+           }))
   in
   let half =
-    { Half_width_multiplier.Config.level_radices =
-        List.init depth ~f:(Fn.const Radix.Radix_2)
+    { Half_width_multiplier.Config.levels =
+        List.init depth ~f:(fun _ ->
+            { Karatsuba_ofman_mult.Config.Level.radix = Radix_2
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 1
+            ; post_adder_stages = 1
+            })
     ; ground_multiplier
     }
   in
@@ -159,14 +171,45 @@ let command_montgomery_mult =
                  (if squarer
                  then
                    `Squarer
-                     { Squarer.Config.level_radices = [ Radix_2; Radix_3; Radix_3 ]
+                     { Squarer.Config.levels =
+                         [ { radix = Radix_2
+                           ; pre_adder_stages = 1
+                           ; middle_adder_stages = 1
+                           ; post_adder_stages = 1
+                           }
+                         ; { radix = Radix_3
+                           ; pre_adder_stages = 1
+                           ; middle_adder_stages = 1
+                           ; post_adder_stages = 1
+                           }
+                         ; { radix = Radix_3
+                           ; pre_adder_stages = 1
+                           ; middle_adder_stages = 1
+                           ; post_adder_stages = 1
+                           }
+                         ]
                      ; ground_multiplier
                      }
                  else
                    `Multiplier
                      (Karatsuba_ofman_mult.Config.generate
                         ~ground_multiplier
-                        [ Radix_2; Radix_3; Radix_3 ]))
+                        [ { radix = Radix_2
+                          ; pre_adder_stages = 1
+                          ; middle_adder_stages = 1
+                          ; post_adder_stages = 1
+                          }
+                        ; { radix = Radix_3
+                          ; pre_adder_stages = 1
+                          ; middle_adder_stages = 1
+                          ; post_adder_stages = 1
+                          }
+                        ; { radix = Radix_3
+                          ; pre_adder_stages = 1
+                          ; middle_adder_stages = 1
+                          ; post_adder_stages = 1
+                          }
+                        ]))
              ; montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
              }
            ~p:(Ark_bls12_377_g1.modulus ())
@@ -219,6 +262,70 @@ let command_barrett_mult =
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
 ;;
 
+let command_pipe_add =
+  Command.basic
+    ~summary:""
+    (let%map_open.Command filename = flag_filename
+     and bits = flag "bits" (required int) ~doc:""
+     and rhs_list_length = flag "rhs-list-length" (required int) ~doc:""
+     and stages = flag "stages" (required int) ~doc:"" in
+     fun () ->
+       let module X =
+         Adder_subtractor_pipe.With_interface (struct
+           let bits = bits
+           let rhs_list_length = rhs_list_length
+         end)
+       in
+       let module C = Circuit.With_interface (X.I) (X.O) in
+       let scope = Scope.create ~flatten_design:false () in
+       let database = Scope.circuit_database scope in
+       let create_fn (i : _ X.I.t) =
+         X.create
+           ~stages
+           ~ops:(List.init rhs_list_length ~f:(Fn.const `Add))
+           ~rhs_constant_overrides:(List.init rhs_list_length ~f:(Fn.const None))
+           scope
+           i
+       in
+       let circuit = C.create_exn ~name:"pipe_add" create_fn in
+       Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
+;;
+
+let command_naive_pipe_add =
+  Command.basic
+    ~summary:""
+    (let%map_open.Command filename = flag_filename
+     and bits = flag "bits" (required int) ~doc:""
+     and num_items = flag "num-items" (required int) ~doc:""
+     and stages = flag "stages" (required int) ~doc:"" in
+     fun () ->
+       let module I = struct
+         type 'a t =
+           { clock : 'a
+           ; x : 'a array [@bits bits] [@length num_items]
+           }
+         [@@deriving sexp_of, hardcaml]
+       end
+       in
+       let module O = struct
+         type 'a t = { z : 'a [@bits bits] } [@@deriving sexp_of, hardcaml]
+       end
+       in
+       let module C = Circuit.With_interface (I) (O) in
+       let scope = Scope.create ~flatten_design:false () in
+       let database = Scope.circuit_database scope in
+       let create_fn (i : _ I.t) =
+         { O.z =
+             Signal.pipeline
+               ~n:stages
+               (Reg_spec.create ~clock:i.clock ())
+               (Array.reduce_exn i.x ~f:Signal.( +: ))
+         }
+       in
+       let circuit = C.create_exn ~name:"naive_pipe_add" create_fn in
+       Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
+;;
+
 let () =
   [ "specialized-43x43-multiplier", command_specialized_43x43_multiplier
   ; "verilog-43x43-multiplier", command_verilog_43x43_multiplier
@@ -226,6 +333,8 @@ let () =
   ; "montgomery-mult", command_montgomery_mult
   ; "barrett-reduction", command_barrett_reduction
   ; "barrett-mult", command_barrett_mult
+  ; "pipe-add", command_pipe_add
+  ; "naive-pipe-add", command_naive_pipe_add
   ]
   |> Command.group ~summary:"generate verilog"
   |> Command_unix.run

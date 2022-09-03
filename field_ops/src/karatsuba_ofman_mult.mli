@@ -1,18 +1,27 @@
 open Hardcaml
 
 module Config : sig
+  module Level : sig
+    type t =
+      { radix : Radix.t
+      ; pre_adder_stages : int
+      ; middle_adder_stages : int
+      ; post_adder_stages : int
+      }
+    [@@deriving sexp_of]
+  end
+
   type t =
     | Ground_multiplier of Ground_multiplier.Config.t
     | Karatsubsa_ofman_stage of karatsubsa_ofman_stage
 
   and karatsubsa_ofman_stage =
-    { post_adder_stages : int
-    ; radix : Radix.t
+    { level : Level.t
     ; child_config : t
     }
 
   val latency : t -> int
-  val generate : ground_multiplier:Ground_multiplier.Config.t -> Radix.t list -> t
+  val generate : ground_multiplier:Ground_multiplier.Config.t -> Level.t list -> t
 end
 
 val hierarchical

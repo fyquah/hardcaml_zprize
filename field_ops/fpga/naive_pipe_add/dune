@@ -1,0 +1,7 @@
+(rule
+ (target naive_pipe_add.v)
+ (deps ../../bin/generate/verilog.exe)
+ (mode promote)
+ (action
+  (run %{deps} naive-pipe-add -bits 754 -num-items 2 -stages 10 -o %{target})))
+

@@ -50,18 +50,24 @@ open Signal
 open Reg_with_enable
 
 module Config = struct
+  module Level = struct
+    type t =
+      { radix : Radix.t
+      ; pre_adder_stages : int
+      ; middle_adder_stages : int
+      ; post_adder_stages : int
+      }
+    [@@deriving sexp_of]
+  end
+
   type t =
     | Ground_multiplier of Ground_multiplier.Config.t
     | Karatsubsa_ofman_stage of karatsubsa_ofman_stage
 
   and karatsubsa_ofman_stage =
-    { post_adder_stages : int
-    ; radix : Radix.t
+    { level : Level.t
     ; child_config : t
     }
-
-  (* TODO(fyquah): Consider making this configurable. *)
-  let pre_adder_stages = 1
 
   let rec latency (t : t) =
     match t with
@@ -70,16 +76,20 @@ module Config = struct
     | Karatsubsa_ofman_stage karatsubsa_ofman_stage ->
       karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
 
-  and karatsubsa_ofman_stage_latency { post_adder_stages; child_config; radix = _ } =
-    pre_adder_stages + latency child_config + post_adder_stages
+  and karatsubsa_ofman_stage_latency
+      { level = { pre_adder_stages; post_adder_stages; radix = _; middle_adder_stages }
+      ; child_config
+      }
+    =
+    pre_adder_stages + latency child_config + middle_adder_stages + post_adder_stages
   ;;
 
-  let rec generate ~ground_multiplier radixes =
-    match radixes with
+  let rec generate ~ground_multiplier (levels : Level.t list) =
+    match levels with
     | [] -> Ground_multiplier ground_multiplier
     | hd :: tl ->
       let child_config = generate ~ground_multiplier tl in
-      Karatsubsa_ofman_stage { post_adder_stages = 1; radix = hd; child_config }
+      Karatsubsa_ofman_stage { level = hd; child_config }
   ;;
 end
 
@@ -142,7 +152,7 @@ and create_karatsuba_ofman_stage
     x
     y
   =
-  match config.radix with
+  match config.level.radix with
   | Radix_2 -> create_karatsuba_ofman_stage_radix_2 ~scope ~clock ~enable ~config x y
   | Radix_3 -> create_karatsuba_ofman_stage_radix_3 ~scope ~clock ~enable ~config x y
 
@@ -155,10 +165,19 @@ and create_karatsuba_ofman_stage_radix_2
     (b : Signal.t)
   =
   let ( -- ) = Scope.naming scope in
-  let { Config.child_config; post_adder_stages = _; radix = _ } = config in
+  let { Config.child_config
+      ; level = { pre_adder_stages; middle_adder_stages; post_adder_stages; radix = _ }
+      }
+    =
+    config
+  in
+  let pipe_add ~stages items =
+    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
+  in
+  let pipe_sub ~stages = Adder_subtractor_pipe.sub ~scope ~enable ~clock ~stages in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
-  let reg x = if Signal.is_const x then x else reg spec ~enable x in
+  let pipeline ~n x = if Signal.is_const x then x else pipeline ~n spec ~enable x in
   let hw = (width a + 1) / 2 in
   let w = hw * 2 in
   let top_half x =
@@ -174,29 +193,79 @@ and create_karatsuba_ofman_stage_radix_2
     in
     let a1, a0 = split2 a in
     let b1, b0 = split2 b in
-    let z0 = recurse "m0" (reg a1) (reg b1) in
-    let z2 = recurse "m2" (reg a0) (reg b0) in
-    let m1 = recurse "m1" (reg Uop.(a1 +: a0)) (reg Uop.(b1 +: b0)) in
+    let z0 =
+      recurse "m0" (pipeline ~n:pre_adder_stages a1) (pipeline ~n:pre_adder_stages b1)
+    in
+    let z2 =
+      recurse "m2" (pipeline ~n:pre_adder_stages a0) (pipeline ~n:pre_adder_stages b0)
+    in
+    let m1 =
+      recurse
+        "m1"
+        (pipe_add ~stages:pre_adder_stages [ gnd @: a1; gnd @: a0 ])
+        (pipe_add ~stages:pre_adder_stages [ gnd @: b1; gnd @: b0 ])
+    in
     { z0; m1; z2 }
   in
-  let z1 = m1 -: uresize z2 (w + 2) -: uresize z0 (w + 2) in
-  (uresize z0 (2 * wa) << w) +: (uresize z1 (2 * wa) << hw) +: uresize z2 (2 * wa)
-  |> reg
-  |> Fn.flip ( -- ) "out"
+  let z1 =
+    pipe_sub ~stages:middle_adder_stages m1 [ uresize z2 (w + 2); uresize z0 (w + 2) ]
+  in
+  let z0 = pipeline ~n:middle_adder_stages z0 in
+  let z2 = pipeline ~n:middle_adder_stages z2 in
+  let o =
+    let o0 = pipeline ~n:post_adder_stages (sel_bottom z2 hw) in
+    let o1 =
+      pipe_add
+        ~stages:post_adder_stages
+        [ uresize z0 ((2 * wa) - hw) << w - hw
+        ; uresize z1 ((2 * wa) - hw)
+        ; uresize (drop_bottom z2 hw) ((2 * wa) - hw)
+        ]
+    in
+    o1 @: o0
+  in
+  o -- "out"
 
 and create_karatsuba_ofman_stage_radix_3
     ~scope
     ~clock
     ~enable
-    ~config:{ Config.child_config; post_adder_stages = _; radix = _ }
+    ~config:
+      { Config.child_config
+      ; level = { radix = _; pre_adder_stages; middle_adder_stages; post_adder_stages }
+      }
     (x : Signal.t)
     (y : Signal.t)
   =
   let ( -- ) = Scope.naming scope in
   let wx = Signal.width x in
   let spec = Reg_spec.create ~clock () in
-  let reg x = if Signal.is_const x then x else reg spec ~enable x in
-  let pipeline ~n x = if Signal.is_const x then x else pipeline ~enable spec x ~n in
+  let pipe_add ~stages items =
+    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
+  in
+  let pipe_add_sub ~n lhs rhs_list =
+    Adder_subtractor_pipe.hierarchical
+      ~scope
+      ~enable
+      ~clock
+      ~stages:n
+      { lhs
+      ; rhs_list =
+          List.map rhs_list ~f:(fun op_and_term ->
+              let op, term =
+                match op_and_term with
+                | `Add x -> `Add, x
+                | `Sub x -> `Sub, x
+              in
+              { Adder_subtractor_pipe.Term_and_op.op; term })
+      }
+    |> List.last_exn
+    |> Adder_subtractor_pipe.Single_op_output.result
+  in
+  let pipeline ~n x =
+    assert (n >= 0);
+    if Signal.is_const x then x else pipeline ~enable spec x ~n
+  in
   let part_width = Int.round_up ~to_multiple_of:3 (width x) / 3 in
   let split3 xs =
     match List.rev (split_lsb ~exact:false ~part_width xs) with
@@ -208,8 +277,7 @@ and create_karatsuba_ofman_stage_radix_3
   let recurse subscope x y =
     assert (width x = width y);
     let scope = Scope.sub_scope scope subscope in
-    let res = create_recursive ~scope ~enable ~clock ~config:child_config x y in
-    uresize res (2 * wx)
+    create_recursive ~scope ~enable ~clock ~config:child_config x y
   in
   let sum_or_delta =
     (* CR-someday fyquah: Make this configurable. *)
@@ -219,46 +287,126 @@ and create_karatsuba_ofman_stage_radix_3
      *)
     if wx >= 370 then `Sum else `Delta
   in
+  let wd =
+    match sum_or_delta with
+    | `Sum -> 2 * (part_width + 1)
+    | `Delta -> (2 * part_width) + 1
+  in
+  let wp = 2 * part_width in
   let recurse_on_sum_or_delta subscope (x1, x0) (y1, y0) =
     match sum_or_delta with
-    | `Sum -> recurse subscope (reg Uop.(x1 +: x0)) (reg Uop.(y1 +: y0))
+    | `Sum ->
+      recurse
+        subscope
+        (pipe_add ~stages:pre_adder_stages [ gnd @: x1; gnd @: x0 ])
+        (pipe_add ~stages:pre_adder_stages [ gnd @: y1; gnd @: y0 ])
     | `Delta ->
       let { sign = signx; value = dx } = abs_diff_and_sign x1 x0 in
       let { sign = signy; value = dy } = abs_diff_and_sign y1 y0 in
-      let sign = pipeline ~n:(Config.latency child_config + 1) (signx ^: signy) in
-      let value = recurse subscope (reg dx) (reg dy) in
+      let sign =
+        pipeline ~n:(Config.latency child_config + pre_adder_stages) (signx ^: signy)
+      in
+      let value =
+        recurse
+          subscope
+          (pipeline ~n:pre_adder_stages dx)
+          (pipeline ~n:pre_adder_stages dy)
+      in
+      let value = gnd @: value in
       mux2 sign (negate value) value
   in
   let d21 = recurse_on_sum_or_delta "d21" (x2, x1) (y2, y1) in
   let d10 = recurse_on_sum_or_delta "d10" (x1, x0) (y1, y0) in
   let d20 = recurse_on_sum_or_delta "d20" (x2, x0) (y2, y0) in
-  let p22 = recurse "p22" (reg x2) (reg y2) in
-  let p11 = recurse "p11" (reg x1) (reg y1) in
-  let p00 = recurse "p00" (reg x0) (reg y0) in
+  let p22 =
+    recurse "p22" (pipeline ~n:pre_adder_stages x2) (pipeline ~n:pre_adder_stages y2)
+  in
+  let p11 =
+    recurse "p11" (pipeline ~n:pre_adder_stages x1) (pipeline ~n:pre_adder_stages y1)
+  in
+  let p00 =
+    recurse "p00" (pipeline ~n:pre_adder_stages x0) (pipeline ~n:pre_adder_stages y0)
+  in
+  assert (width d21 = wd);
+  assert (width d10 = wd);
+  assert (width d20 = wd);
+  assert (width p22 = wp);
+  assert (width p11 = wp);
+  assert (width p00 = wp);
+  let wt3 =
+    (* [t3] computes (x1y2 + x2y1) *)
+    (2 * part_width) + 1
+  in
+  let wt2 =
+    (* [t2] computes (x0y2 + x2y0 + x1y1) *)
+    (2 * part_width) + 2
+  in
+  let wt1 =
+    (* [t1] computes (x0y1 + x1y0) *)
+    wt3
+  in
   let { t4; t3; t2; t1; t0 } =
     match sum_or_delta with
     | `Sum ->
-      let t4 = p22 in
-      let t3 = d21 -: p22 -: p11 in
-      let t2 = d20 -: p22 -: p00 +: p11 in
-      let t1 = d10 -: p11 -: p00 in
-      let t0 = p00 in
+      let t4 = pipeline ~n:middle_adder_stages p22 in
+      let t3 =
+        pipe_add_sub
+          ~n:middle_adder_stages
+          (sresize d21 wt3)
+          [ `Sub (uresize p22 wt3); `Sub (uresize p11 wt3) ]
+      in
+      let t2 =
+        pipe_add_sub
+          ~n:middle_adder_stages
+          (sresize d20 wt2)
+          [ `Sub (uresize p22 wt2); `Sub (uresize p00 wt2); `Add (uresize p11 wt2) ]
+      in
+      let t1 =
+        pipe_add_sub
+          ~n:middle_adder_stages
+          (sresize d10 wt1)
+          [ `Sub (uresize p11 wt1); `Sub (uresize p00 wt1) ]
+      in
+      let t0 = pipeline ~n:middle_adder_stages p00 in
       { t4; t3; t2; t1; t0 }
     | `Delta ->
-      let t4 = p22 in
-      let t3 = p22 +: p11 -: d21 in
-      let t2 = p22 +: p11 +: p00 -: d20 in
-      let t1 = p11 +: p00 -: d10 in
-      let t0 = p00 in
+      let t4 = pipeline ~n:middle_adder_stages p22 in
+      let t3 =
+        pipe_add_sub
+          ~n:middle_adder_stages
+          (uresize p22 wt3)
+          [ `Add (uresize p11 wt3); `Sub (uresize d21 wt3) ]
+      in
+      let t2 =
+        pipe_add_sub
+          ~n:middle_adder_stages
+          (uresize p22 wt2)
+          [ `Add (uresize p11 wt2); `Add (uresize p00 wt2); `Sub (sresize d20 wt2) ]
+      in
+      let t1 =
+        pipe_add_sub
+          ~n:middle_adder_stages
+          (uresize p11 wt1)
+          [ `Add (uresize p00 wt1); `Sub (sresize d10 wt1) ]
+      in
+      let t0 = pipeline ~n:middle_adder_stages p00 in
       { t4; t3; t2; t1; t0 }
   in
-  sll (uresize t4 (2 * wx)) (4 * part_width)
-  +: sll (uresize t3 (2 * wx)) (3 * part_width)
-  +: sll (uresize t2 (2 * wx)) (2 * part_width)
-  +: sll (uresize t1 (2 * wx)) part_width
-  +: uresize t0 (2 * wx)
-  |> reg
-  |> Fn.flip ( -- ) "out"
+  let result =
+    let o0 = pipeline ~n:post_adder_stages (sel_bottom t0 part_width) in
+    let o1 =
+      pipe_add
+        ~stages:post_adder_stages
+        [ sll (uresize t4 ((2 * wx) - part_width)) ((4 * part_width) - part_width)
+        ; sll (uresize t3 ((2 * wx) - part_width)) ((3 * part_width) - part_width)
+        ; sll (uresize t2 ((2 * wx) - part_width)) ((2 * part_width) - part_width)
+        ; sll (uresize t1 ((2 * wx) - part_width)) ((1 * part_width) - part_width)
+        ; uresize (drop_bottom t0 part_width) ((2 * wx) - part_width)
+        ]
+    in
+    o1 @: o0
+  in
+  result -- "out"
 ;;
 
 let create ?(enable = vdd) ~config ~scope ~clock a b : Signal.t =
