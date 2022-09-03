@@ -17,15 +17,57 @@ module Make (P : Size) = struct
   let ram_output_pipelining = 1
   let ram_latency = 1
   let datapath_latency = ram_latency + ram_output_pipelining + multiply_latency
+  let twiddle_stream_pipe_length = multiply_latency + 1
 
-  module Omegas = struct
-    type 'a t =
-      { omega1 : 'a [@bits Gf.num_bits]
-      ; omega2 : 'a [@bits Gf.num_bits]
-      ; omega3 : 'a [@bits Gf.num_bits]
-      ; omega4 : 'a [@bits Gf.num_bits]
-      }
-    [@@deriving sexp_of, hardcaml]
+  let gf_mul ~clock a b =
+    let pipe x =
+      Gf.to_bits x |> Signal.pipeline (Reg_spec.create ~clock ()) ~n:1 |> Gf.of_bits
+    in
+    Gf.mul ~pipe (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  ;;
+
+  module Twiddle_factor_stream = struct
+    module I = struct
+      type 'a t =
+        { clock : 'a
+        ; start_twiddles : 'a
+        ; omegas : 'a list [@bits Gf.num_bits] [@length twiddle_stream_pipe_length]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O = struct
+      type 'a t = { w : 'a [@bits Gf.num_bits] } [@@deriving sexp_of, hardcaml]
+    end
+
+    module Var = Always.Variable
+    open Signal
+
+    let create (i : _ I.t) =
+      let pipe_length = List.length i.omegas in
+      let spec = Reg_spec.create ~clock:i.clock () in
+      let w = Always.Variable.reg ~width:Gf.num_bits spec in
+      let omega_step, omega_pipe = List.last_exn i.omegas, List.drop_last_exn i.omegas in
+      let multiplier_output = gf_mul ~clock:i.clock w.value omega_step in
+      let count = Var.reg spec ~width:(Int.ceil_log2 (multiply_latency + 1)) in
+      Always.(
+        compile
+          [ w <-- mux count.value (omega_pipe @ [ multiplier_output ])
+          ; when_ (count.value <>:. pipe_length - 1) [ count <-- count.value +:. 1 ]
+          ; when_ i.start_twiddles [ w <-- Gf.to_bits Gf.one; count <--. 0 ]
+          ]);
+      { O.w = w.value }
+    ;;
+
+    let initial_pipeline_factors root =
+      let inverse_root = Roots.inverse.(root) in
+      let rec f acc i =
+        if i = twiddle_stream_pipe_length
+        then []
+        else acc :: f (Gf_z.( * ) acc inverse_root) (i + 1)
+      in
+      f inverse_root 0 |> List.map ~f:(fun x -> Gf.to_bits (Gf.of_z (Gf_z.to_z x)))
+    ;;
   end
 
   module Controller = struct
@@ -47,7 +89,7 @@ module Make (P : Size) = struct
         ; m : 'a [@bits logn]
         ; addr1 : 'a [@bits logn]
         ; addr2 : 'a [@bits logn]
-        ; omegas : 'a Omegas.t
+        ; omegas : 'a list [@bits Gf.num_bits] [@length twiddle_stream_pipe_length]
         ; start_twiddles : 'a
         ; first_stage : 'a
         ; last_stage : 'a
@@ -86,15 +128,9 @@ module Make (P : Size) = struct
       let addr2 = Var.reg spec ~width:logn in
       let omegas =
         List.init logn ~f:(fun i ->
-            let inverse_root = Roots.inverse.(i + 1) in
-            let open Gf_z in
-            { Omegas.omega1 = inverse_root
-            ; omega2 = inverse_root * inverse_root
-            ; omega3 = inverse_root * inverse_root * inverse_root
-            ; omega4 = inverse_root * inverse_root * inverse_root * inverse_root
-            }
-            |> Omegas.map ~f:(fun x -> Gf.to_bits (Gf.of_z (Gf_z.to_z x))))
-        |> Omegas.Of_signal.mux i.value
+          Twiddle_factor_stream.initial_pipeline_factors (i + 1))
+        |> List.transpose_exn
+        |> List.map ~f:(mux i.value)
       in
       let start_twiddles = Var.reg spec ~width:1 in
       let first_stage = Var.reg spec ~width:1 in
@@ -187,55 +223,6 @@ module Make (P : Size) = struct
     ;;
   end
 
-  let gf_mul ~clock a b =
-    let pipe x =
-      Gf.to_bits x |> Signal.pipeline (Reg_spec.create ~clock ()) ~n:1 |> Gf.of_bits
-    in
-    Gf.mul ~pipe (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-  ;;
-
-  module Twiddle_factor_stream = struct
-    module I = struct
-      type 'a t =
-        { clock : 'a
-        ; start_twiddles : 'a
-        ; omegas : 'a Omegas.t
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module O = struct
-      type 'a t = { w : 'a [@bits Gf.num_bits] } [@@deriving sexp_of, hardcaml]
-    end
-
-    module State = struct
-      type t =
-        | Stream_multiplier_output
-        | Omega1
-        | Omega2
-        | Omega3
-      [@@deriving compare, enumerate, sexp_of, variants]
-    end
-
-    let create (i : _ I.t) =
-      let spec = Reg_spec.create ~clock:i.clock () in
-      let sm = Always.State_machine.create (module State) spec in
-      let w = Always.Variable.reg ~width:Gf.num_bits spec in
-      let multiplier_output = gf_mul ~clock:i.clock w.value i.omegas.omega4 in
-      Always.(
-        compile
-          [ sm.switch
-              [ Stream_multiplier_output, [ w <-- multiplier_output ]
-              ; Omega1, [ w <-- i.omegas.omega1; sm.set_next Omega2 ]
-              ; Omega2, [ w <-- i.omegas.omega2; sm.set_next Omega3 ]
-              ; Omega3, [ w <-- i.omegas.omega3; sm.set_next Stream_multiplier_output ]
-              ]
-          ; when_ i.start_twiddles [ w <-- Gf.to_bits Gf.one; sm.set_next Omega1 ]
-          ]);
-      { O.w = w.value }
-    ;;
-  end
-
   (* Butterly and twiddle factor calculation *)
   module Datapath = struct
     open Signal
@@ -246,7 +233,7 @@ module Make (P : Size) = struct
         ; clear : 'a
         ; d1 : 'a [@bits Gf.num_bits]
         ; d2 : 'a [@bits Gf.num_bits]
-        ; omegas : 'a Omegas.t
+        ; omegas : 'a list [@bits Gf.num_bits] [@length twiddle_stream_pipe_length]
         ; start_twiddles : 'a
         }
       [@@deriving sexp_of, hardcaml]
@@ -269,7 +256,8 @@ module Make (P : Size) = struct
       let ( -- ) = Scope.naming scope in
       let spec_with_clear = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let spec_no_clear = Reg_spec.create ~clock:i.clock () in
-      (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
+      (* The latency of the input data must be adjusted to match the latency of
+         the twiddle factor calculation *)
       let { Twiddle_factor_stream.O.w } =
         Twiddle_factor_stream.create
           { clock = i.clock
