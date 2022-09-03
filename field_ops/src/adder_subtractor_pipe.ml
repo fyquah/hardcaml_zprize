@@ -84,6 +84,7 @@ module Make_stage (Comb : Comb.S) = struct
           | `Add -> ( +: )
           | `Sub -> ( -: )
         in
+        assert (width term = w);
         op (op (uresize prev (w + 1)) (uresize term (w + 1))) (uresize carry_in (w + 1))
       in
       let hd = { Single_op_output.result = lsbs this_sum; carry = msb this_sum } in
@@ -117,7 +118,8 @@ module Make_implementation (Comb : Comb.S) = struct
   let create ~stages ~pipe (input : _ Input.t) =
     let bits = Input.validate_same_width (module Comb) input in
     let num_rhs_terms = List.length input.rhs_list in
-    let part_width = (bits + (stages - 1)) / stages in
+    assert (stages <= bits);
+    let part_width = Int.round_up ~to_multiple_of:stages bits / stages in
     assert (num_rhs_terms >= 1);
     (* [ a; b; c ] -> [ [ a1; b1; c1 ]; [ a2; b2; c2; ] [ a3; b3; c3 ] ]
      *
@@ -179,7 +181,9 @@ struct
     let results =
       Implementation.create
         ~stages
-        ~pipe:(fun ~n x -> if Signal.is_const x then x else pipeline ~n spec ~enable x)
+        ~pipe:(fun ~n x ->
+          assert (n >= 0);
+          if Signal.is_const x || n = 0 then x else pipeline ~n spec ~enable x)
         { lhs
         ; rhs_list =
             List.map3_exn
@@ -204,16 +208,18 @@ struct
   ;;
 end
 
-let hierarchical
-    ?(name = "adder_subtractor_pipe")
-    ?instance
-    ~stages
-    ~scope
-    ~enable
-    ~clock
-    (input : _ Input.t)
-  =
+let hierarchical ?name ?instance ~stages ~scope ~enable ~clock (input : _ Input.t) =
   let bits = Input.validate_same_width (module Signal) input in
+  let name =
+    match name with
+    | Some name -> name
+    | None ->
+      if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Add)
+      then Printf.sprintf "add_pipe_%d" bits
+      else if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Sub)
+      then Printf.sprintf "sub_pipe_%d" bits
+      else Printf.sprintf "add_sub_pipe_%d" bits
+  in
   let module M =
     With_interface (struct
       let bits = bits
@@ -241,4 +247,35 @@ let hierarchical
 let create (type a) (module Comb : Comb.S with type t = a) ~stages ~pipe input =
   let module Impl = Make_implementation (Comb) in
   Impl.create ~stages ~pipe input
+;;
+
+let add ?name ?instance ~stages ~scope ~enable ~clock xs =
+  hierarchical
+    ?name
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    { lhs = List.hd_exn xs
+    ; rhs_list =
+        List.map (List.tl_exn xs) ~f:(fun x -> { Term_and_op.op = `Add; term = x })
+    }
+  |> List.last_exn
+  |> Single_op_output.result
+;;
+
+let sub ?name ?instance ~stages ~scope ~enable ~clock lhs rhs_list =
+  hierarchical
+    ?name
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    { lhs
+    ; rhs_list = List.map rhs_list ~f:(fun x -> { Term_and_op.op = `Sub; term = x })
+    }
+  |> List.last_exn
+  |> Single_op_output.result
 ;;
