@@ -275,7 +275,7 @@ and create_karatsuba_ofman_stage_radix_3
      * configuration. The principled thing to do is to make [sum_or_delta]
      * part of the field of the karatsuba ofman tree
      *)
-    if wx >= 370 then `Sum else `Delta
+    if wx >= 370 then `Sum else if wx <= 126 then `Sum else `Delta
   in
   let wd =
     match sum_or_delta with
