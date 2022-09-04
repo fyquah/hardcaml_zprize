@@ -2,30 +2,47 @@ open Base
 open Hardcaml
 open Reg_with_enable
 
-module O = struct
-  type 'a t =
-    { result : 'a
-    ; carry : 'a
-    }
-  [@@deriving sexp_of, hardcaml, fields]
-end
-
 module Term_and_op = struct
   type 'a t =
-    { op : [ `Add | `Sub ]
-    ; term : 'a
-    }
-  [@@deriving fields]
+    | Add of 'a
+    | Sub of 'a
 
-  let map ~f { op; term } = { op; term = f term }
-  let transpose { op; term } = List.map term ~f:(fun term -> { op; term })
+  let map ~f = function
+    | Add x -> Add (f x)
+    | Sub x -> Sub (f x)
+  ;;
+
+  let transpose = function
+    | Add xs -> List.map xs ~f:(fun term -> Add term)
+    | Sub xs -> List.map xs ~f:(fun term -> Sub term)
+  ;;
+
+  let term = function
+    | Add x -> x
+    | Sub x -> x
+  ;;
+
+  let is_add = function
+    | Add _ -> true
+    | Sub _ -> false
+  ;;
+
+  let is_sub = function
+    | Add _ -> false
+    | Sub _ -> true
+  ;;
+
+  let op = function
+    | Add _ -> `Add
+    | Sub _ -> `Sub
+  ;;
 end
 
 (* [lhs `op` rhs[0] `op` rhs[1] `op` rhs[2] ... `op` rhs[-1]
  *
  * where `op` can be (+) or (-)
  *)
-module Input = struct
+module I = struct
   type 'a t =
     { lhs : 'a
     ; rhs_list : 'a Term_and_op.t list
@@ -45,9 +62,17 @@ module Input = struct
   let validate_same_width (type a) (module Comb : Comb.S with type t = a) (i : _ t) =
     let open Comb in
     let w = width i.lhs in
-    List.iter i.rhs_list ~f:(fun x -> assert (width x.term = w));
+    List.iter i.rhs_list ~f:(fun x -> assert (width (Term_and_op.term x) = w));
     w
   ;;
+end
+
+module O = struct
+  type 'a t =
+    { result : 'a
+    ; carry : 'a
+    }
+  [@@deriving sexp_of, hardcaml, fields]
 end
 
 module Carry_type = struct
@@ -65,8 +90,8 @@ module Make_stage (Comb : Comb.S) = struct
     List.fold terms ~init:prev ~f:(fun acc term ->
         let op, term =
           match term with
-          | `Add term -> ( +: ), term
-          | `Sub term -> ( -: ), term
+          | Term_and_op.Add term -> ( +: ), term
+          | Term_and_op.Sub term -> ( -: ), term
         in
         let w = width acc in
         op acc (uresize term w))
@@ -78,8 +103,8 @@ module Make_stage (Comb : Comb.S) = struct
     List.iter items ~f:(fun p ->
         let term =
           match p with
-          | `Add p -> p
-          | `Sub p -> p
+          | Term_and_op.Add p -> p
+          | Term_and_op.Sub p -> p
         in
         assert (width term = w));
     let partial_sum_and_carry =
@@ -109,8 +134,8 @@ module Make_implementation (Comb : Comb.S) = struct
   open Comb
   module Stage = Make_stage (Comb)
 
-  let create ~stages ~pipe ~carry_type ~carry_num_bits (input : _ Input.t) =
-    let bits = Input.validate_same_width (module Comb) input in
+  let create ~stages ~pipe ~carry_type ~carry_num_bits (input : _ I.t) =
+    let bits = I.validate_same_width (module Comb) input in
     let num_rhs_terms = List.length input.rhs_list in
     let part_width = Int.round_up ~to_multiple_of:stages bits / stages in
     assert (stages <= bits);
@@ -120,16 +145,13 @@ module Make_implementation (Comb : Comb.S) = struct
      * where a = concat_lsb [ a1; a2; a3 ]
      *)
     input
-    |> Input.map ~f:(split_lsb ~exact:false ~part_width)
-    |> Input.transpose
+    |> I.map ~f:(split_lsb ~exact:false ~part_width)
+    |> I.transpose
     |> List.foldi
          ~init:{ O.result = empty; carry = zero carry_num_bits }
-         ~f:(fun n (acc : _ O.t) (stage_input : _ Input.t) ->
-           let { Input.lhs; rhs_list } = Input.map ~f:(pipe ~n) stage_input in
-           List.map rhs_list ~f:(fun x ->
-               match x.op with
-               | `Add -> `Add x.term
-               | `Sub -> `Sub x.term)
+         ~f:(fun n (acc : _ O.t) (stage_input : _ I.t) ->
+           let { I.lhs; rhs_list } = I.map ~f:(pipe ~n) stage_input in
+           rhs_list
            |> Stage.create ~carry_type ~carry_num_bits acc ~init:lhs
            |> O.map ~f:(pipe ~n:1))
   ;;
@@ -171,6 +193,15 @@ struct
       { I.clock; enable; lhs; rhs_list }
     =
     let spec = Reg_spec.create ~clock () in
+    let rhs_list =
+      List.map2_exn rhs_list rhs_constant_overrides ~f:(fun default override ->
+          Option.map override ~f:(fun x -> Signal.of_constant (Bits.to_constant x))
+          |> Option.value ~default)
+      |> List.map2_exn ops ~f:(fun op term ->
+             match op with
+             | `Add -> Term_and_op.Add term
+             | `Sub -> Term_and_op.Sub term)
+    in
     Implementation.create
       ~carry_num_bits
       ~carry_type
@@ -178,20 +209,7 @@ struct
       ~pipe:(fun ~n x ->
         assert (n >= 0);
         if Signal.is_const x || n = 0 then x else pipeline ~n spec ~enable x)
-      { lhs
-      ; rhs_list =
-          List.map3_exn
-            ops
-            rhs_list
-            rhs_constant_overrides
-            ~f:(fun op term rhs_constant_override ->
-              let term =
-                match rhs_constant_override with
-                | None -> term
-                | Some x -> Signal.of_constant (Bits.to_constant x)
-              in
-              { Term_and_op.op; term })
-      }
+      { lhs; rhs_list }
   ;;
 
   let hierarchical
@@ -215,18 +233,11 @@ struct
 end
 
 let mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items =
-  let input =
-    { Input.lhs = init
-    ; rhs_list =
-        List.map items ~f:(function
-            | `Add term -> { Term_and_op.op = `Add; term }
-            | `Sub term -> { Term_and_op.op = `Sub; term })
-    }
-  in
+  let input = { I.lhs = init; rhs_list = items } in
   let carry_type =
-    if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Add)
+    if List.for_all input.rhs_list ~f:Term_and_op.is_add
     then Carry_type.Carry
-    else if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Sub)
+    else if List.for_all input.rhs_list ~f:Term_and_op.is_sub
     then Carry_type.Borrow
     else Carry_type.With_sign_bit
   in
@@ -239,14 +250,14 @@ let mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items =
     then carry_num_bits + 1
     else carry_num_bits
   in
-  let bits = Input.validate_same_width (module Signal) input in
+  let bits = I.validate_same_width (module Signal) input in
   let name =
     match name with
     | Some name -> name
     | None ->
-      if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Add)
+      if List.for_all input.rhs_list ~f:Term_and_op.is_add
       then Printf.sprintf "add_pipe_%d" bits
-      else if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Sub)
+      else if List.for_all input.rhs_list ~f:Term_and_op.is_sub
       then Printf.sprintf "sub_pipe_%d" bits
       else Printf.sprintf "add_sub_pipe_%d" bits
   in
@@ -284,7 +295,7 @@ let add ?name ?instance ~stages ~scope ~enable ~clock xs =
     ~enable
     ~clock
     ~init:(List.hd_exn xs)
-    (List.map (List.tl_exn xs) ~f:(fun x -> `Add x))
+    (List.map (List.tl_exn xs) ~f:(fun x -> Term_and_op.Add x))
 ;;
 
 let sub ?name ?instance ~stages ~scope ~enable ~clock xs =
@@ -296,5 +307,5 @@ let sub ?name ?instance ~stages ~scope ~enable ~clock xs =
     ~enable
     ~clock
     ~init:(List.hd_exn xs)
-    (List.map (List.tl_exn xs) ~f:(fun x -> `Sub x))
+    (List.map (List.tl_exn xs) ~f:(fun x -> Term_and_op.Sub x))
 ;;

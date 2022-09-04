@@ -27,6 +27,12 @@
 
 open Hardcaml
 
+module Term_and_op : sig
+  type 'a t =
+    | Add of 'a
+    | Sub of 'a
+end
+
 (** Output from performing a single [a `op1` b] step. *)
 module O : sig
   type 'a t =
@@ -45,7 +51,7 @@ val mixed
   -> enable:Signal.t
   -> clock:Signal.t
   -> init:Signal.t
-  -> [ `Add of Signal.t | `Sub of Signal.t ] list
+  -> Signal.t Term_and_op.t list
   -> Signal.t O.t
 
 val add
