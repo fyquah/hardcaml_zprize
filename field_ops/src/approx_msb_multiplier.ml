@@ -53,7 +53,8 @@ let rec create_recursive
       | Multiply (a, b) -> a, b
       | Square a -> a, a
     in
-    Ground_multiplier.create ~clock ~enable ~config:ground_multiplier a b
+    With_shift.no_shift
+      (Ground_multiplier.create ~clock ~enable ~config:ground_multiplier a b)
   | level :: remaining_levels ->
     create_level
       ~scope
@@ -84,6 +85,10 @@ and create_level
     Karatsuba_ofman_mult.Config.generate ~ground_multiplier remaining_levels
   in
   let create_recursive input =
+    let n =
+      Karatsuba_ofman_mult.Config.latency child_karatsuba_config
+      - Config.latency { levels = remaining_levels; ground_multiplier }
+    in
     create_recursive
       ~scope
       ~clock
@@ -91,10 +96,7 @@ and create_level
       ~levels:remaining_levels
       ~ground_multiplier
       input
-    |> pipeline
-         ~n:
-           (Karatsuba_ofman_mult.Config.latency child_karatsuba_config
-           - Config.latency { levels = remaining_levels; ground_multiplier })
+    |> With_shift.map ~f:(pipeline ~n)
   in
   let create_full_multiplier a b =
     assert (Signal.width a = Signal.width b);
@@ -110,11 +112,9 @@ and create_level
       | _ -> `Signal b)
   in
   let w = Multiplier_input.width input in
+  let w2 = w * 2 in
   let k = calc_k radix w in
-  let pipe_add ~stages items =
-    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
-    |> Adder_subtractor_pipe.O.result
-  in
+  let pipe_add ~stages items = With_shift.pipe_add ~scope ~enable ~clock ~stages items in
   match radix with
   | Radix.Radix_2 ->
     let k = calc_k radix w in
@@ -141,13 +141,13 @@ and create_level
       let result =
         pipe_add
           ~stages:post_adder_stages
-          [ uresize ua_mult_lb ((w * 2) - k)
-          ; uresize ub_mult_la ((w * 2) - k)
-          ; uresize (ua_mult_ub @: zero k) ((w * 2) - k)
+          [ With_shift.uresize ua_mult_lb (w2 - k)
+          ; With_shift.uresize ub_mult_la (w2 - k)
+          ; With_shift.uresize (With_shift.create ~shift:k ua_mult_ub) (w2 - k)
           ]
+        |> With_shift.sll ~by:k
       in
-      let result = result @: zero k in
-      assert (width result = w * 2);
+      assert (With_shift.width result = w * 2);
       result
     | Square _ -> raise_s [%message "Approx MSB squaring specialization not implemented"])
   | Radix_3 ->
@@ -179,15 +179,15 @@ and create_level
       let result =
         pipe_add
           ~stages:post_adder_stages
-          [ x2y2 @: zero (k4 - k2)
-          ; uresize (x2y1 @: zero (k3 - k2)) ((w * 2) - k2)
-          ; uresize (x1y2 @: zero (k3 - k2)) ((w * 2) - k2)
-          ; uresize x2y0 ((w * 2) - k2)
-          ; uresize x1y1 ((w * 2) - k2)
-          ; uresize x0y2 ((w * 2) - k2)
+          [ With_shift.create x2y2 ~shift:(k4 - k2)
+          ; With_shift.uresize (With_shift.create x2y1 ~shift:(k3 - k2)) (w2 - k2)
+          ; With_shift.uresize (With_shift.create x1y2 ~shift:(k3 - k2)) (w2 - k2)
+          ; With_shift.uresize x2y0 ((w * 2) - k2)
+          ; With_shift.uresize x1y1 ((w * 2) - k2)
+          ; With_shift.uresize x0y2 ((w * 2) - k2)
           ]
       in
-      result @: zero k2
+      With_shift.sll result ~by:k2
     | Square _ ->
       raise_s [%message "Radix-3 not implemented in approx msb multiplication."])
 ;;
@@ -230,7 +230,10 @@ module With_interface_multiply (M : Width) = struct
 
   let create ~config scope { I.clock; enable; x; y; in_valid } =
     let spec = Reg_spec.create ~clock () in
-    let z = create_with_config ~config ~scope ~clock ~enable (Multiply (x, y)) in
+    let z =
+      create_with_config ~config ~scope ~clock ~enable (Multiply (x, y))
+      |> With_shift.to_signal
+    in
     let out_valid = pipeline spec ~enable ~n:(Config.latency config) in_valid in
     assert (width z = bits);
     { O.z; out_valid }
@@ -273,6 +276,7 @@ module With_interface_multiply_by_constant (M : Width) = struct
     let y =
       Multiply (x, Signal.of_constant (Bits.to_constant multiply_by))
       |> create_with_config ~scope ~clock ~enable ~config
+      |> With_shift.to_signal
     in
     let out_valid = pipeline spec ~enable ~n:(Config.latency config) in_valid in
     assert (width y = bits * 2);
@@ -299,6 +303,7 @@ module With_interface_square (M : Width) = struct
     let spec = Reg_spec.create ~clock () in
     let y =
       create_recursive ~scope ~clock ~enable ~levels ~ground_multiplier (Square x)
+      |> With_shift.to_signal
     in
     let out_valid =
       pipeline spec ~enable ~n:(Config.latency { levels; ground_multiplier }) in_valid
