@@ -174,7 +174,16 @@ and create_level
       let x2y1 = create_full_multiplier (uresize x2 wx2) (uresize y1 wx2) in
       let x1y2 = create_full_multiplier (uresize x1 wx2) (uresize y2 wx2) in
       let x2y0 = create_recursive (Multiply (uresize x2 wx2, uresize y0 wx2)) in
-      let x1y1 = create_recursive (Multiply (uresize x1 wx2, uresize y1 wx2)) in
+      let x1y1 =
+        (* CR-someday fyquah: The upcast to wx2 is strictly not necessary.
+         * But we're keeping it for now due to empirical better DSP usage (at
+         * the cost of some LUTs). This is likely due to vivado offloading some
+         * multiplications to LUTs when there are more zeros (due to the
+         * uresize). Revisit this when we implement custom logic to implement
+         * constant multiplication specially.
+         *)
+        create_recursive (Multiply (uresize x1 wx2, uresize y1 wx2))
+      in
       let x0y2 = create_recursive (Multiply (uresize x0 wx2, uresize y2 wx2)) in
       let result =
         pipe_add
