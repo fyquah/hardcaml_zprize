@@ -208,7 +208,17 @@ struct
   ;;
 end
 
-let hierarchical ?name ?instance ~stages ~scope ~enable ~clock (input : _ Input.t) =
+module O = Single_op_output
+
+let mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items =
+  let input =
+    { Input.lhs = init
+    ; rhs_list =
+        List.map items ~f:(function
+            | `Add term -> { Term_and_op.op = `Add; term }
+            | `Sub term -> { Term_and_op.op = `Sub; term })
+    }
+  in
   let bits = Input.validate_same_width (module Signal) input in
   let name =
     match name with
@@ -242,40 +252,29 @@ let hierarchical ?name ?instance ~stages ~scope ~enable ~clock (input : _ Input.
     scope
     { clock; enable; lhs = input.lhs; rhs_list }
   |> M.O.results
-;;
-
-let create (type a) (module Comb : Comb.S with type t = a) ~stages ~pipe input =
-  let module Impl = Make_implementation (Comb) in
-  Impl.create ~stages ~pipe input
+  |> List.last_exn
 ;;
 
 let add ?name ?instance ~stages ~scope ~enable ~clock xs =
-  hierarchical
+  mixed
     ?name
     ?instance
     ~stages
     ~scope
     ~enable
     ~clock
-    { lhs = List.hd_exn xs
-    ; rhs_list =
-        List.map (List.tl_exn xs) ~f:(fun x -> { Term_and_op.op = `Add; term = x })
-    }
-  |> List.last_exn
-  |> Single_op_output.result
+    ~init:(List.hd_exn xs)
+    (List.map (List.tl_exn xs) ~f:(fun x -> `Add x))
 ;;
 
-let sub ?name ?instance ~stages ~scope ~enable ~clock lhs rhs_list =
-  hierarchical
+let sub ?name ?instance ~stages ~scope ~enable ~clock xs =
+  mixed
     ?name
     ?instance
     ~stages
     ~scope
     ~enable
     ~clock
-    { lhs
-    ; rhs_list = List.map rhs_list ~f:(fun x -> { Term_and_op.op = `Sub; term = x })
-    }
-  |> List.last_exn
-  |> Single_op_output.result
+    ~init:(List.hd_exn xs)
+    (List.map (List.tl_exn xs) ~f:(fun x -> `Sub x))
 ;;
