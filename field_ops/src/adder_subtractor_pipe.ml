@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Reg_with_enable
 
-module Single_op_output = struct
+module O = struct
   type 'a t =
     { result : 'a
     ; carry : 'a
@@ -50,64 +50,58 @@ module Input = struct
   ;;
 end
 
-module Output = struct
-  type 'a t = 'a Single_op_output.t list
-
-  let map ~f stage_output : _ t =
-    List.map stage_output ~f:(fun ({ result; carry } : _ Single_op_output.t) ->
-        { Single_op_output.carry = f carry; result = f result })
-  ;;
+module Carry_type = struct
+  type t =
+    | Carry
+    | Borrow
+    | With_sign_bit
+  [@@deriving sexp_of, equal]
 end
 
 module Make_stage (Comb : Comb.S) = struct
   open Comb
 
-  module Term_and_op_and_carry = struct
-    type t =
-      { op : [ `Add | `Sub ]
-      ; term : Comb.t
-      ; carry_in : Comb.t
-      }
-  end
-
-  let rec create_stage_impl
-      prev
-      (term_and_op_and_carry_list : Term_and_op_and_carry.t list)
-    =
-    match term_and_op_and_carry_list with
-    | [] -> []
-    | { Term_and_op_and_carry.term; op; carry_in } :: tl ->
-      let this_sum =
-        let w = width prev in
-        let op =
-          match op with
-          | `Add -> ( +: )
-          | `Sub -> ( -: )
+  let create_stage_impl prev terms =
+    List.fold terms ~init:prev ~f:(fun acc term ->
+        let op, term =
+          match term with
+          | `Add term -> ( +: ), term
+          | `Sub term -> ( -: ), term
         in
-        assert (width term = w);
-        op (op (uresize prev (w + 1)) (uresize term (w + 1))) (uresize carry_in (w + 1))
-      in
-      let hd = { Single_op_output.result = lsbs this_sum; carry = msb this_sum } in
-      hd :: create_stage_impl (lsbs this_sum) tl
+        let w = width acc in
+        op acc (uresize term w))
   ;;
 
-  let create (prev_stage_output : _ Output.t) ({ lhs; rhs_list } : _ Input.t) : _ Output.t
-    =
-    assert (not (List.is_empty rhs_list));
-    let part_width = width lhs in
-    List.iter rhs_list ~f:(fun p -> assert (width p.term = part_width));
-    let partial_output =
-      List.map2_exn
-        rhs_list
-        prev_stage_output
-        ~f:(fun { Term_and_op.term; op } { result = _; carry = carry_in } ->
-          { Term_and_op_and_carry.term; op; carry_in })
-      |> create_stage_impl lhs
+  let create (prev_stage_output : _ O.t) ~carry_num_bits ~carry_type ~init items : _ O.t =
+    assert (not (List.is_empty items));
+    let w = width init in
+    List.iter items ~f:(fun p ->
+        let term =
+          match p with
+          | `Add p -> p
+          | `Sub p -> p
+        in
+        assert (width term = w));
+    let partial_sum_and_carry =
+      let init = uresize init (w + carry_num_bits) in
+      create_stage_impl
+        (match (carry_type : Carry_type.t) with
+        | Carry -> init +: uresize prev_stage_output.carry (w + carry_num_bits)
+        | Borrow -> init -: uresize prev_stage_output.carry (w + carry_num_bits)
+        | With_sign_bit -> init +: sresize prev_stage_output.carry (w + carry_num_bits))
+        items
     in
-    List.map2_exn prev_stage_output partial_output ~f:(fun prev this ->
-        { Single_op_output.result = concat_msb_e [ this.result; prev.result ]
-        ; carry = this.carry
-        })
+    let carry = sel_top partial_sum_and_carry carry_num_bits in
+    let carry =
+      match carry_type with
+      | Borrow -> negate carry
+      | Carry | With_sign_bit -> carry
+    in
+    { O.result =
+        concat_msb_e
+          [ drop_top partial_sum_and_carry carry_num_bits; prev_stage_output.result ]
+    ; carry
+    }
   ;;
 end
 
@@ -115,11 +109,11 @@ module Make_implementation (Comb : Comb.S) = struct
   open Comb
   module Stage = Make_stage (Comb)
 
-  let create ~stages ~pipe (input : _ Input.t) =
+  let create ~stages ~pipe ~carry_type ~carry_num_bits (input : _ Input.t) =
     let bits = Input.validate_same_width (module Comb) input in
     let num_rhs_terms = List.length input.rhs_list in
-    assert (stages <= bits);
     let part_width = Int.round_up ~to_multiple_of:stages bits / stages in
+    assert (stages <= bits);
     assert (num_rhs_terms >= 1);
     (* [ a; b; c ] -> [ [ a1; b1; c1 ]; [ a2; b2; c2; ] [ a3; b3; c3 ] ]
      *
@@ -129,31 +123,26 @@ module Make_implementation (Comb : Comb.S) = struct
     |> Input.map ~f:(split_lsb ~exact:false ~part_width)
     |> Input.transpose
     |> List.foldi
-         ~init:
-           (List.init num_rhs_terms ~f:(fun _ ->
-                { Single_op_output.result = empty; carry = gnd }))
-         ~f:(fun n (acc : _ Output.t) (stage_input : _ Input.t) ->
-           stage_input
-           |> Input.map ~f:(pipe ~n)
-           |> Stage.create acc
-           |> Output.map ~f:(pipe ~n:1))
+         ~init:{ O.result = empty; carry = zero carry_num_bits }
+         ~f:(fun n (acc : _ O.t) (stage_input : _ Input.t) ->
+           let { Input.lhs; rhs_list } = Input.map ~f:(pipe ~n) stage_input in
+           List.map rhs_list ~f:(fun x ->
+               match x.op with
+               | `Add -> `Add x.term
+               | `Sub -> `Sub x.term)
+           |> Stage.create ~carry_type ~carry_num_bits acc ~init:lhs
+           |> O.map ~f:(pipe ~n:1))
   ;;
 end
 
 module With_interface (M : sig
   val bits : int
   val rhs_list_length : int
+  val carry_num_bits : int
 end) =
 struct
   module Implementation = Make_implementation (Signal)
   include M
-
-  module Single_op_output =
-    Interface.Update
-      (Single_op_output)
-      (struct
-        let t = { Single_op_output.result = "result", bits; carry = "carry", 1 }
-      end)
 
   module I = struct
     type 'a t =
@@ -166,7 +155,10 @@ struct
   end
 
   module O = struct
-    type 'a t = { results : 'a Single_op_output.t list [@length rhs_list_length] }
+    type 'a t = 'a O.t =
+      { result : 'a [@bits bits]
+      ; carry : 'a [@bits carry_num_bits]
+      }
     [@@deriving sexp_of, hardcaml, fields]
   end
 
@@ -174,41 +166,53 @@ struct
       ~stages
       ~ops
       ~rhs_constant_overrides
+      ~carry_type
       (_ : Scope.t)
       { I.clock; enable; lhs; rhs_list }
     =
     let spec = Reg_spec.create ~clock () in
-    let results =
-      Implementation.create
-        ~stages
-        ~pipe:(fun ~n x ->
-          assert (n >= 0);
-          if Signal.is_const x || n = 0 then x else pipeline ~n spec ~enable x)
-        { lhs
-        ; rhs_list =
-            List.map3_exn
-              ops
-              rhs_list
-              rhs_constant_overrides
-              ~f:(fun op term rhs_constant_override ->
-                let term =
-                  match rhs_constant_override with
-                  | None -> term
-                  | Some x -> Signal.of_constant (Bits.to_constant x)
-                in
-                { Term_and_op.op; term })
-        }
-    in
-    { O.results }
+    Implementation.create
+      ~carry_num_bits
+      ~carry_type
+      ~stages
+      ~pipe:(fun ~n x ->
+        assert (n >= 0);
+        if Signal.is_const x || n = 0 then x else pipeline ~n spec ~enable x)
+      { lhs
+      ; rhs_list =
+          List.map3_exn
+            ops
+            rhs_list
+            rhs_constant_overrides
+            ~f:(fun op term rhs_constant_override ->
+              let term =
+                match rhs_constant_override with
+                | None -> term
+                | Some x -> Signal.of_constant (Bits.to_constant x)
+              in
+              { Term_and_op.op; term })
+      }
   ;;
 
-  let hierarchical ~instance ~name ~stages ~ops ~rhs_constant_overrides scope i =
+  let hierarchical
+      ~instance
+      ~name
+      ~stages
+      ~ops
+      ~rhs_constant_overrides
+      ~carry_type
+      scope
+      i
+    =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ?instance ~scope ~name (create ~stages ~ops ~rhs_constant_overrides) i
+    H.hierarchical
+      ?instance
+      ~scope
+      ~name
+      (create ~stages ~ops ~rhs_constant_overrides ~carry_type)
+      i
   ;;
 end
-
-module O = Single_op_output
 
 let mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items =
   let input =
@@ -218,6 +222,22 @@ let mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items =
             | `Add term -> { Term_and_op.op = `Add; term }
             | `Sub term -> { Term_and_op.op = `Sub; term })
     }
+  in
+  let carry_type =
+    if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Add)
+    then Carry_type.Carry
+    else if List.for_all input.rhs_list ~f:(fun x -> Poly.equal x.op `Sub)
+    then Carry_type.Borrow
+    else Carry_type.With_sign_bit
+  in
+  let carry_num_bits =
+    (* CR fyquah: This is perhaps too coarse? i think we can do better *)
+    Int.ceil_log2 (1 + List.length input.rhs_list)
+  in
+  let carry_num_bits =
+    if Carry_type.equal With_sign_bit carry_type
+    then carry_num_bits + 1
+    else carry_num_bits
   in
   let bits = Input.validate_same_width (module Signal) input in
   let name =
@@ -234,6 +254,7 @@ let mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items =
     With_interface (struct
       let bits = bits
       let rhs_list_length = List.length input.rhs_list
+      let carry_num_bits = carry_num_bits
     end)
   in
   let ops = List.map ~f:Term_and_op.op input.rhs_list in
@@ -249,10 +270,9 @@ let mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items =
     ~name
     ~stages
     ~ops
+    ~carry_type
     scope
     { clock; enable; lhs = input.lhs; rhs_list }
-  |> M.O.results
-  |> List.last_exn
 ;;
 
 let add ?name ?instance ~stages ~scope ~enable ~clock xs =
