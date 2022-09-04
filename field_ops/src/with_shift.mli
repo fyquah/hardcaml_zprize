@@ -20,4 +20,5 @@ val pipe_add
   -> t list
   -> t
 
+val sum : t list -> t
 val to_signal : t -> Signal.t
