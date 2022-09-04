@@ -87,56 +87,6 @@ struct
     ;;
   end
 
-  module Twiddle_controller = struct
-    module I = struct
-      type 'a t =
-        { clock : 'a
-        ; clear : 'a
-        ; start : 'a
-        ; d : 'a [@bits Gf.num_bits]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module O = struct
-      type 'a t =
-        { done_ : 'a
-        ; addr : 'a [@bits logn]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module State = struct
-      type t =
-        | Idle
-        | Twiddle_loop
-      [@@deriving compare, enumerate, sexp_of, variants]
-    end
-
-    module Var = Always.Variable
-
-    let create _scope (i : _ I.t) =
-      let open Signal in
-      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
-      let sm = Always.State_machine.create (module State) spec in
-      let j = Var.reg spec ~width:logn in
-      let j_next = j.value +:. 1 in
-      Always.(
-        compile
-          [ sm.switch
-              [ Idle, [ j <--. 0; when_ i.start [ sm.set_next Twiddle_loop ] ]
-              ; Twiddle_loop, [ j <-- j_next; when_ (j_next ==:. 0) [ sm.set_next Idle ] ]
-              ]
-          ]);
-      { O.done_ = sm.is Idle; addr = j.value }
-    ;;
-
-    let hierarchy scope =
-      let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"twiddle" ~scope create
-    ;;
-  end
-
   module Controller = struct
     module I = struct
       type 'a t =
@@ -289,7 +239,6 @@ struct
           ; cores_done
           }
       in
-      (* let twiddler = Twiddle_controller.create {} *)
       let cores =
         Parallel_cores.hierarchy
           ~build_mode

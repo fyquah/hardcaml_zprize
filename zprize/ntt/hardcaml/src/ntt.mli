@@ -11,6 +11,23 @@ module Make (P : Size) : sig
   val n : int
   val logn : int
 
+  module Twiddle_factor_stream : sig
+    module I : sig
+      type 'a t =
+        { clock : 'a
+        ; start_twiddles : 'a
+        ; omegas : 'a list
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O : sig
+      type 'a t = { w : 'a } [@@deriving sexp_of, hardcaml]
+    end
+
+    val create : Signal.t Interface.Create_fn(I)(O).t
+  end
+
   module Controller : sig
     module I : sig
       type 'a t =

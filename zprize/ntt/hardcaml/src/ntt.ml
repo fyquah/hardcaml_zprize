@@ -128,7 +128,7 @@ module Make (P : Size) = struct
       let addr2 = Var.reg spec ~width:logn in
       let omegas =
         List.init logn ~f:(fun i ->
-          Twiddle_factor_stream.initial_pipeline_factors (i + 1))
+            Twiddle_factor_stream.initial_pipeline_factors (i + 1))
         |> List.transpose_exn
         |> List.map ~f:(mux i.value)
       in
@@ -182,16 +182,14 @@ module Make (P : Size) = struct
                       (sync_count.value ==:. sync_cycles - 1)
                       [ sm.set_next Looping
                       ; sync_count <--. 0
+                      ; start_twiddles <--. 1
                       ; flip <-- vdd
-                      ; j <--. 0
-                      ; start_twiddles <--. 1
-                      ; k <-- k_next
-                      ; addr1 <-- k_next
-                      ; addr2 <-- k_next +: m.value
-                      ; i <-- i_next
-                      ; start_twiddles <--. 1
                       ; first_stage <--. 0
+                      ; i <-- i_next
+                      ; j <--. 0
+                      ; k <-- k_next
                       ; m <-- m_next
+                      ; addr1 <-- k_next
                       ; addr2 <-- k_next +: m_next
                       ; when_ (i_next ==:. logn - 1) [ last_stage <--. 1 ]
                       ; when_
