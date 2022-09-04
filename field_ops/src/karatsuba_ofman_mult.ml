@@ -343,19 +343,19 @@ and create_karatsuba_ofman_stage_radix_3
         pipe_add_sub
           ~n:middle_adder_stages
           (sresize d21 wt3)
-          [ `Sub (uresize p22 wt3); `Sub (uresize p11 wt3) ]
+          [ Sub (uresize p22 wt3); Sub (uresize p11 wt3) ]
       in
       let t2 =
         pipe_add_sub
           ~n:middle_adder_stages
           (sresize d20 wt2)
-          [ `Sub (uresize p22 wt2); `Sub (uresize p00 wt2); `Add (uresize p11 wt2) ]
+          [ Sub (uresize p22 wt2); Sub (uresize p00 wt2); Add (uresize p11 wt2) ]
       in
       let t1 =
         pipe_add_sub
           ~n:middle_adder_stages
           (sresize d10 wt1)
-          [ `Sub (uresize p11 wt1); `Sub (uresize p00 wt1) ]
+          [ Sub (uresize p11 wt1); Sub (uresize p00 wt1) ]
       in
       let t0 = pipeline ~n:middle_adder_stages p00 in
       { t4; t3; t2; t1; t0 }
@@ -365,19 +365,19 @@ and create_karatsuba_ofman_stage_radix_3
         pipe_add_sub
           ~n:middle_adder_stages
           (uresize p22 wt3)
-          [ `Add (uresize p11 wt3); `Sub (uresize d21 wt3) ]
+          [ Add (uresize p11 wt3); Sub (uresize d21 wt3) ]
       in
       let t2 =
         pipe_add_sub
           ~n:middle_adder_stages
           (uresize p22 wt2)
-          [ `Add (uresize p11 wt2); `Add (uresize p00 wt2); `Sub (sresize d20 wt2) ]
+          [ Add (uresize p11 wt2); Add (uresize p00 wt2); Sub (sresize d20 wt2) ]
       in
       let t1 =
         pipe_add_sub
           ~n:middle_adder_stages
           (uresize p11 wt1)
-          [ `Add (uresize p00 wt1); `Sub (sresize d10 wt1) ]
+          [ Add (uresize p00 wt1); Sub (sresize d10 wt1) ]
       in
       let t0 = pipeline ~n:middle_adder_stages p00 in
       { t4; t3; t2; t1; t0 }
