@@ -23,7 +23,7 @@ let validate_all_items_same_width items =
   w
 ;;
 
-let pipe_add ~scope ~enable ~clock ~stages (items : t list) =
+let on_overlapping_bits (items : t list) do_thing =
   let item_width = validate_all_items_same_width items in
   let smallest_shift =
     Option.value_exn
@@ -37,10 +37,20 @@ let pipe_add ~scope ~enable ~clock ~stages (items : t list) =
           | shift -> item.x @: zero shift
         in
         Signal.uresize signal (item_width - smallest_shift))
-    |> Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages
-    |> Adder_subtractor_pipe.O.result
+    |> do_thing
   in
   { x; shift = smallest_shift }
 ;;
 
-let to_signal t = t.x @: zero t.shift
+let pipe_add ~scope ~enable ~clock ~stages (items : t list) =
+  on_overlapping_bits items (fun x ->
+      x
+      |> Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages
+      |> Adder_subtractor_pipe.O.result)
+;;
+
+let sum (items : t list) =
+  on_overlapping_bits items (fun x -> List.reduce_exn x ~f:( +: ))
+;;
+
+let to_signal t = if t.shift = 0 then t.x else t.x @: zero t.shift
