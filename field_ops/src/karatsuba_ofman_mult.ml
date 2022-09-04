@@ -173,8 +173,12 @@ and create_karatsuba_ofman_stage_radix_2
   in
   let pipe_add ~stages items =
     Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
+    |> Adder_subtractor_pipe.O.result
   in
-  let pipe_sub ~stages = Adder_subtractor_pipe.sub ~scope ~enable ~clock ~stages in
+  let pipe_sub ~stages items =
+    Adder_subtractor_pipe.sub ~scope ~enable ~clock ~stages items
+    |> Adder_subtractor_pipe.O.result
+  in
   let wa = width a in
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = if Signal.is_const x then x else pipeline ~n spec ~enable x in
@@ -208,7 +212,7 @@ and create_karatsuba_ofman_stage_radix_2
     { z0; m1; z2 }
   in
   let z1 =
-    pipe_sub ~stages:middle_adder_stages m1 [ uresize z2 (w + 2); uresize z0 (w + 2) ]
+    pipe_sub ~stages:middle_adder_stages [ m1; uresize z2 (w + 2); uresize z0 (w + 2) ]
   in
   let z0 = pipeline ~n:middle_adder_stages z0 in
   let z2 = pipeline ~n:middle_adder_stages z2 in
@@ -242,25 +246,11 @@ and create_karatsuba_ofman_stage_radix_3
   let spec = Reg_spec.create ~clock () in
   let pipe_add ~stages items =
     Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
+    |> Adder_subtractor_pipe.O.result
   in
   let pipe_add_sub ~n lhs rhs_list =
-    Adder_subtractor_pipe.hierarchical
-      ~scope
-      ~enable
-      ~clock
-      ~stages:n
-      { lhs
-      ; rhs_list =
-          List.map rhs_list ~f:(fun op_and_term ->
-              let op, term =
-                match op_and_term with
-                | `Add x -> `Add, x
-                | `Sub x -> `Sub, x
-              in
-              { Adder_subtractor_pipe.Term_and_op.op; term })
-      }
-    |> List.last_exn
-    |> Adder_subtractor_pipe.Single_op_output.result
+    Adder_subtractor_pipe.mixed ~scope ~enable ~clock ~stages:n ~init:lhs rhs_list
+    |> Adder_subtractor_pipe.O.result
   in
   let pipeline ~n x =
     assert (n >= 0);

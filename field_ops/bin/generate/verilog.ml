@@ -267,25 +267,34 @@ let command_pipe_add =
     ~summary:""
     (let%map_open.Command filename = flag_filename
      and bits = flag "bits" (required int) ~doc:""
-     and rhs_list_length = flag "rhs-list-length" (required int) ~doc:""
+     and num_items = flag "num-items" (required int) ~doc:""
      and stages = flag "stages" (required int) ~doc:"" in
      fun () ->
-       let module X =
-         Adder_subtractor_pipe.With_interface (struct
-           let bits = bits
-           let rhs_list_length = rhs_list_length
-         end)
+       let module I = struct
+         type 'a t =
+           { clock : 'a
+           ; x : 'a array [@bits bits] [@length num_items]
+           }
+         [@@deriving sexp_of, hardcaml]
+       end
        in
-       let module C = Circuit.With_interface (X.I) (X.O) in
+       let module O = struct
+         type 'a t = { z : 'a [@bits bits] } [@@deriving sexp_of, hardcaml]
+       end
+       in
+       let module C = Circuit.With_interface (I) (O) in
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
-       let create_fn (i : _ X.I.t) =
-         X.create
-           ~stages
-           ~ops:(List.init rhs_list_length ~f:(Fn.const `Add))
-           ~rhs_constant_overrides:(List.init rhs_list_length ~f:(Fn.const None))
-           scope
-           i
+       let create_fn (i : _ I.t) =
+         { O.z =
+             Adder_subtractor_pipe.add
+               ~stages
+               ~scope
+               ~enable:Signal.vdd
+               ~clock:i.clock
+               (Array.to_list i.x)
+             |> Adder_subtractor_pipe.O.result
+         }
        in
        let circuit = C.create_exn ~name:"pipe_add" create_fn in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)

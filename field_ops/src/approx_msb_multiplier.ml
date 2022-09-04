@@ -113,6 +113,7 @@ and create_level
   let k = calc_k radix w in
   let pipe_add ~stages items =
     Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
+    |> Adder_subtractor_pipe.O.result
   in
   match radix with
   | Radix.Radix_2 ->

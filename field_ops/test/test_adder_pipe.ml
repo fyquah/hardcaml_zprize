@@ -36,6 +36,7 @@ struct
           ~enable:Signal.vdd
           ~clock:i.clock
           (Array.to_list i.items)
+        |> Adder_subtractor_pipe.O.result
     ; valid_out = Signal.pipeline ~n:stages (Reg_spec.create ~clock:i.clock ()) i.valid_in
     }
   ;;

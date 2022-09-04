@@ -188,14 +188,8 @@ struct
       assert (width a' = bits + 2);
       assert (width qp = bits + 2);
       { a_minus_qp =
-          Adder_subtractor_pipe.hierarchical
-            ~stages
-            ~scope
-            ~enable
-            ~clock
-            { lhs = a'; rhs_list = [ { op = `Sub; term = qp } ] }
-          |> List.hd_exn
-          |> Adder_subtractor_pipe.Single_op_output.result
+          Adder_subtractor_pipe.sub ~stages ~scope ~enable ~clock [ a'; qp ]
+          |> Adder_subtractor_pipe.O.result
       ; valid = pipeline ~enable ~n:latency spec valid
       }
     ;;
@@ -218,20 +212,15 @@ struct
       let a_mod_p =
         List.map (List.range 0 4) ~f:(fun i ->
             let result =
-              Adder_subtractor_pipe.hierarchical
+              Adder_subtractor_pipe.sub
                 ~stages
                 ~scope
                 ~enable
                 ~clock
-                { lhs = a_minus_qp
-                ; rhs_list =
-                    [ { op = `Sub; term = Signal.of_z ~width:(bits + 2) Z.(of_int i * p) }
-                    ]
-                }
-              |> List.hd_exn
+                [ a_minus_qp; Signal.of_z ~width:(bits + 2) Z.(of_int i * p) ]
             in
-            { With_valid.valid = ~:(Adder_subtractor_pipe.Single_op_output.carry result)
-            ; value = Adder_subtractor_pipe.Single_op_output.result result
+            { With_valid.valid = ~:(Adder_subtractor_pipe.O.carry result)
+            ; value = Adder_subtractor_pipe.O.result result
             })
         |> List.rev
         |> Signal.priority_select
