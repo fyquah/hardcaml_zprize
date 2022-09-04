@@ -30,7 +30,7 @@ struct
 
   let create ~stages scope (i : _ I.t) =
     { O.sum =
-        Adder_subtractor_pipe.add
+        Adder_subtractor_pipe.sub
           ~stages
           ~scope
           ~enable:Signal.vdd
@@ -68,9 +68,19 @@ let test ~bits ~num_items ~stages test_cases =
   done;
   let results = Array.of_list (List.rev !results) in
   Array.iter2_exn test_cases results ~f:(fun test_case obtained ->
-      let expected = Array.fold test_case ~init:(Bits.zero bits) ~f:Bits.( +: ) in
+      let expected = Array.reduce_exn test_case ~f:Bits.( -: ) in
       if not (Bits.equal obtained expected)
-      then raise_s [%message "Test case failed!" (bits : int)])
+      then (
+        let obtained = Bits.to_z ~signedness:Unsigned obtained in
+        let expected = Bits.to_z ~signedness:Unsigned expected in
+        let test_case = Array.map ~f:(Bits.to_z ~signedness:Unsigned) test_case in
+        raise_s
+          [%message
+            "Test case failed!"
+              (bits : int)
+              (test_case : Utils.z array)
+              (obtained : Utils.z)
+              (expected : Utils.z)]))
 ;;
 
 let rand bits =
@@ -78,25 +88,17 @@ let rand bits =
   |> Bits.of_z ~width:bits
 ;;
 
-let test_random ~w ~k ~wx2 ~num_items ~stages ~num_test_cases =
-  let bits = (2 * w) - (2 * k) in
-  let k2 = 2 * k in
-  let k3 = 3 * k in
-  let k4 = 4 * k in
+let test_random ~bits ~num_items ~stages ~num_test_cases =
   let test_cases =
-    Array.init num_test_cases ~f:(fun _ ->
-        let open Bits in
-        [| rand (wx2 * 2) @: zero (k4 - k2)
-         ; uresize (rand (wx2 * 2) @: zero (k3 - k2)) ((w * 2) - k2)
-         ; uresize (rand (wx2 * 2) @: zero (k3 - k2)) ((w * 2) - k2)
-         ; uresize (rand (wx2 * 2)) ((w * 2) - k2)
-         ; uresize (rand (wx2 * 2)) ((w * 2) - k2)
-         ; uresize (rand (wx2 * 2)) ((w * 2) - k2)
-        |])
+    Array.init num_test_cases ~f:(fun _ -> Array.init num_items ~f:(fun _ -> rand bits))
   in
   test ~bits ~num_items ~stages test_cases
 ;;
 
-let%expect_test "" =
-  test_random ~num_items:6 ~num_test_cases:1_000 ~w:378 ~k:124 ~stages:5 ~wx2:130
+let%expect_test "Subtract with 2 items" =
+  test_random ~num_items:2 ~num_test_cases:1_000 ~bits:32 ~stages:8
+;;
+
+let%expect_test "Subtract with 3 items" =
+  test_random ~num_items:3 ~num_test_cases:1_000 ~bits:32 ~stages:8
 ;;
