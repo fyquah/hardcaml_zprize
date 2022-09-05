@@ -11,6 +11,7 @@ let command_kernel =
         let module Test =
           Ntts_r_fun_test.Test_kernel.Make (struct
             let logn = logn
+            let support_4step_twiddle = true
           end)
         in
         let input_coefs =

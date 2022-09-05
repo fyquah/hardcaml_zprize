@@ -16,13 +16,8 @@ open Signal
    in mind.
 *)
 
-module Make (Size : sig
-  (* Overall, we are going to compute an ntt of 2^(logn + logn) *)
-
-  val logn : int
-end) =
-struct
-  open Size
+module Make (Config : Ntt.Config) = struct
+  open Config
 
   (* Specifying this as a log is probably not as flexible as we want (if we can
    fit 29 cores, this would limit us to 16). But it greatly simplifies things to
@@ -31,10 +26,7 @@ struct
   let cores = 1 lsl logcores
 
   module Gf = Gf_bits.Make (Hardcaml.Signal)
-
-  module Ntt = Ntt.Make (struct
-    let logn = logn
-  end)
+  module Ntt = Ntt.Make (Config)
 
   module Parallel_cores = struct
     module I = struct
@@ -42,6 +34,7 @@ struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; flip : 'a
         ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
         ; wr_en : 'a [@bits cores]
@@ -70,6 +63,7 @@ struct
               { Ntt.With_rams.I.clock = i.clock
               ; clear = i.clear
               ; start = i.start
+              ; first_4step_pass = i.first_4step_pass
               ; flip = i.flip
               ; wr_d = i.wr_d.(index)
               ; wr_en = i.wr_en.:(index)
@@ -205,6 +199,7 @@ struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
         ; wr_en : 'a [@bits cores]
         ; wr_addr : 'a [@bits logn]
@@ -246,6 +241,7 @@ struct
           { Parallel_cores.I.clock = i.clock
           ; clear = i.clear
           ; start = controller.start_cores
+          ; first_4step_pass = i.first_4step_pass
           ; flip = controller.flip
           ; wr_d = i.wr_d
           ; wr_en = i.wr_en
@@ -276,6 +272,7 @@ struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; data_in : 'a Axi512.Stream.Source.t
         ; data_out_dest : 'a Axi512.Stream.Dest.t
         }
@@ -401,6 +398,7 @@ struct
           { Core.I.clock = i.clock
           ; clear = i.clear
           ; start = i.start
+          ; first_4step_pass = i.first_4step_pass
           ; wr_d = i.data_in.tdata |> split_lsb ~part_width:Gf.num_bits |> Array.of_list
           ; wr_en = repeat (i.data_in.tvalid &: load_sm.tready) cores
           ; wr_addr = load_sm.wr_addr
@@ -456,18 +454,26 @@ struct
     let create
         ~build_mode
         scope
-        { I.ap_clk; ap_rst_n; controller_to_compute; compute_to_controller_dest }
+        { I.ap_clk = clock
+        ; ap_rst_n = clear_n
+        ; controller_to_compute
+        ; compute_to_controller_dest
+        }
       =
+      let clear = ~:clear_n in
+      let spec = Reg_spec.create ~clock ~clear () in
       let start = wire 1 in
+      let first_4step_pass = reg_fb spec ~enable:start ~width:1 ~f:( ~: ) in
       let { Kernel.O.data_out; data_in_dest; done_ } =
         Kernel.hierarchy
           ~build_mode
           scope
-          { clock = ap_clk
-          ; clear = ~:ap_rst_n
+          { clock
+          ; clear
           ; data_in = controller_to_compute
           ; data_out_dest = compute_to_controller_dest
           ; start
+          ; first_4step_pass
           }
       in
       start <== (done_ &: controller_to_compute.tvalid);

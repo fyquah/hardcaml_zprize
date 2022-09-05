@@ -46,6 +46,7 @@ module Gf_bits = Ntts_r_fun.Gf_bits.Make (Bits)
 
 module Size = struct
   let logn = 5
+  let support_4step_twiddle = false
 end
 
 module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Size)

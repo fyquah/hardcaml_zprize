@@ -4,6 +4,7 @@ open Hardcaml_waveterm
 
 module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (struct
   let logn = 4
+  let support_4step_twiddle = false
 end)
 
 module Kernel = Ntt_4step.Kernel
@@ -56,7 +57,8 @@ let test_store_sm () =
 let%expect_test "store sm" =
   let waves = test_store_sm () in
   Waveform.print ~display_width:90 ~display_height:25 ~wave_width:1 waves;
-  [%expect {|
+  [%expect
+    {|
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────┐
     │clock             ││┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ │
     │                  ││  └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─│

@@ -7,6 +7,7 @@ let%expect_test "addressing" =
   let module Ntt =
     Ntts_r_fun.Ntt.Make (struct
       let logn = 3
+      let support_4step_twiddle = false
     end)
   in
   let module Sim = Cyclesim.With_interface (Ntt.Controller.I) (Ntt.Controller.O) in
@@ -85,6 +86,7 @@ let inverse_ntt_test ~waves input_coefs =
   let module Ntt =
     Ntts_r_fun.Ntt.Make (struct
       let logn = logn
+      let support_4step_twiddle = false
     end)
   in
   let module Sim = Cyclesim.With_interface (Ntt.With_rams.I) (Ntt.With_rams.O) in

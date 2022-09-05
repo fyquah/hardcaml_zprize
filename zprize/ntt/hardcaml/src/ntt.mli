@@ -1,17 +1,20 @@
 open! Base
 open! Hardcaml
 
-module type Size = sig
+module type Config = sig
   val logn : int
+  val support_4step_twiddle : bool
 end
 
 module Gf : module type of Gf_bits.Make (Signal)
 
-module Make (P : Size) : sig
+module Make (Config : Config) : sig
   val n : int
   val logn : int
 
   module Twiddle_factor_stream : sig
+    val pipe_length : int
+
     module I : sig
       type 'a t =
         { clock : 'a
@@ -34,6 +37,7 @@ module Make (P : Size) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -78,6 +82,7 @@ module Make (P : Size) : sig
       type 'a t =
         { q1 : 'a
         ; q2 : 'a
+        ; q_scale : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -92,6 +97,7 @@ module Make (P : Size) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; d1 : 'a
         ; d2 : 'a
         }
@@ -126,6 +132,7 @@ module Make (P : Size) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; flip : 'a
         ; wr_d : 'a
         ; wr_en : 'a

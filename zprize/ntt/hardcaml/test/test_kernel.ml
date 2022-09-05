@@ -5,15 +5,12 @@ module N4 = Ntts_r_fun.Ntt_4step
 module Gf_z = Ntts_r_fun.Gf_z
 module Gf_bits = Ntts_r_fun.Gf_bits.Make (Bits)
 
-module Make (Size : sig
-  val logn : int
-end) =
-struct
-  module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Size)
+module Make (Config : Ntts_r_fun.Ntt.Config) = struct
+  module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Config)
   module Kernel = Ntt_4step.Kernel
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
 
-  let logn = Size.logn
+  let logn = Config.logn
   let n = 1 lsl logn
   let logcores = Ntt_4step.logcores
   let num_cores = 1 lsl logcores
@@ -160,11 +157,12 @@ struct
   ;;
 end
 
-module Size = struct
+module Config = struct
   let logn = 5
+  let support_4step_twiddle = true
 end
 
-module Test = Make (Size)
+module Test = Make (Config)
 
 let%expect_test "" =
   let waves = Test.run (Test.random_input_coefs ()) in
