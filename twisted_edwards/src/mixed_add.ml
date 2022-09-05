@@ -34,6 +34,7 @@ module Config = struct
     ; p : Z.t
     ; a : Z.t
     ; d : Z.t
+    ; output_pipeline_stages : int
     }
 
   let reduce config ~scope ~clock ~enable x =
@@ -58,6 +59,7 @@ module Config = struct
       ; p = Ark_bls12_377_g1.modulus ()
       ; a
       ; d
+      ; output_pipeline_stages = 1
       }
     ;;
   end
@@ -370,22 +372,51 @@ module Make (Num_bits : Num_bits.S) = struct
     ;;
   end
 
+  module Stage5 = struct
+    type 'a t =
+      { x3 : 'a
+      ; y3 : 'a
+      ; z3 : 'a
+      ; t3 : 'a
+      ; valid : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+
+    let latency (config : Config.t) = config.output_pipeline_stages
+
+    let create ~scope ~clock ~config { Stage4.x3; y3; z3; t3; valid } =
+      assert (latency config >= 0);
+      let scope = Scope.sub_scope scope "stage4" in
+      { x3; y3; z3; t3; valid }
+      |> map ~f:(pipeline (Reg_spec.create ~clock ()) ~n:(latency config))
+      |> map ~f:(fun x ->
+             if latency config > 0
+             then
+               (* Only mark as dont_touch if there is any pipelining. *)
+               add_attribute x (Rtl_attribute.Vivado.dont_touch true)
+             else x)
+      |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
+    ;;
+  end
+
   let latency config =
     Stage0.latency config
     + Stage1.latency config
     + Stage2.latency config
     + Stage3.latency config
     + Stage4.latency config
+    + Stage5.latency config
   ;;
 
   let create ~config scope { I.clock; valid_in; p1; p2 } =
-    let { Stage4.x3; y3; z3; t3; valid = valid_out } =
+    let { Stage5.x3; y3; z3; t3; valid = valid_out } =
       { p1; p2; valid = valid_in }
       |> Stage0.create ~config ~scope ~clock
       |> Stage1.create ~config ~scope ~clock
       |> Stage2.create ~config ~scope ~clock
       |> Stage3.create ~config ~scope ~clock
       |> Stage4.create ~config ~scope ~clock
+      |> Stage5.create ~config ~scope ~clock
     in
     { O.valid_out; p3 = { x = x3; y = y3; z = z3; t = t3 } }
   ;;

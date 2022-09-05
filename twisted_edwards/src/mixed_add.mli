@@ -16,6 +16,7 @@ module Config : sig
     ; p : Z.t
     ; a : Z.t
     ; d : Z.t
+    ; output_pipeline_stages : int
     }
 
   module For_bls12_377 : sig
