@@ -48,7 +48,7 @@ let hybrid_dsp_and_luts_umul a b =
       let pivot = drop_bottom b 17 in
       Signal.add_attribute
         (a *: pivot)
-        (Rtl_attribute.create ~value:(Bool false) "USE_DSP")
+        (Rtl_attribute.create ~value:(String "no") "USE_DSP")
     in
     let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
     assert (width result = width a + width b);
