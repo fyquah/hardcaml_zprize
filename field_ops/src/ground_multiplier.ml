@@ -37,6 +37,33 @@ let long_multiplication_with_addition
     |> Fn.flip uresize output_width
 ;;
 
+let long_multiplication_with_addition_for_signal ~pivot big =
+  let open Signal in
+  let output_width = width pivot + width big in
+  let addition_terms =
+    List.filter_mapi (bits_lsb pivot) ~f:(fun i b ->
+        if is_vdd (b ==:. 0)
+        then None
+        else Some (With_shift.create ~shift:i (mux2 b big (zero (width big)))))
+  in
+  match addition_terms with
+  | [] -> With_shift.create ~shift:0 (zero output_width)
+  | _ ->
+    let addition_term_bits =
+      let maximum_addition_term_width =
+        List.map addition_terms ~f:With_shift.width
+        |> List.max_elt ~compare:Int.compare
+        |> Option.value_exn
+      in
+      let num_terms = List.length addition_terms in
+      maximum_addition_term_width + Int.ceil_log2 num_terms
+    in
+    addition_terms
+    |> List.map ~f:(Fn.flip With_shift.uresize addition_term_bits)
+    |> With_shift.sum
+    |> Fn.flip With_shift.uresize output_width
+;;
+
 let hybrid_dsp_and_luts_umul a b =
   assert (Signal.width a = Signal.width b);
   let w = Signal.width a in
@@ -46,9 +73,7 @@ let hybrid_dsp_and_luts_umul a b =
     let smaller = a *: b.:[16, 0] in
     let bigger =
       let pivot = drop_bottom b 17 in
-      Signal.add_attribute
-        (a *: pivot)
-        (Rtl_attribute.create ~value:(String "no") "USE_DSP")
+      long_multiplication_with_addition_for_signal ~pivot a |> With_shift.to_signal
     in
     let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
     assert (width result = width a + width b);
