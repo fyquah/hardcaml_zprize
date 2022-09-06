@@ -21,4 +21,5 @@ val pipe_add
   -> t
 
 val sum : t list -> t
+val mixed : init:t -> [ `Add of t | `Sub of t ] list -> t
 val to_signal : t -> Signal.t

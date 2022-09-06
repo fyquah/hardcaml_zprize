@@ -37,6 +37,12 @@ let long_multiplication_with_addition
     |> Fn.flip uresize output_width
 ;;
 
+let opt_to_bits (x : Signal.t) =
+  match x with
+  | Signal.Const { constant; signal_id = _ } -> Some constant
+  | _ -> None
+;;
+
 let long_multiplication_with_addition_for_signal ~pivot big =
   let open Signal in
   let output_width = width pivot + width big in
@@ -46,9 +52,8 @@ let long_multiplication_with_addition_for_signal ~pivot big =
         then None
         else Some (With_shift.create ~shift:i (mux2 b big (zero (width big)))))
   in
-  match addition_terms with
-  | [] -> With_shift.create ~shift:0 (zero output_width)
-  | _ ->
+  match opt_to_bits pivot with
+  | None ->
     let addition_term_bits =
       let maximum_addition_term_width =
         List.map addition_terms ~f:With_shift.width
@@ -62,6 +67,46 @@ let long_multiplication_with_addition_for_signal ~pivot big =
     |> List.map ~f:(Fn.flip With_shift.uresize addition_term_bits)
     |> With_shift.sum
     |> Fn.flip With_shift.uresize output_width
+    |> With_shift.to_signal
+  | Some pivot ->
+    let pivot = Naf.of_bits pivot in
+    (match
+       Naf.bits_lsb pivot
+       |> List.filter_mapi ~f:(fun shift bit ->
+              match bit with
+              | Naf.Bit.Zero -> None
+              | Naf.Bit.Pos_one -> Some (`Add (With_shift.create ~shift big))
+              | Naf.Bit.Neg_one -> Some (`Sub (With_shift.create ~shift big)))
+       |> List.rev
+     with
+    | [] -> zero output_width
+    | [ hd ] ->
+      (match hd with
+      | `Add hd -> With_shift.to_signal hd
+      | `Sub hd -> Signal.negate (With_shift.to_signal hd))
+    | init :: items ->
+      let addition_term_bits =
+        let maximum_addition_term_width =
+          List.map addition_terms ~f:With_shift.width
+          |> List.max_elt ~compare:Int.compare
+          |> Option.value_exn
+        in
+        let num_terms = List.length addition_terms in
+        maximum_addition_term_width + Int.ceil_log2 num_terms
+      in
+      let init =
+        match init with
+        | `Add x -> With_shift.uresize x addition_term_bits
+        | `Sub _ -> assert false
+      in
+      let items =
+        List.map items ~f:(fun x ->
+            match x with
+            | `Add x -> `Add (With_shift.uresize x addition_term_bits)
+            | `Sub x -> `Sub (With_shift.uresize x addition_term_bits))
+      in
+      With_shift.uresize (With_shift.mixed ~init items) output_width
+      |> With_shift.to_signal)
 ;;
 
 let hybrid_dsp_and_luts_umul a b =
@@ -73,7 +118,7 @@ let hybrid_dsp_and_luts_umul a b =
     let smaller = a *: b.:[16, 0] in
     let bigger =
       let pivot = drop_bottom b 17 in
-      long_multiplication_with_addition_for_signal ~pivot a |> With_shift.to_signal
+      long_multiplication_with_addition_for_signal ~pivot a
     in
     let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
     assert (width result = width a + width b);
