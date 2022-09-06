@@ -71,7 +71,7 @@ let long_multiplication_with_addition_for_signal ~pivot big =
     | [] -> zero output_width
     | [ hd ] ->
       (match hd with
-      | `Add hd -> With_shift.to_signal hd
+      | `Add hd -> With_shift.to_signal (With_shift.uresize hd output_width)
       | `Sub hd ->
         assert (With_shift.width hd = Signal.width big);
         With_shift.mixed
@@ -104,13 +104,13 @@ let long_multiplication_with_addition_for_signal ~pivot big =
       |> With_shift.to_signal)
 ;;
 
-let should_use_top_as_pivot b =
+let should_multiply_top_with_luts b =
   match b with
   | Signal.Const { constant = b; signal_id = _ } ->
     let bottom = Naf.of_bits (Bits.drop_top b 17) in
     let top = Naf.of_bits (Bits.drop_bottom b 17) in
     Naf.hamming_weight top < Naf.hamming_weight bottom
-  | _ -> true (* Doesn't matter with non constants ... *)
+  | _ -> true (* doesn't matter with non constants ... *)
 ;;
 
 let hybrid_dsp_and_luts_umul a b =
@@ -120,7 +120,7 @@ let hybrid_dsp_and_luts_umul a b =
   then a *: b
   else (
     let result =
-      if should_use_top_as_pivot b
+      if should_multiply_top_with_luts b
       then (
         let smaller = a *: sel_bottom b 17 in
         let bigger =
@@ -138,6 +138,19 @@ let hybrid_dsp_and_luts_umul a b =
     in
     assert (width result = width a + width b);
     result)
+;;
+
+let hybrid_dsp_and_luts_umul a b =
+  match b with
+  | Signal.Const { constant; signal_id = _ } ->
+    let threshold = 5 in
+    if Naf.hamming_weight (Naf.of_bits constant) < threshold
+    then (
+      let result = long_multiplication_with_addition_for_signal ~pivot:b a in
+      assert (Signal.width result = Signal.width a + Signal.width b);
+      result)
+    else hybrid_dsp_and_luts_umul a b
+  | _ -> hybrid_dsp_and_luts_umul a b
 ;;
 
 let specialized_43_bit_multiply
