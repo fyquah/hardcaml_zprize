@@ -54,20 +54,9 @@ let long_multiplication_with_addition_for_signal ~pivot big =
   in
   match opt_to_bits pivot with
   | None ->
-    let addition_term_bits =
-      let maximum_addition_term_width =
-        List.map addition_terms ~f:With_shift.width
-        |> List.max_elt ~compare:Int.compare
-        |> Option.value_exn
-      in
-      let num_terms = List.length addition_terms in
-      maximum_addition_term_width + Int.ceil_log2 num_terms
-    in
-    addition_terms
-    |> List.map ~f:(Fn.flip With_shift.uresize addition_term_bits)
-    |> With_shift.sum
-    |> Fn.flip With_shift.uresize output_width
-    |> With_shift.to_signal
+    Signal.add_attribute
+      (big *: pivot)
+      (Rtl_attribute.create ~value:(String "no") "USE_DSP")
   | Some pivot ->
     let pivot = Naf.of_bits pivot in
     (match
@@ -83,7 +72,13 @@ let long_multiplication_with_addition_for_signal ~pivot big =
     | [ hd ] ->
       (match hd with
       | `Add hd -> With_shift.to_signal hd
-      | `Sub hd -> Signal.negate (With_shift.to_signal hd))
+      | `Sub hd ->
+        assert (With_shift.width hd = Signal.width big);
+        With_shift.mixed
+          ~init:(With_shift.create ~shift:(Naf.width pivot) big)
+          [ `Sub (With_shift.uresize hd (Naf.width pivot + Signal.width big)) ]
+        |> Fn.flip With_shift.uresize output_width
+        |> With_shift.to_signal)
     | init :: items ->
       let addition_term_bits =
         let maximum_addition_term_width =
@@ -109,18 +104,38 @@ let long_multiplication_with_addition_for_signal ~pivot big =
       |> With_shift.to_signal)
 ;;
 
+let should_use_top_as_pivot b =
+  match b with
+  | Signal.Const { constant = b; signal_id = _ } ->
+    let bottom = Naf.of_bits (Bits.drop_top b 17) in
+    let top = Naf.of_bits (Bits.drop_bottom b 17) in
+    Naf.hamming_weight top < Naf.hamming_weight bottom
+  | _ -> true (* Doesn't matter with non constants ... *)
+;;
+
 let hybrid_dsp_and_luts_umul a b =
   assert (Signal.width a = Signal.width b);
   let w = Signal.width a in
   if w <= 17
   then a *: b
   else (
-    let smaller = a *: b.:[16, 0] in
-    let bigger =
-      let pivot = drop_bottom b 17 in
-      long_multiplication_with_addition_for_signal ~pivot a
+    let result =
+      if should_use_top_as_pivot b
+      then (
+        let smaller = a *: sel_bottom b 17 in
+        let bigger =
+          let pivot = drop_bottom b 17 in
+          long_multiplication_with_addition_for_signal ~pivot a
+        in
+        uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w))
+      else (
+        let smaller =
+          let pivot = drop_top b 17 in
+          long_multiplication_with_addition_for_signal ~pivot a
+        in
+        let bigger = a *: sel_top b 17 in
+        uresize (bigger @: zero (width b - 17)) (2 * w) +: uresize smaller (2 * w))
     in
-    let result = uresize (bigger @: zero 17) (2 * w) +: uresize smaller (2 * w) in
     assert (width result = width a + width b);
     result)
 ;;

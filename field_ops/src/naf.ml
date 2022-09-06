@@ -6,7 +6,7 @@ module Bit = struct
     | Zero
     | Pos_one
     | Neg_one
-  [@@deriving sexp_of]
+  [@@deriving sexp_of, equal]
 
   let of_int = function
     | 0 -> Zero
@@ -36,6 +36,9 @@ let of_bits e =
     e := Bits.srl !e 1;
     i := !i + 1
   done;
+  if Array.for_alli z ~f:(fun i bit ->
+         (i = 0 && Bit.equal Neg_one bit) || (i <> 0 && Bit.equal Zero bit))
+  then z.(Array.length z - 1) <- Bit.Pos_one;
   z
 ;;
 
@@ -50,3 +53,11 @@ let to_bits (t : t) =
 ;;
 
 let bits_lsb t = Array.to_list t
+
+let hamming_weight t =
+  Array.fold t ~init:0 ~f:(fun acc bit ->
+      match bit with
+      | Bit.Zero -> acc
+      | Bit.Pos_one -> acc + 1
+      | Bit.Neg_one -> acc + 1)
+;;
