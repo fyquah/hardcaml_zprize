@@ -143,7 +143,7 @@ let hybrid_dsp_and_luts_umul a b =
 let hybrid_dsp_and_luts_umul a b =
   match b with
   | Signal.Const { constant; signal_id = _ } ->
-    let threshold = 5 in
+    let threshold = 10 in
     if Naf.hamming_weight (Naf.of_bits constant) < threshold
     then (
       let result = long_multiplication_with_addition_for_signal ~pivot:b a in
