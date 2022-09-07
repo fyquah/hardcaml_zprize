@@ -67,5 +67,5 @@ let%expect_test "Test on some test cases" =
   let config = Lazy.force Config.For_bls12_377.with_barrett_reduction in
   let sim = create_sim config in
   test ~montgomery:false ~config ~sim test_cases;
-  [%expect {| (Ok ()) |}]
+  [%expect{| (Ok ()) |}]
 ;;

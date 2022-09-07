@@ -65,7 +65,8 @@ module Config = struct
               ; post_adder_stages = 1
               }
             ]
-        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 2 }
+        ; ground_multiplier =
+            Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
         }
     ; half_multiplier_config =
         { levels =
@@ -92,7 +93,8 @@ module Config = struct
               ; post_adder_stages = 1
               }
             ]
-        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 2 }
+        ; ground_multiplier =
+            Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
         }
     ; subtracter_stages = 3
     }

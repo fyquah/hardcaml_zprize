@@ -3,7 +3,10 @@ open Hardcaml
 module Config : sig
   type t =
     | Verilog_multiply of { latency : int }
-    | Hybrid_dsp_and_luts of { latency : int }
+    | Hybrid_dsp_and_luts of
+        { latency : int
+        ; lut_only_hamming_weight_threshold : int
+        }
     | Specialized_43_bit_multiply
   [@@deriving sexp_of]
 

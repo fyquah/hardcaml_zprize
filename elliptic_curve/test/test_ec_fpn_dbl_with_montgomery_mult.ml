@@ -10,7 +10,7 @@ let config = Config_presets.For_bls12_377.ec_fpn_ops_with_montgomery_reduction
 
 let%expect_test "latency" =
   Stdio.printf "latency = %d\n" (Ec_fpn_dbl.latency config);
-  [%expect {| latency = 154 |}]
+  [%expect {| latency = 170 |}]
 ;;
 
 let with_waves = false

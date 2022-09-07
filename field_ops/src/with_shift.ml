@@ -53,4 +53,29 @@ let sum (items : t list) =
   on_overlapping_bits items (fun x -> List.reduce_exn x ~f:( +: ))
 ;;
 
+let peek_terms a =
+  List.map a ~f:(function
+      | `Add x -> x
+      | `Sub x -> x)
+;;
+
+let mixed ~init arg_items =
+  on_overlapping_bits (init :: peek_terms arg_items) (fun x ->
+      let init, tl =
+        match x with
+        | hd :: tl -> hd, tl
+        | _ -> assert false
+      in
+      let tl =
+        List.map2_exn arg_items tl ~f:(fun arg_item x ->
+            match arg_item with
+            | `Add _ -> `Add x
+            | `Sub _ -> `Sub x)
+      in
+      List.fold tl ~init ~f:(fun unchanged term ->
+          match term with
+          | `Add x -> unchanged +: x
+          | `Sub x -> unchanged -: x))
+;;
+
 let to_signal t = if t.shift = 0 then t.x else t.x @: zero t.shift

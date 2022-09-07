@@ -81,7 +81,7 @@ module Config = struct
       ; child_config
       }
     =
-    pre_adder_stages + latency child_config + middle_adder_stages + post_adder_stages
+    pre_adder_stages + latency child_config + post_adder_stages + middle_adder_stages
   ;;
 
   let rec generate ~ground_multiplier (levels : Level.t list) =
@@ -92,8 +92,6 @@ module Config = struct
       Karatsubsa_ofman_stage { level = hd; child_config }
   ;;
 end
-
-let ( << ) a b = sll a b
 
 type m_terms =
   { z0 : Signal.t
@@ -175,8 +173,8 @@ and create_karatsuba_ofman_stage_radix_2
     Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
     |> Adder_subtractor_pipe.O.result
   in
-  let pipe_sub ~stages items =
-    Adder_subtractor_pipe.sub ~scope ~enable ~clock ~stages items
+  let pipe_add_sub ~n lhs rhs_list =
+    Adder_subtractor_pipe.mixed ~scope ~enable ~clock ~stages:n ~init:lhs rhs_list
     |> Adder_subtractor_pipe.O.result
   in
   let wa = width a in
@@ -212,19 +210,33 @@ and create_karatsuba_ofman_stage_radix_2
     { z0; m1; z2 }
   in
   let z1 =
-    pipe_sub ~stages:middle_adder_stages [ m1; uresize z2 (w + 2); uresize z0 (w + 2) ]
+    pipe_add_sub
+      ~n:middle_adder_stages
+      (uresize m1 (w + 1))
+      [ Sub (uresize z2 (w + 1)); Sub (uresize z0 (w + 1)) ]
   in
   let z0 = pipeline ~n:middle_adder_stages z0 in
   let z2 = pipeline ~n:middle_adder_stages z2 in
+  (* The following computes
+   * [let o = (z0 << w) + (z1 << hw) + z2], where [z1 = m1 - z2 - z0] in a
+   * convoluted way.
+   *
+   * A possible optimization here is to start computing [o] right when we have
+   * partial lower bits results of [z1]. This can save on SRL resources.
+   *)
   let o =
     let o0 = pipeline ~n:post_adder_stages (sel_bottom z2 hw) in
     let o1 =
-      pipe_add
-        ~stages:post_adder_stages
-        [ uresize z0 ((2 * wa) - hw) << w - hw
-        ; uresize z1 ((2 * wa) - hw)
-        ; uresize (drop_bottom z2 hw) ((2 * wa) - hw)
-        ]
+      let d2 = drop_bottom z2 hw in
+      assert (width d2 <= w - hw);
+      (* We need to compute add d2 at some point down the chain, but since z0
+       * and d2's bits never overlap, we can just or z0 and z2 together
+       * (with appropriate zeros) to compute the addition.
+       *)
+      pipe_add_sub
+        ~n:post_adder_stages
+        (uresize (concat_msb_e [ z0; zero (w - hw - width d2); d2 ]) ((2 * wa) - hw))
+        [ Add (uresize z1 ((2 * wa) - hw)) ]
     in
     o1 @: o0
   in
@@ -385,13 +397,16 @@ and create_karatsuba_ofman_stage_radix_3
   let result =
     let o0 = pipeline ~n:post_adder_stages (sel_bottom t0 part_width) in
     let o1 =
+      let d0 = drop_bottom t0 part_width in
+      assert (width d0 <= (2 * part_width) - part_width);
       pipe_add
         ~stages:post_adder_stages
         [ sll (uresize t4 ((2 * wx) - part_width)) ((4 * part_width) - part_width)
         ; sll (uresize t3 ((2 * wx) - part_width)) ((3 * part_width) - part_width)
-        ; sll (uresize t2 ((2 * wx) - part_width)) ((2 * part_width) - part_width)
+        ; uresize
+            (concat_msb_e [ t2; zero ((2 * part_width) - part_width - width d0); d0 ])
+            ((2 * wx) - part_width)
         ; sll (uresize t1 ((2 * wx) - part_width)) ((1 * part_width) - part_width)
-        ; uresize (drop_bottom t0 part_width) ((2 * wx) - part_width)
         ]
     in
     o1 @: o0
