@@ -146,14 +146,6 @@ let hybrid_dsp_and_luts_umul a b =
 let hybrid_dsp_and_luts_umul ~lut_only_hamming_weight_threshold a b =
   match b with
   | Signal.Const { constant; signal_id = _ } ->
-    (* Search between 5 and 10?
-     * 5 | 191k LUTs, 1456 DSP
-     * 6 | 193k LUTs, 1440 DSP
-     * 7 | 203k LUTs, 1324 DSP
-     * 8 | 216k LUTs, 1188 DSP
-     * 9 | 230k LUTs, 1052 DSP
-     * 10| 240k LUTs, 1016 DSP
-     *)
     if Naf.hamming_weight (Naf.of_bits constant) < lut_only_hamming_weight_threshold
     then (
       let result = long_multiplication_with_addition_for_signal ~pivot:b a in
@@ -163,6 +155,7 @@ let hybrid_dsp_and_luts_umul ~lut_only_hamming_weight_threshold a b =
   | _ -> hybrid_dsp_and_luts_umul a b
 ;;
 
+(* Maybe delete this? Don't think this is that useful..*)
 let specialized_43_bit_multiply
     (type a)
     (module Comb : Comb.S with type t = a)
