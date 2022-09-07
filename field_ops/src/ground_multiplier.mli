@@ -21,15 +21,6 @@ val create
   -> Signal.t
   -> Signal.t
 
-val hierarchical
-  :  clock:Signal.t
-  -> enable:Signal.t
-  -> config:Config.t
-  -> scope:Scope.t
-  -> Signal.t
-  -> Signal.t
-  -> Signal.t
-
 module For_testing : sig
   val long_multiplication_with_addition
     :  (module Comb.S with type t = 'a)

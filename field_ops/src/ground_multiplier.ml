@@ -222,51 +222,6 @@ let create ~clock ~enable ~config a b =
     specialized_43_bit_multiply (module Signal) ~pipe a b
 ;;
 
-module Hierarchy (Num_bits : sig
-  val num_bits : int
-end) =
-struct
-  open Num_bits
-
-  module I = struct
-    type 'a t =
-      { clock : 'a
-      ; enable : 'a
-      ; a : 'a [@bits num_bits]
-      ; b : 'a [@bits num_bits]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
-  module O = struct
-    type 'a t = { c : 'a [@bits num_bits * 2] } [@@deriving sexp_of, hardcaml]
-  end
-
-  let create ~config _scope { I.clock; enable; a; b } =
-    { O.c = create ~clock ~enable ~config a b }
-  ;;
-
-  let hierarchical ?name ~config scope i =
-    let module H = Hierarchy.In_scope (I) (O) in
-    let name =
-      Option.value name ~default:(Printf.sprintf "ground_multiplier_%d" num_bits)
-    in
-    H.hierarchical ~name ~scope (create ~config) i
-  ;;
-end
-
-let hierarchical ~clock ~enable ~config ~scope a b =
-  assert (Signal.width a = Signal.width b);
-  let num_bits = Signal.width a in
-  let module H =
-    Hierarchy (struct
-      let num_bits = num_bits
-    end)
-  in
-  let { H.O.c } = H.hierarchical ~config scope { H.I.clock; enable; a; b } in
-  c
-;;
-
 module For_testing = struct
   let long_multiplication_with_addition = long_multiplication_with_addition
   let specialized_43_bit_multiply = specialized_43_bit_multiply ~pipe:(fun ~n:_ x -> x)

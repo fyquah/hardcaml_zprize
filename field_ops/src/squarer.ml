@@ -29,8 +29,7 @@ module Input = Multiplier_input
 
 let rec create_recursive ~scope ~clock ~enable ~ground_multiplier ~levels (x : Signal.t) =
   match levels with
-  | [] ->
-    Ground_multiplier.hierarchical ~scope ~clock ~enable ~config:ground_multiplier x x
+  | [] -> Ground_multiplier.create ~clock ~enable ~config:ground_multiplier x x
   | this_level :: levels ->
     create_level ~scope ~clock ~enable ~ground_multiplier ~this_level ~levels x
 
