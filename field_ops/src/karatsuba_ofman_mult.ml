@@ -81,7 +81,7 @@ module Config = struct
       ; child_config
       }
     =
-    pre_adder_stages + latency child_config + middle_adder_stages + post_adder_stages
+    pre_adder_stages + latency child_config + post_adder_stages + middle_adder_stages
   ;;
 
   let rec generate ~ground_multiplier (levels : Level.t list) =
@@ -175,8 +175,8 @@ and create_karatsuba_ofman_stage_radix_2
     Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
     |> Adder_subtractor_pipe.O.result
   in
-  let pipe_sub ~stages items =
-    Adder_subtractor_pipe.sub ~scope ~enable ~clock ~stages items
+  let pipe_add_sub ~n lhs rhs_list =
+    Adder_subtractor_pipe.mixed ~scope ~enable ~clock ~stages:n ~init:lhs rhs_list
     |> Adder_subtractor_pipe.O.result
   in
   let wa = width a in
@@ -211,19 +211,17 @@ and create_karatsuba_ofman_stage_radix_2
     in
     { z0; m1; z2 }
   in
-  let z1 =
-    pipe_sub ~stages:middle_adder_stages [ m1; uresize z2 (w + 2); uresize z0 (w + 2) ]
-  in
-  let z0 = pipeline ~n:middle_adder_stages z0 in
-  let z2 = pipeline ~n:middle_adder_stages z2 in
   let o =
-    let o0 = pipeline ~n:post_adder_stages (sel_bottom z2 hw) in
+    (* This computes [(z0 << w) + (z1 << hw) + z2], where [z1 = m1 - z2 - z0] *)
+    let o0 = pipeline ~n:(post_adder_stages + middle_adder_stages) (sel_bottom z2 hw) in
     let o1 =
-      pipe_add
-        ~stages:post_adder_stages
-        [ uresize z0 ((2 * wa) - hw) << w - hw
-        ; uresize z1 ((2 * wa) - hw)
-        ; uresize (drop_bottom z2 hw) ((2 * wa) - hw)
+      pipe_add_sub
+        ~n:(post_adder_stages + middle_adder_stages)
+        (uresize z0 ((2 * wa) - hw) << w - hw)
+        [ Add (uresize m1 ((2 * wa) - hw))
+        ; Sub (uresize z2 ((2 * wa) - hw))
+        ; Sub (uresize z0 ((2 * wa) - hw))
+        ; Add (uresize (drop_bottom z2 hw) ((2 * wa) - hw))
         ]
     in
     o1 @: o0
