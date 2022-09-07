@@ -46,7 +46,7 @@ module Gf_bits = Ntts_r_fun.Gf_bits.Make (Bits)
 
 module Size = struct
   let logn = 5
-  let support_4step_twiddle = false
+  let twiddle_4step_config = None
 end
 
 module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Size)
@@ -69,7 +69,7 @@ let%expect_test "" =
   let waves, sim = Waveform.create sim in
   let input_coefs =
     Array.init (1 lsl logcores) ~f:(fun _ ->
-        Array.init (1 lsl logn) ~f:(fun _ -> Z.of_int (Random.int 100_000)))
+      Array.init (1 lsl logn) ~f:(fun _ -> Z.of_int (Random.int 100_000)))
   in
   inputs.clear := Bits.vdd;
   Cyclesim.cycle sim;

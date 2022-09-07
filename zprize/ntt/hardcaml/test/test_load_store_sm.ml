@@ -4,7 +4,7 @@ open Hardcaml_waveterm
 
 module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (struct
   let logn = 4
-  let support_4step_twiddle = false
+  let twiddle_4step_config = None
 end)
 
 module Kernel = Ntt_4step.Kernel
@@ -20,8 +20,8 @@ let test_store_sm () =
   let i =
     Kernel.I.(
       map t ~f:(fun (n, b) ->
-          try Cyclesim.in_port sim n with
-          | _ -> ref (Bits.zero b)))
+        try Cyclesim.in_port sim n with
+        | _ -> ref (Bits.zero b)))
   in
   let start = Cyclesim.in_port sim "start_store" in
   let _o = Store_sm.(map port_names ~f:(Cyclesim.out_port sim)) in

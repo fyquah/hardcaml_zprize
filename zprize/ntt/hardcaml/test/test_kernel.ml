@@ -33,6 +33,11 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
     Array.of_list coefs
   ;;
 
+  let flatten_coefs coefs =
+    let a = Array.map coefs ~f:(fun a -> Array.concat (Array.to_list a)) in
+    a |> Array.to_list |> Array.concat
+  ;;
+
   let print_matrices c =
     for pass = 0 to num_passes - 1 do
       for i = 0 to n - 1 do
@@ -65,7 +70,17 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
     if verbose
     then (
       printf "\n\nREFERENCE\n\n";
-      print_matrices c);
+      print_matrices c;
+      let n =
+        Array.fold c ~init:0 ~f:(fun init c ->
+          Array.fold ~init c ~f:(fun acc c -> acc + Array.length c))
+      in
+      let logn = Int.ceil_log2 n in
+      let d = flatten_coefs c in
+      let m = Ntt.matrix d (logn / 2) (logn / 2) in
+      Ntt.apply_twiddles Ntt.inverse_roots.(logn) m;
+      printf "\n\nTWIDDLED %i %i\n\n" n logn;
+      print_matrices (form_input_coefs (Array.to_list (Array.concat (Array.to_list m)))));
     c
   ;;
 
@@ -149,7 +164,10 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
     (try
        let results = get_results !results in
        let reference = reference ~verbose input_coefs in
-       if verbose then print_matrices results;
+       if verbose
+       then (
+         printf "\n\nHW RESULT\n\n";
+         print_matrices results);
        if [%equal: Gf_z.t array array array] results reference
        then printf "IT WORKED!!!\n"
        else printf "ERROR!!!\n"
@@ -161,7 +179,14 @@ end
 
 module Config = struct
   let logn = 5
-  let support_4step_twiddle = true
+  let log_rows_per_iteration = 3
+
+  let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
+    Some
+      { rows_per_iteration = 1 lsl log_rows_per_iteration
+      ; log_num_iterations = (logn * 2) - log_rows_per_iteration
+      }
+  ;;
 end
 
 module Test = Make (Config)

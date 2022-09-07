@@ -10,7 +10,7 @@ let n = 1 lsl logn
 
 module Ntt_hw = Ntts_r_fun.Ntt.Make (struct
   let logn = logn
-  let support_4step_twiddle = false
+  let twiddle_4step_config = None
 end)
 
 let%expect_test "show twiddle generation" =

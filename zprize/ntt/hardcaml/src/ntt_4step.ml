@@ -57,6 +57,7 @@ module Make (Config : Ntt.Config) = struct
       let cores =
         Array.init cores ~f:(fun index ->
           Ntt.With_rams.hierarchy
+            ~row:index
             ~build_mode
             ~instance:("ntt" ^ Int.to_string index)
             scope

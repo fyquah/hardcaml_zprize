@@ -1,11 +1,14 @@
 open! Base
 open! Hardcaml
 
-(* Max transform size*)
+type twiddle_4step_config =
+  { rows_per_iteration : int
+  ; log_num_iterations : int
+  }
 
 module type Config = sig
   val logn : int
-  val support_4step_twiddle : bool
+  val twiddle_4step_config : twiddle_4step_config option
 end
 
 module Gf = Gf_bits.Make (Hardcaml.Signal)
@@ -17,6 +20,13 @@ module Make (Config : Config) = struct
   let ram_output_pipelining = 1
   let ram_latency = 1
   let datapath_latency = ram_latency + ram_output_pipelining + multiply_latency
+  let support_4step_twiddle = Option.is_some Config.twiddle_4step_config
+
+  let twiddle_4step_config =
+    Option.value
+      ~default:{ rows_per_iteration = 0; log_num_iterations = 0 }
+      Config.twiddle_4step_config
+  ;;
 
   let gf_mul ~clock a b =
     let pipe x =
@@ -117,19 +127,28 @@ module Make (Config : Config) = struct
 
     module Var = Always.Variable
 
-    let create scope (inputs : _ I.t) =
+    let create ?(row = 0) scope (inputs : _ I.t) =
       let open Signal in
       let ( -- ) = Scope.naming scope in
       let spec = Reg_spec.create ~clock:inputs.clock ~clear:inputs.clear () in
       let sm = Always.State_machine.create (module State) spec in
       ignore (sm.current -- "STATE" : Signal.t);
+      let block =
+        Option.map Config.twiddle_4step_config ~f:(fun { log_num_iterations; _ } ->
+          Var.reg spec ~width:log_num_iterations)
+      in
+      Option.iter block ~f:(fun block -> ignore (block.value -- "BLOCK"));
       let done_ = Var.reg (Reg_spec.override spec ~clear_to:vdd) ~width:1 in
       let i = Var.reg spec ~width:(Int.ceil_log2 (logn + 1)) in
+      ignore (i.value -- "i" : Signal.t);
       let i_next = i.value +:. 1 in
       let j = Var.reg spec ~width:logn in
+      ignore (j.value -- "j" : Signal.t);
       let j_next = j.value +:. 1 in
       let k = Var.reg spec ~width:logn in
+      ignore (k.value -- "k" : Signal.t);
       let m = Var.reg spec ~width:logn in
+      ignore (m.value -- "m" : Signal.t);
       let m_next = sll m.value 1 in
       let k_next = k.value +: m_next in
       let addr1 = Var.reg spec ~width:logn in
@@ -150,7 +169,7 @@ module Make (Config : Config) = struct
       let flip = Var.wire ~default:gnd in
       let read_write_enable = Var.wire ~default:gnd in
       let if_twiddle_supported ((s : State.t), p) =
-        if Config.support_4step_twiddle then s, p else s, []
+        if support_4step_twiddle then s, p else s, []
       in
       Always.(
         compile
@@ -212,7 +231,7 @@ module Make (Config : Config) = struct
                       ; when_
                           (i_next ==:. logn)
                           [ last_stage <--. 0
-                          ; (if Config.support_4step_twiddle
+                          ; (if support_4step_twiddle
                             then
                               proc
                                 [ if_
@@ -242,6 +261,9 @@ module Make (Config : Config) = struct
                         [ twiddle_stage <--. 0
                         ; last_stage <-- gnd
                         ; done_ <--. 1
+                        ; (match block with
+                           | None -> proc []
+                           | Some block -> block <-- block.value +:. 1)
                         ; sm.set_next Idle
                         ]
                     ] )
@@ -255,8 +277,28 @@ module Make (Config : Config) = struct
       ; addr1 = addr1.value
       ; addr2 = addr2.value
       ; omegas =
-          List.map omegas ~f:(fun omega ->
-            mux2 twiddle_stage.value Gf.(of_z Z.one |> to_bits) omega)
+          List.mapi omegas ~f:(fun idx omega ->
+            match block with
+            | None -> omega
+            | Some block ->
+              let twiddle_root row =
+                Gf_z.pow Roots.inverse.(logn * 2) (row * (idx + 1))
+                |> Gf_z.to_z
+                |> Gf.of_z
+                |> Gf.to_bits
+              in
+              (* XXX aray: We should fix this rom.  We need to either pack it into block ram,
+                 or probably better, calculate the initial omegas iteratively through the
+                 multiplier. *)
+              let twiddle_root =
+                mux
+                  block.value
+                  (List.init
+                     (1 lsl twiddle_4step_config.log_num_iterations)
+                     ~f:(fun block ->
+                     twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration))))
+              in
+              mux2 twiddle_stage.value twiddle_root omega)
       ; start_twiddles = start_twiddles.value
       ; first_stage = first_stage.value
       ; last_stage = last_stage.value
@@ -266,9 +308,9 @@ module Make (Config : Config) = struct
       }
     ;;
 
-    let hierarchy scope =
+    let hierarchy ?row scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"ctrl" ~scope create
+      Hier.hierarchical ~name:"ctrl" ~scope (create ?row)
     ;;
   end
 
@@ -378,10 +420,11 @@ module Make (Config : Config) = struct
       [@@deriving sexp_of, hardcaml]
     end
 
-    let create scope (i : _ I.t) =
+    let create ?row scope (i : _ I.t) =
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let controller =
         Controller.hierarchy
+          ?row
           scope
           { Controller.I.clock = i.clock
           ; clear = i.clear
@@ -418,9 +461,9 @@ module Make (Config : Config) = struct
       }
     ;;
 
-    let hierarchy scope =
+    let hierarchy ?row scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"core" ~scope create
+      Hier.hierarchical ~name:"core" ~scope (create ?row)
     ;;
   end
 
@@ -522,7 +565,7 @@ module Make (Config : Config) = struct
       q
     ;;
 
-    let create ~build_mode scope (i : _ I.t) =
+    let create ?row ~build_mode scope (i : _ I.t) =
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let core = Core.O.Of_signal.wires () in
       let piped_first_stage = pipeline spec ~n:1 core.first_stage in
@@ -537,6 +580,7 @@ module Make (Config : Config) = struct
       Core.O.iter2
         core
         (Core.hierarchy
+           ?row
            scope
            { clock = i.clock
            ; clear = i.clear
@@ -558,9 +602,9 @@ module Make (Config : Config) = struct
       { O.done_ = core.done_; rd_q = d_out }
     ;;
 
-    let hierarchy ?instance ~build_mode scope =
+    let hierarchy ?row ?instance ~build_mode scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"ntt_with_rams" ?instance ~scope (create ~build_mode)
+      Hier.hierarchical ~name:"ntt_with_rams" ?instance ~scope (create ?row ~build_mode)
     ;;
   end
 end

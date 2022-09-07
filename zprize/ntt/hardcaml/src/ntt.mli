@@ -1,9 +1,14 @@
 open! Base
 open! Hardcaml
 
+type twiddle_4step_config =
+  { rows_per_iteration : int
+  ; log_num_iterations : int
+  }
+
 module type Config = sig
   val logn : int
-  val support_4step_twiddle : bool
+  val twiddle_4step_config : twiddle_4step_config option
 end
 
 module Gf : module type of Gf_bits.Make (Signal)
@@ -63,8 +68,8 @@ module Make (Config : Config) : sig
       [@@deriving sexp_of, hardcaml]
     end
 
-    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val create : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module Datapath : sig
@@ -125,8 +130,8 @@ module Make (Config : Config) : sig
       [@@deriving sexp_of, hardcaml]
     end
 
-    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val create : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module With_rams : sig
@@ -155,12 +160,14 @@ module Make (Config : Config) : sig
     end
 
     val create
-      :  build_mode:Build_mode.t
+      :  ?row:int
+      -> build_mode:Build_mode.t
       -> Scope.t
       -> Signal.t Interface.Create_fn(I)(O).t
 
     val hierarchy
-      :  ?instance:string
+      :  ?row:int
+      -> ?instance:string
       -> build_mode:Build_mode.t
       -> Scope.t
       -> Signal.t Interface.Create_fn(I)(O).t

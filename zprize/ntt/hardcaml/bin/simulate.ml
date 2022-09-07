@@ -11,7 +11,10 @@ let command_kernel =
         let module Test =
           Ntts_r_fun_test.Test_kernel.Make (struct
             let logn = logn
-            let support_4step_twiddle = true
+
+            let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
+              Some { rows_per_iteration = 8; log_num_iterations = logn - 3 }
+            ;;
           end)
         in
         let input_coefs =
@@ -34,8 +37,8 @@ let command_ntt =
       fun () ->
         let input_coefs =
           Array.init (1 lsl logn) ~f:(fun _ ->
-              let c = Ntts_r_fun.Gf_z.random () in
-              Ntts_r_fun.Gf_z.to_z c |> Ntts_r_fun_test.Test_ntt_hw.Gf.of_z)
+            let c = Ntts_r_fun.Gf_z.random () in
+            Ntts_r_fun.Gf_z.to_z c |> Ntts_r_fun_test.Test_ntt_hw.Gf.of_z)
         in
         let waves, _result =
           Ntts_r_fun_test.Test_ntt_hw.inverse_ntt_test ~waves input_coefs
