@@ -209,12 +209,23 @@ and create_karatsuba_ofman_stage_radix_2
     in
     { z0; m1; z2 }
   in
+  let z1 =
+    pipe_add_sub
+      ~n:middle_adder_stages
+      (uresize m1 (w + 1))
+      [ Sub (uresize z2 (w + 1)); Sub (uresize z0 (w + 1)) ]
+  in
+  let z0 = pipeline ~n:middle_adder_stages z0 in
+  let z2 = pipeline ~n:middle_adder_stages z2 in
   (* The following computes
    * [let o = (z0 << w) + (z1 << hw) + z2], where [z1 = m1 - z2 - z0] in a
    * convoluted way.
+   *
+   * A possible optimization here is to start computing [o] right when we have
+   * partial lower bits results of [z1]. This can save on SRL resources.
    *)
   let o =
-    let o0 = pipeline ~n:(post_adder_stages + middle_adder_stages) (sel_bottom z2 hw) in
+    let o0 = pipeline ~n:post_adder_stages (sel_bottom z2 hw) in
     let o1 =
       let d2 = drop_bottom z2 hw in
       assert (width d2 <= w - hw);
@@ -223,12 +234,9 @@ and create_karatsuba_ofman_stage_radix_2
        * (with appropriate zeros) to compute the addition.
        *)
       pipe_add_sub
-        ~n:(post_adder_stages + middle_adder_stages)
+        ~n:post_adder_stages
         (uresize (concat_msb_e [ z0; zero (w - hw - width d2); d2 ]) ((2 * wa) - hw))
-        [ Add (uresize m1 ((2 * wa) - hw))
-        ; Sub (uresize z2 ((2 * wa) - hw))
-        ; Sub (uresize z0 ((2 * wa) - hw))
-        ]
+        [ Add (uresize z1 ((2 * wa) - hw)) ]
     in
     o1 @: o0
   in
