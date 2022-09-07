@@ -43,7 +43,7 @@ let rec create_recursive
       | Multiply (a, b) -> a, b
       | Square a -> a, a
     in
-    Ground_multiplier.create ~clock ~enable ~config:ground_multiplier a b
+    Ground_multiplier.hierarchical ~scope ~clock ~enable ~config:ground_multiplier a b
   | level :: remaining_levels ->
     create_level
       ~scope

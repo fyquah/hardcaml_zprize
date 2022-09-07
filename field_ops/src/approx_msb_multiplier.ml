@@ -54,7 +54,7 @@ let rec create_recursive
       | Square a -> a, a
     in
     With_shift.no_shift
-      (Ground_multiplier.create ~clock ~enable ~config:ground_multiplier a b)
+      (Ground_multiplier.hierarchical ~scope ~clock ~enable ~config:ground_multiplier a b)
   | level :: remaining_levels ->
     create_level
       ~scope

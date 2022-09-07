@@ -140,7 +140,8 @@ let rec create_recursive
   match config with
   | Karatsubsa_ofman_stage config ->
     create_karatsuba_ofman_stage ~scope ~clock ~enable ~config a b
-  | Ground_multiplier config -> Ground_multiplier.create ~clock ~enable ~config a b
+  | Ground_multiplier config ->
+    Ground_multiplier.hierarchical ~scope ~clock ~enable ~config a b
 
 and create_karatsuba_ofman_stage
     ~scope
