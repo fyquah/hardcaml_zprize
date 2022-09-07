@@ -87,16 +87,20 @@ and create_level
            - Config.latency { levels = remaining_levels; ground_multiplier })
   in
   let create_full_multiplier a b =
-    Karatsuba_ofman_mult.hierarchical
-      ~scope
-      ~config:child_karatsuba_config
-      ~enable
-      ~clock
-      a
-      (match b with
-      | Const { signal_id = _; constant } ->
-        `Constant (Bits.to_z ~signedness:Unsigned constant)
-      | _ -> `Signal b)
+    assert (Signal.width a = Signal.width b);
+    match child_karatsuba_config with
+    | Ground_multiplier config -> Ground_multiplier.create ~clock ~enable ~config a b
+    | Karatsubsa_ofman_stage _ ->
+      Karatsuba_ofman_mult.hierarchical
+        ~scope
+        ~config:child_karatsuba_config
+        ~enable
+        ~clock
+        a
+        (match b with
+        | Const { signal_id = _; constant } ->
+          `Constant (Bits.to_z ~signedness:Unsigned constant)
+        | _ -> `Signal b)
   in
   let w =
     match input with
