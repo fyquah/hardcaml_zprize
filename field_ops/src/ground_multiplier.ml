@@ -143,6 +143,14 @@ let hybrid_dsp_and_luts_umul a b =
 let hybrid_dsp_and_luts_umul a b =
   match b with
   | Signal.Const { constant; signal_id = _ } ->
+    (* Search between 5 and 10?
+     * 5 | 191k LUTs, 1456 DSP
+     * 6 | 193k LUTs, 1440 DSP
+     * 7 | 203k LUTs, 1324 DSP
+     * 8 | 216k LUTs, 1188 DSP
+     * 9 | 230k LUTs, 1052 DSP
+     * 10| 240k LUTs, 1016 DSP
+     *)
     let threshold = 10 in
     if Naf.hamming_weight (Naf.of_bits constant) < threshold
     then (
