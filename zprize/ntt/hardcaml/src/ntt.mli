@@ -28,7 +28,8 @@ module Make (Config : Config) : sig
       type 'a t = { w : 'a } [@@deriving sexp_of, hardcaml]
     end
 
-    val create : Signal.t Interface.Create_fn(I)(O).t
+    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module Controller : sig
@@ -55,6 +56,7 @@ module Make (Config : Config) : sig
         ; start_twiddles : 'a
         ; first_stage : 'a
         ; last_stage : 'a
+        ; twiddle_stage : 'a
         ; read_write_enable : 'a
         ; flip : 'a
         }
@@ -74,6 +76,7 @@ module Make (Config : Config) : sig
         ; d2 : 'a
         ; omegas : 'a list
         ; start_twiddles : 'a
+        ; twiddle_stage : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -82,7 +85,6 @@ module Make (Config : Config) : sig
       type 'a t =
         { q1 : 'a
         ; q2 : 'a
-        ; q_scale : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -116,6 +118,7 @@ module Make (Config : Config) : sig
         ; write_enable_out : 'a
         ; first_stage : 'a
         ; last_stage : 'a
+        ; twiddle_stage : 'a
         ; flip : 'a
         ; done_ : 'a
         }

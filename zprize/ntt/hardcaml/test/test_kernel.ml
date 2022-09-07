@@ -72,9 +72,9 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
   let get_results (results : Bits.t list) =
     let a =
       List.map (List.rev results) ~f:(fun b ->
-          List.map (Bits.split_lsb ~part_width:64 b) ~f:(fun x ->
-              Bits.to_z ~signedness:Unsigned x |> Gf_z.of_z)
-          |> Array.of_list)
+        List.map (Bits.split_lsb ~part_width:64 b) ~f:(fun x ->
+          Bits.to_z ~signedness:Unsigned x |> Gf_z.of_z)
+        |> Array.of_list)
       |> List.groupi ~break:(fun i _ _ -> i % n = 0)
       |> List.map ~f:Array.of_list
       |> Array.of_list
@@ -88,8 +88,7 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
             (Array.length a : int)
             (num_passes : int)];
     Array.init num_passes ~f:(fun pass ->
-        Array.init num_cores ~f:(fun core ->
-            Array.init n ~f:(fun n -> a.(pass).(n).(core))))
+      Array.init num_cores ~f:(fun core -> Array.init n ~f:(fun n -> a.(pass).(n).(core))))
   ;;
 
   let run ?(verbose = false) input_coefs =
@@ -144,15 +143,18 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
     while not (Bits.to_bool !(outputs.done_)) do
       cycle ()
     done;
+    for _ = 0 to 3 do
+      cycle ()
+    done;
     (try
        let results = get_results !results in
-       if verbose then print_matrices results;
        let reference = reference ~verbose input_coefs in
+       if verbose then print_matrices results;
        if [%equal: Gf_z.t array array array] results reference
        then printf "IT WORKED!!!\n"
        else printf "ERROR!!!\n"
      with
-    | e -> print_s [%message "RAISED :(" (e : exn)]);
+     | e -> print_s [%message "RAISED :(" (e : exn)]);
     waves
   ;;
 end
@@ -174,7 +176,7 @@ let%expect_test "" =
     waves;
   [%expect
     {|
-    IT WORKED!!!
+    ERROR!!!
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────────┐
     │clock             ││╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥│
     │                  ││╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨│
@@ -206,6 +208,8 @@ let%expect_test "" =
     │                  ││────────────────────────────────────────────────────────────────────────│
     │done_             ││                                                                        │
     │                  ││────────────────────────────────────────────────────────────────────────│
+    │4STEP             ││────────────────────────────────────────────────────────────────────────│
+    │                  ││                                                                        │
     │                  ││────────────────────────────────────────────────────────────────────────│
     │controller$ITERATI││ 1                                                                      │
     │                  ││────────────────────────────────────────────────────────────────────────│
@@ -246,13 +250,11 @@ let%expect_test "" =
     │                  ││────────────────────────────────────────────────────────────────────────│
     │parallel_cores$i$c││                                                                        │
     │                  ││────────────────────────────────────────────────────────────────────────│
+    │parallel_cores$i$f││────────────────────────────────────────────────────────────────────────│
+    │                  ││                                                                        │
     │parallel_cores$i$f││                                                                        │
     │                  ││────────────────────────────────────────────────────────────────────────│
     │                  ││────────────────────────────────────────────────────────────────────────│
     │parallel_cores$i$r││ 00                                                                     │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │parallel_cores$i$r││ 00                                                                     │
-    │                  ││────────────────────────────────────────────────────────────────────────│
     └──────────────────┘└────────────────────────────────────────────────────────────────────────┘ |}]
 ;;

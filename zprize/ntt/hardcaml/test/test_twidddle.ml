@@ -150,7 +150,7 @@ let%expect_test "" =
       (Ntt_hw.Twiddle_factor_stream.I)
       (Ntt_hw.Twiddle_factor_stream.O)
   in
-  let sim = Sim.create Ntt_hw.Twiddle_factor_stream.create in
+  let sim = Sim.create (Ntt_hw.Twiddle_factor_stream.create (Scope.create ())) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in

@@ -117,7 +117,6 @@ module Make (Config : Ntt.Config) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
-        ; first_4step_pass : 'a
         ; data_in : 'a Axi512.Stream.Source.t
         ; data_out_dest : 'a Axi512.Stream.Dest.t
         }
