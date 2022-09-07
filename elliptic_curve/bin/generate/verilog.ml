@@ -32,7 +32,9 @@ let flag_ground_multiplier =
   in
   if use_vanila_multiply
   then Ground_multiplier.Config.Verilog_multiply { latency = multiplier_latency }
-  else Ground_multiplier.Config.Hybrid_dsp_and_luts { latency = multiplier_latency }
+  else
+    Ground_multiplier.Config.Hybrid_dsp_and_luts
+      { latency = multiplier_latency; lut_only_hamming_weight_threshold = 10 }
 ;;
 
 let command_point_double =

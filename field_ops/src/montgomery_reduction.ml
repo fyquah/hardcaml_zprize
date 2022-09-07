@@ -181,7 +181,8 @@ module Config = struct
               ; post_adder_stages = 1
               }
             ]
-        ; ground_multiplier = Hybrid_dsp_and_luts { latency = 3 }
+        ; ground_multiplier =
+            Hybrid_dsp_and_luts { latency = 3; lut_only_hamming_weight_threshold = 6 }
         }
     ; adder_depth = 3
     ; subtractor_depth = 3

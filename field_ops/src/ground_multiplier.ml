@@ -5,13 +5,16 @@ open Signal
 module Config = struct
   type t =
     | Verilog_multiply of { latency : int }
-    | Hybrid_dsp_and_luts of { latency : int }
+    | Hybrid_dsp_and_luts of
+        { latency : int
+        ; lut_only_hamming_weight_threshold : int
+        }
     | Specialized_43_bit_multiply
   [@@deriving sexp_of]
 
   let latency = function
     | Verilog_multiply { latency } -> latency
-    | Hybrid_dsp_and_luts { latency } -> latency
+    | Hybrid_dsp_and_luts { latency; lut_only_hamming_weight_threshold = _ } -> latency
     | Specialized_43_bit_multiply -> 5
   ;;
 end
@@ -140,7 +143,7 @@ let hybrid_dsp_and_luts_umul a b =
     result)
 ;;
 
-let hybrid_dsp_and_luts_umul a b =
+let hybrid_dsp_and_luts_umul ~lut_only_hamming_weight_threshold a b =
   match b with
   | Signal.Const { constant; signal_id = _ } ->
     (* Search between 5 and 10?
@@ -151,8 +154,7 @@ let hybrid_dsp_and_luts_umul a b =
      * 9 | 230k LUTs, 1052 DSP
      * 10| 240k LUTs, 1016 DSP
      *)
-    let threshold = 10 in
-    if Naf.hamming_weight (Naf.of_bits constant) < threshold
+    if Naf.hamming_weight (Naf.of_bits constant) < lut_only_hamming_weight_threshold
     then (
       let result = long_multiplication_with_addition_for_signal ~pivot:b a in
       assert (Signal.width result = Signal.width a + Signal.width b);
@@ -217,11 +219,11 @@ let create ~clock ~enable ~config a b =
   let pipeline ~n x = if Signal.is_const x then x else pipeline ~n spec ~enable x in
   match config with
   | Config.Verilog_multiply { latency } -> pipeline ~n:latency (a *: b)
-  | Config.Hybrid_dsp_and_luts { latency } ->
+  | Config.Hybrid_dsp_and_luts { latency; lut_only_hamming_weight_threshold } ->
     (* TODO(fyquah): either annotate this with backwards retiming, or
      * balance the register stages better.
      *)
-    pipeline ~n:latency (hybrid_dsp_and_luts_umul a b)
+    pipeline ~n:latency (hybrid_dsp_and_luts_umul ~lut_only_hamming_weight_threshold a b)
   | Config.Specialized_43_bit_multiply ->
     let pipe ~n x = pipeline ~n x in
     specialized_43_bit_multiply (module Signal) ~pipe a b
