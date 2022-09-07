@@ -142,7 +142,7 @@ and create_level
       let o =
         let o0 = pipeline ~n:post_adder_stages (sel_bottom la_mult_lb hw) in
         let o1 =
-          Adder_subtractor_pipe.add
+          Adder_subtractor_pipe.add_no_carry
             ~stages:post_adder_stages
             ~scope
             ~enable
@@ -151,7 +151,6 @@ and create_level
             ; uresize ub_mult_la (w - hw)
             ; uresize (drop_bottom la_mult_lb hw) (w - hw)
             ]
-          |> Adder_subtractor_pipe.O.result
         in
         o1 @: o0
       in
@@ -209,7 +208,7 @@ and create_level
       let o =
         let o0 = pipeline ~n:post_adder_stages (sel_bottom x0y0 k) in
         let o1 =
-          Adder_subtractor_pipe.add
+          Adder_subtractor_pipe.add_no_carry
             ~stages:post_adder_stages
             ~scope
             ~enable
@@ -218,7 +217,6 @@ and create_level
             ; uresize (x1y0 +: x0y1) (w - k)
             ; uresize (drop_bottom x0y0 k) (w - k)
             ]
-          |> Adder_subtractor_pipe.O.result
         in
         o1 @: o0
       in

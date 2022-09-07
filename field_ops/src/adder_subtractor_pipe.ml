@@ -309,3 +309,38 @@ let sub ?name ?instance ~stages ~scope ~enable ~clock xs =
     ~init:(List.hd_exn xs)
     (List.map (List.tl_exn xs) ~f:(fun x -> Term_and_op.Sub x))
 ;;
+
+let mixed_no_carry ?name ?instance ~stages ~scope ~enable ~clock ~init items =
+  match stages with
+  | 1 ->
+    List.fold ~init items ~f:(fun acc item ->
+        match item with
+        | Term_and_op.Add x -> Signal.( +: ) acc x
+        | Term_and_op.Sub x -> Signal.( -: ) acc x)
+    |> reg ~enable (Reg_spec.create ~clock ())
+  | _ -> mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items |> O.result
+;;
+
+let add_no_carry ?name ?instance ~stages ~scope ~enable ~clock xs =
+  mixed_no_carry
+    ?name
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    ~init:(List.hd_exn xs)
+    (List.map (List.tl_exn xs) ~f:(fun x -> Term_and_op.Add x))
+;;
+
+let sub_no_carry ?name ?instance ~stages ~scope ~enable ~clock xs =
+  mixed_no_carry
+    ?name
+    ?instance
+    ~stages
+    ~scope
+    ~enable
+    ~clock
+    ~init:(List.hd_exn xs)
+    (List.map (List.tl_exn xs) ~f:(fun x -> Term_and_op.Sub x))
+;;

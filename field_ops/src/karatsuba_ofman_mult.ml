@@ -217,17 +217,21 @@ and create_karatsuba_ofman_stage_radix_2
     =
     config
   in
-  let pipe_add ~stages items =
-    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
-    |> Adder_subtractor_pipe.O.result
-  in
-  let pipe_add_sub ~n lhs rhs_list =
-    Adder_subtractor_pipe.mixed ~scope ~enable ~clock ~stages:n ~init:lhs rhs_list
-    |> Adder_subtractor_pipe.O.result
-  in
-  let wa = width a in
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = if Signal.is_const x then x else pipeline ~n spec ~enable x in
+  let pipe_add ~stages items =
+    Adder_subtractor_pipe.add_no_carry ~scope ~enable ~clock ~stages items
+  in
+  let pipe_add_sub ~n lhs rhs_list =
+    Adder_subtractor_pipe.mixed_no_carry
+      ~scope
+      ~enable
+      ~clock
+      ~stages:n
+      ~init:lhs
+      rhs_list
+  in
+  let wa = width a in
   let hw = (width a + 1) / 2 in
   let w = hw * 2 in
   let top_half x =
@@ -249,11 +253,13 @@ and create_karatsuba_ofman_stage_radix_2
     let z2 =
       recurse "m2" (pipeline ~n:pre_adder_stages a0) (pipeline ~n:pre_adder_stages b0)
     in
+    let pre_add a b =
+      match child_config with
+      | Ground_multiplier _ -> pipeline ~n:pre_adder_stages (a +: b)
+      | Karatsubsa_ofman_stage _ -> pipe_add ~stages:pre_adder_stages [ a; b ]
+    in
     let m1 =
-      recurse
-        "m1"
-        (pipe_add ~stages:pre_adder_stages [ gnd @: a1; gnd @: a0 ])
-        (pipe_add ~stages:pre_adder_stages [ gnd @: b1; gnd @: b0 ])
+      recurse "m1" (pre_add (gnd @: a1) (gnd @: a0)) (pre_add (gnd @: b1) (gnd @: b0))
     in
     { z0; m1; z2 }
   in
@@ -305,12 +311,16 @@ and create_karatsuba_ofman_stage_radix_3
   let wx = Signal.width x in
   let spec = Reg_spec.create ~clock () in
   let pipe_add ~stages items =
-    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
-    |> Adder_subtractor_pipe.O.result
+    Adder_subtractor_pipe.add_no_carry ~scope ~enable ~clock ~stages items
   in
   let pipe_add_sub ~n lhs rhs_list =
-    Adder_subtractor_pipe.mixed ~scope ~enable ~clock ~stages:n ~init:lhs rhs_list
-    |> Adder_subtractor_pipe.O.result
+    Adder_subtractor_pipe.mixed_no_carry
+      ~scope
+      ~enable
+      ~clock
+      ~stages:n
+      ~init:lhs
+      rhs_list
   in
   let pipeline ~n x =
     assert (n >= 0);
