@@ -93,8 +93,6 @@ module Config = struct
   ;;
 end
 
-let ( << ) a b = sll a b
-
 type m_terms =
   { z0 : Signal.t
   ; m1 : Signal.t
@@ -211,17 +209,25 @@ and create_karatsuba_ofman_stage_radix_2
     in
     { z0; m1; z2 }
   in
+  (* The following computes
+   * [let o = (z0 << w) + (z1 << hw) + z2], where [z1 = m1 - z2 - z0] in a
+   * convoluted way.
+   *)
   let o =
-    (* This computes [(z0 << w) + (z1 << hw) + z2], where [z1 = m1 - z2 - z0] *)
     let o0 = pipeline ~n:(post_adder_stages + middle_adder_stages) (sel_bottom z2 hw) in
     let o1 =
+      let d2 = drop_bottom z2 hw in
+      assert (width d2 <= w - hw);
+      (* We need to compute add d2 at some point down the chain, but since z0
+       * and d2's bits never overlap, we can just or z0 and z2 together
+       * (with appropriate zeros) to compute the addition.
+       *)
       pipe_add_sub
         ~n:(post_adder_stages + middle_adder_stages)
-        (uresize z0 ((2 * wa) - hw) << w - hw)
+        (uresize (concat_msb_e [ z0; zero (w - hw - width d2); d2 ]) ((2 * wa) - hw))
         [ Add (uresize m1 ((2 * wa) - hw))
         ; Sub (uresize z2 ((2 * wa) - hw))
         ; Sub (uresize z0 ((2 * wa) - hw))
-        ; Add (uresize (drop_bottom z2 hw) ((2 * wa) - hw))
         ]
     in
     o1 @: o0
