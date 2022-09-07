@@ -397,13 +397,16 @@ and create_karatsuba_ofman_stage_radix_3
   let result =
     let o0 = pipeline ~n:post_adder_stages (sel_bottom t0 part_width) in
     let o1 =
+      let d0 = drop_bottom t0 part_width in
+      assert (width d0 <= (2 * part_width) - part_width);
       pipe_add
         ~stages:post_adder_stages
         [ sll (uresize t4 ((2 * wx) - part_width)) ((4 * part_width) - part_width)
         ; sll (uresize t3 ((2 * wx) - part_width)) ((3 * part_width) - part_width)
-        ; sll (uresize t2 ((2 * wx) - part_width)) ((2 * part_width) - part_width)
+        ; uresize
+            (concat_msb_e [ t2; zero ((2 * part_width) - part_width - width d0); d0 ])
+            ((2 * wx) - part_width)
         ; sll (uresize t1 ((2 * wx) - part_width)) ((1 * part_width) - part_width)
-        ; uresize (drop_bottom t0 part_width) ((2 * wx) - part_width)
         ]
     in
     o1 @: o0
