@@ -100,16 +100,19 @@ and create_level
   in
   let create_full_multiplier a b =
     assert (Signal.width a = Signal.width b);
-    Karatsuba_ofman_mult.hierarchical
-      ~scope
-      ~config:child_karatsuba_config
-      ~enable
-      ~clock
-      a
-      (match b with
-      | Const { signal_id = _; constant } ->
-        `Constant (Bits.to_z ~signedness:Unsigned constant)
-      | _ -> `Signal b)
+    match child_karatsuba_config with
+    | Ground_multiplier config -> Ground_multiplier.create ~clock ~enable ~config a b
+    | Karatsubsa_ofman_stage _ ->
+      Karatsuba_ofman_mult.hierarchical
+        ~scope
+        ~config:child_karatsuba_config
+        ~enable
+        ~clock
+        a
+        (match b with
+        | Const { signal_id = _; constant } ->
+          `Constant (Bits.to_z ~signedness:Unsigned constant)
+        | _ -> `Signal b)
   in
   let w = Multiplier_input.width input in
   let w2 = w * 2 in

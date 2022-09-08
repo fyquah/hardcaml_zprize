@@ -87,16 +87,20 @@ and create_level
            - Config.latency { levels = remaining_levels; ground_multiplier })
   in
   let create_full_multiplier a b =
-    Karatsuba_ofman_mult.hierarchical
-      ~scope
-      ~config:child_karatsuba_config
-      ~enable
-      ~clock
-      a
-      (match b with
-      | Const { signal_id = _; constant } ->
-        `Constant (Bits.to_z ~signedness:Unsigned constant)
-      | _ -> `Signal b)
+    assert (Signal.width a = Signal.width b);
+    match child_karatsuba_config with
+    | Ground_multiplier config -> Ground_multiplier.create ~clock ~enable ~config a b
+    | Karatsubsa_ofman_stage _ ->
+      Karatsuba_ofman_mult.hierarchical
+        ~scope
+        ~config:child_karatsuba_config
+        ~enable
+        ~clock
+        a
+        (match b with
+        | Const { signal_id = _; constant } ->
+          `Constant (Bits.to_z ~signedness:Unsigned constant)
+        | _ -> `Signal b)
   in
   let w =
     match input with
@@ -142,7 +146,7 @@ and create_level
       let o =
         let o0 = pipeline ~n:post_adder_stages (sel_bottom la_mult_lb hw) in
         let o1 =
-          Adder_subtractor_pipe.add
+          Adder_subtractor_pipe.add_no_carry
             ~stages:post_adder_stages
             ~scope
             ~enable
@@ -151,7 +155,6 @@ and create_level
             ; uresize ub_mult_la (w - hw)
             ; uresize (drop_bottom la_mult_lb hw) (w - hw)
             ]
-          |> Adder_subtractor_pipe.O.result
         in
         o1 @: o0
       in
@@ -209,7 +212,7 @@ and create_level
       let o =
         let o0 = pipeline ~n:post_adder_stages (sel_bottom x0y0 k) in
         let o1 =
-          Adder_subtractor_pipe.add
+          Adder_subtractor_pipe.add_no_carry
             ~stages:post_adder_stages
             ~scope
             ~enable
@@ -218,7 +221,6 @@ and create_level
             ; uresize (x1y0 +: x0y1) (w - k)
             ; uresize (drop_bottom x0y0 k) (w - k)
             ]
-          |> Adder_subtractor_pipe.O.result
         in
         o1 @: o0
       in

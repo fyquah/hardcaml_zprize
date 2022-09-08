@@ -93,6 +93,32 @@ module Config = struct
   ;;
 end
 
+module IO (M : sig
+  val bits : int
+end) =
+struct
+  open M
+
+  module I = struct
+    type 'a t =
+      { clock : 'a
+      ; enable : 'a
+      ; valid : 'a [@rtlname "in_valid"]
+      ; a : 'a [@bits bits]
+      ; b : 'a [@bits bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { c : 'a [@bits bits * 2]
+      ; valid : 'a [@rtlname "out_valid"]
+      }
+    [@@deriving sexp_of, hardcaml, fields]
+  end
+end
+
 type m_terms =
   { z0 : Signal.t
   ; m1 : Signal.t
@@ -117,14 +143,7 @@ let abs_diff_and_sign a b =
   { sign; value = mux2 sign (b -: a) (a -: b) }
 ;;
 
-let rec create_recursive
-    ~scope
-    ~clock
-    ~enable
-    ~(config : Config.t)
-    (a : Signal.t)
-    (b : Signal.t)
-  =
+let rec create_recursive ~scope ~clock ~enable ~config a b =
   let ( -- ) = Scope.naming scope in
   let a = a -- "in_a" in
   let b = b -- "in_b" in
@@ -137,9 +156,38 @@ let rec create_recursive
         "Width of [a] and [b] argument of karatsuba ofman multiplier mismatch"
           (wa : int)
           (wb : int)];
+  let module X =
+    IO (struct
+      let bits = wa
+    end)
+  in
+  let module H = Hierarchy.In_scope (X.I) (X.O) in
+  let override_b = if Signal.is_const b then Some b else None in
   match config with
-  | Karatsubsa_ofman_stage config ->
-    create_karatsuba_ofman_stage ~scope ~clock ~enable ~config a b
+  | Config.Karatsubsa_ofman_stage config ->
+    let name =
+      Printf.sprintf
+        "karatsuba_ofman_stage_%d_%s"
+        wa
+        (match config.level.radix with
+        | Radix_2 -> "radix_2"
+        | Radix_3 -> "radix_3")
+    in
+    H.hierarchical
+      ~name
+      ~scope
+      (fun scope { X.I.clock; enable; valid = _; a; b } ->
+        let b =
+          match override_b with
+          | Some x -> x
+          | None -> b
+        in
+        (* CR-someday fyquah: Populate [valid] properly. *)
+        { X.O.c = create_karatsuba_ofman_stage ~scope ~clock ~enable ~config a b
+        ; valid = gnd
+        })
+      { clock; enable; a; b; valid = gnd }
+    |> X.O.c
   | Ground_multiplier config -> Ground_multiplier.create ~clock ~enable ~config a b
 
 and create_karatsuba_ofman_stage
@@ -169,17 +217,21 @@ and create_karatsuba_ofman_stage_radix_2
     =
     config
   in
-  let pipe_add ~stages items =
-    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
-    |> Adder_subtractor_pipe.O.result
-  in
-  let pipe_add_sub ~n lhs rhs_list =
-    Adder_subtractor_pipe.mixed ~scope ~enable ~clock ~stages:n ~init:lhs rhs_list
-    |> Adder_subtractor_pipe.O.result
-  in
-  let wa = width a in
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = if Signal.is_const x then x else pipeline ~n spec ~enable x in
+  let pipe_add ~stages items =
+    Adder_subtractor_pipe.add_no_carry ~scope ~enable ~clock ~stages items
+  in
+  let pipe_add_sub ~n lhs rhs_list =
+    Adder_subtractor_pipe.mixed_no_carry
+      ~scope
+      ~enable
+      ~clock
+      ~stages:n
+      ~init:lhs
+      rhs_list
+  in
+  let wa = width a in
   let hw = (width a + 1) / 2 in
   let w = hw * 2 in
   let top_half x =
@@ -201,11 +253,13 @@ and create_karatsuba_ofman_stage_radix_2
     let z2 =
       recurse "m2" (pipeline ~n:pre_adder_stages a0) (pipeline ~n:pre_adder_stages b0)
     in
+    let pre_add a b =
+      match child_config with
+      | Ground_multiplier _ -> pipeline ~n:pre_adder_stages (a +: b)
+      | Karatsubsa_ofman_stage _ -> pipe_add ~stages:pre_adder_stages [ a; b ]
+    in
     let m1 =
-      recurse
-        "m1"
-        (pipe_add ~stages:pre_adder_stages [ gnd @: a1; gnd @: a0 ])
-        (pipe_add ~stages:pre_adder_stages [ gnd @: b1; gnd @: b0 ])
+      recurse "m1" (pre_add (gnd @: a1) (gnd @: a0)) (pre_add (gnd @: b1) (gnd @: b0))
     in
     { z0; m1; z2 }
   in
@@ -257,12 +311,16 @@ and create_karatsuba_ofman_stage_radix_3
   let wx = Signal.width x in
   let spec = Reg_spec.create ~clock () in
   let pipe_add ~stages items =
-    Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages items
-    |> Adder_subtractor_pipe.O.result
+    Adder_subtractor_pipe.add_no_carry ~scope ~enable ~clock ~stages items
   in
   let pipe_add_sub ~n lhs rhs_list =
-    Adder_subtractor_pipe.mixed ~scope ~enable ~clock ~stages:n ~init:lhs rhs_list
-    |> Adder_subtractor_pipe.O.result
+    Adder_subtractor_pipe.mixed_no_carry
+      ~scope
+      ~enable
+      ~clock
+      ~stages:n
+      ~init:lhs
+      rhs_list
   in
   let pipeline ~n x =
     assert (n >= 0);
@@ -423,25 +481,7 @@ module With_interface (M : sig
 end) =
 struct
   open M
-
-  module I = struct
-    type 'a t =
-      { clock : 'a
-      ; enable : 'a
-      ; valid : 'a [@rtlname "in_valid"]
-      ; a : 'a [@bits bits]
-      ; b : 'a [@bits bits]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
-  module O = struct
-    type 'a t =
-      { c : 'a [@bits bits * 2]
-      ; valid : 'a [@rtlname "out_valid"]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
+  include IO (M)
 
   let create ~config (scope : Scope.t) { I.clock; enable; a; b; valid } =
     { O.c = create ~config ~clock ~enable ~scope a b

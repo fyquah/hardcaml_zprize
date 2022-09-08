@@ -74,3 +74,43 @@ val sub
   -> clock:Signal.t
   -> Signal.t list
   -> Signal.t O.t
+
+(* {2 no_carry functions}.
+ *
+ * These are similar to the [mixed], [add] and [sub] functions, except they
+ * don't return the carry. For [stages] > 1, these essentially calls the
+ * version with carries and omits it. For [stages] = 1, this returns the
+ * actual operation without instantiation (for the synthesizers to spot
+ * patterns more easily)
+ *)
+
+val mixed_no_carry
+  :  ?name:string
+  -> ?instance:string
+  -> stages:int
+  -> scope:Scope.t
+  -> enable:Signal.t
+  -> clock:Signal.t
+  -> init:Signal.t
+  -> Signal.t Term_and_op.t list
+  -> Signal.t
+
+val add_no_carry
+  :  ?name:string
+  -> ?instance:string
+  -> stages:int
+  -> scope:Scope.t
+  -> enable:Signal.t
+  -> clock:Signal.t
+  -> Signal.t list
+  -> Signal.t
+
+val sub_no_carry
+  :  ?name:string
+  -> ?instance:string
+  -> stages:int
+  -> scope:Scope.t
+  -> enable:Signal.t
+  -> clock:Signal.t
+  -> Signal.t list
+  -> Signal.t

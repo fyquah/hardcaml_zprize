@@ -44,9 +44,7 @@ let on_overlapping_bits (items : t list) do_thing =
 
 let pipe_add ~scope ~enable ~clock ~stages (items : t list) =
   on_overlapping_bits items (fun x ->
-      x
-      |> Adder_subtractor_pipe.add ~scope ~enable ~clock ~stages
-      |> Adder_subtractor_pipe.O.result)
+      x |> Adder_subtractor_pipe.add_no_carry ~scope ~enable ~clock ~stages)
 ;;
 
 let sum (items : t list) =
