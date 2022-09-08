@@ -29,6 +29,8 @@ jobs:
 
       - run: opam install . --deps-only --with-doc --with-test
 
+      - run: cd rust/ark_bls12_377_g1/ && cargo build && cd ../..
+
       - run: opam exec -- dune build
 
       - run: opam exec -- dune runtest
