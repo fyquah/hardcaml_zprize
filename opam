@@ -1,0 +1,16 @@
+name: "fantastic_carnival"
+opam-version: "2.0"
+depends: [
+  "ocaml" {= "4.13.1"}
+  "base"
+  "bignum"
+  "core"
+  "ctypes"
+  "hardcaml"
+  "hardcaml_circuits"
+  "hardcaml_verify"
+  "zarith"
+
+  # preprocessors follow
+  "ppx_jane"
+]
