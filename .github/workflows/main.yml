@@ -27,6 +27,8 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
+      - run: sudo apt-get install z3 -y
+
       - run: opam install . --deps-only --with-doc --with-test
 
       - run: cd rust/ark_bls12_377_g1/ && cargo build && cd ../..
