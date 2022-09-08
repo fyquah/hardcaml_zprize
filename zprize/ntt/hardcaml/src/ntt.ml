@@ -1,31 +1,87 @@
 open! Base
 open! Hardcaml
 
-(* Max transform size*)
+type twiddle_4step_config =
+  { rows_per_iteration : int
+  ; log_num_iterations : int
+  }
 
-module type Size = sig
+module type Config = sig
   val logn : int
+  val twiddle_4step_config : twiddle_4step_config option
 end
 
 module Gf = Gf_bits.Make (Hardcaml.Signal)
-module Gf_bits = Gf_bits.Make (Hardcaml.Signal)
 
-module Make (P : Size) = struct
-  let logn = P.logn
+module Make (Config : Config) = struct
+  let logn = Config.logn
   let n = 1 lsl logn
   let multiply_latency = 3
   let ram_output_pipelining = 1
   let ram_latency = 1
   let datapath_latency = ram_latency + ram_output_pipelining + multiply_latency
+  let support_4step_twiddle = Option.is_some Config.twiddle_4step_config
 
-  module Omegas = struct
-    type 'a t =
-      { omega1 : 'a [@bits Gf.num_bits]
-      ; omega2 : 'a [@bits Gf.num_bits]
-      ; omega3 : 'a [@bits Gf.num_bits]
-      ; omega4 : 'a [@bits Gf.num_bits]
-      }
-    [@@deriving sexp_of, hardcaml]
+  let twiddle_4step_config =
+    Option.value
+      ~default:{ rows_per_iteration = 0; log_num_iterations = 0 }
+      Config.twiddle_4step_config
+  ;;
+
+  let gf_mul ~clock a b =
+    let pipe x =
+      Gf.to_bits x |> Signal.pipeline (Reg_spec.create ~clock ()) ~n:1 |> Gf.of_bits
+    in
+    Gf.mul ~pipe (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+  ;;
+
+  module Twiddle_factor_stream = struct
+    let pipe_length = multiply_latency + 1
+
+    module I = struct
+      type 'a t =
+        { clock : 'a
+        ; start_twiddles : 'a
+        ; omegas : 'a list [@bits Gf.num_bits] [@length pipe_length]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O = struct
+      type 'a t = { w : 'a [@bits Gf.num_bits] } [@@deriving sexp_of, hardcaml]
+    end
+
+    module Var = Always.Variable
+    open Signal
+
+    let create _scope (i : _ I.t) =
+      let pipe_length = List.length i.omegas in
+      let spec = Reg_spec.create ~clock:i.clock () in
+      let w = Always.Variable.reg ~width:Gf.num_bits spec in
+      let omega_step, omega_pipe = List.last_exn i.omegas, List.drop_last_exn i.omegas in
+      let multiplier_output = gf_mul ~clock:i.clock w.value omega_step in
+      let count = Var.reg spec ~width:(Int.ceil_log2 (multiply_latency + 1)) in
+      Always.(
+        compile
+          [ w <-- mux count.value (omega_pipe @ [ multiplier_output ])
+          ; when_ (count.value <>:. pipe_length - 1) [ count <-- count.value +:. 1 ]
+          ; when_ i.start_twiddles [ w <-- Gf.to_bits Gf.one; count <--. 0 ]
+          ]);
+      { O.w = w.value }
+    ;;
+
+    let hierarchy scope =
+      let module Hier = Hierarchy.In_scope (I) (O) in
+      Hier.hierarchical ~name:"twdl" ~scope create
+    ;;
+
+    let initial_pipeline_factors root =
+      let inverse_root = Roots.inverse.(root) in
+      let rec f acc i =
+        if i = pipe_length then [] else acc :: f (Gf_z.( * ) acc inverse_root) (i + 1)
+      in
+      f inverse_root 0 |> List.map ~f:(fun x -> Gf.to_bits (Gf.of_z (Gf_z.to_z x)))
+    ;;
   end
 
   module Controller = struct
@@ -34,6 +90,7 @@ module Make (P : Size) = struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -47,10 +104,11 @@ module Make (P : Size) = struct
         ; m : 'a [@bits logn]
         ; addr1 : 'a [@bits logn]
         ; addr2 : 'a [@bits logn]
-        ; omegas : 'a Omegas.t
+        ; omegas : 'a list [@bits Gf.num_bits] [@length Twiddle_factor_stream.pipe_length]
         ; start_twiddles : 'a
         ; first_stage : 'a
         ; last_stage : 'a
+        ; twiddle_stage : 'a
         ; read_write_enable : 'a
         ; flip : 'a
         }
@@ -62,47 +120,57 @@ module Make (P : Size) = struct
         | Idle
         | Looping
         | Sync
+        | Twiddle
+        | Sync_twiddles
       [@@deriving compare, enumerate, sexp_of, variants]
     end
 
     module Var = Always.Variable
 
-    let create scope (inputs : _ I.t) =
+    let create ?(row = 0) scope (inputs : _ I.t) =
       let open Signal in
       let ( -- ) = Scope.naming scope in
       let spec = Reg_spec.create ~clock:inputs.clock ~clear:inputs.clear () in
       let sm = Always.State_machine.create (module State) spec in
       ignore (sm.current -- "STATE" : Signal.t);
+      let block =
+        Option.map Config.twiddle_4step_config ~f:(fun { log_num_iterations; _ } ->
+          Var.reg spec ~width:log_num_iterations)
+      in
+      Option.iter block ~f:(fun block -> ignore (block.value -- "BLOCK"));
       let done_ = Var.reg (Reg_spec.override spec ~clear_to:vdd) ~width:1 in
       let i = Var.reg spec ~width:(Int.ceil_log2 (logn + 1)) in
+      ignore (i.value -- "i" : Signal.t);
       let i_next = i.value +:. 1 in
       let j = Var.reg spec ~width:logn in
+      ignore (j.value -- "j" : Signal.t);
       let j_next = j.value +:. 1 in
       let k = Var.reg spec ~width:logn in
+      ignore (k.value -- "k" : Signal.t);
       let m = Var.reg spec ~width:logn in
+      ignore (m.value -- "m" : Signal.t);
       let m_next = sll m.value 1 in
       let k_next = k.value +: m_next in
       let addr1 = Var.reg spec ~width:logn in
       let addr2 = Var.reg spec ~width:logn in
       let omegas =
         List.init logn ~f:(fun i ->
-            let inverse_root = Roots.inverse.(i + 1) in
-            let open Gf_z in
-            { Omegas.omega1 = inverse_root
-            ; omega2 = inverse_root * inverse_root
-            ; omega3 = inverse_root * inverse_root * inverse_root
-            ; omega4 = inverse_root * inverse_root * inverse_root * inverse_root
-            }
-            |> Omegas.map ~f:(fun x -> Gf.to_bits (Gf.of_z (Gf_z.to_z x))))
-        |> Omegas.Of_signal.mux i.value
+          Twiddle_factor_stream.initial_pipeline_factors (i + 1))
+        |> List.transpose_exn
+        |> List.map ~f:(mux i.value)
       in
       let start_twiddles = Var.reg spec ~width:1 in
       let first_stage = Var.reg spec ~width:1 in
       let last_stage = Var.reg spec ~width:1 in
+      let twiddle_stage = Var.reg spec ~width:1 in
       let sync_cycles = datapath_latency + 1 in
       let sync_count = Var.reg spec ~width:(max 1 (Int.ceil_log2 sync_cycles)) in
+      let sync_count_next = sync_count.value +:. 1 in
       let flip = Var.wire ~default:gnd in
       let read_write_enable = Var.wire ~default:gnd in
+      let if_twiddle_supported ((s : State.t), p) =
+        if support_4step_twiddle then s, p else s, []
+      in
       Always.(
         compile
           [ start_twiddles <--. 0
@@ -119,6 +187,8 @@ module Make (P : Size) = struct
                       ; done_ <--. 0
                       ; start_twiddles <--. 1
                       ; first_stage <--. 1
+                      ; last_stage <--. 0
+                      ; twiddle_stage <--. 0
                       ; sm.set_next Looping
                       ]
                   ] )
@@ -141,28 +211,62 @@ module Make (P : Size) = struct
                       ]
                   ] )
               ; ( Sync
-                , [ sync_count <-- sync_count.value +:. 1
+                , [ sync_count <-- sync_count_next
                   ; when_
                       (sync_count.value ==:. sync_cycles - 1)
                       [ sm.set_next Looping
                       ; sync_count <--. 0
+                      ; start_twiddles <--. 1
                       ; flip <-- vdd
-                      ; j <--. 0
-                      ; start_twiddles <--. 1
-                      ; k <-- k_next
-                      ; addr1 <-- k_next
-                      ; addr2 <-- k_next +: m.value
-                      ; i <-- i_next
-                      ; start_twiddles <--. 1
                       ; first_stage <--. 0
+                      ; i <-- i_next
+                      ; j <--. 0
+                      ; k <-- k_next
                       ; m <-- m_next
+                      ; addr1 <-- k_next
                       ; addr2 <-- k_next +: m_next
-                      ; when_ (i_next ==:. logn - 1) [ last_stage <--. 1 ]
+                      ; when_
+                          (i_next ==:. logn - 1)
+                          [ last_stage <-- ~:(inputs.first_4step_pass) ]
                       ; when_
                           (i_next ==:. logn)
-                          [ done_ <--. 1; last_stage <--. 0; sm.set_next Idle ]
+                          [ last_stage <--. 0
+                          ; (if support_4step_twiddle
+                            then
+                              proc
+                                [ if_
+                                    inputs.first_4step_pass
+                                    [ last_stage <--. 1
+                                    ; twiddle_stage <--. 1
+                                    ; addr2 <--. 0
+                                    ; sm.set_next Twiddle
+                                    ]
+                                    [ done_ <--. 1; sm.set_next Idle ]
+                                ]
+                            else proc [ done_ <--. 1; sm.set_next Idle ])
+                          ]
                       ]
                   ] )
+              ; if_twiddle_supported
+                  ( Twiddle
+                  , [ addr2 <-- addr2.value +:. 1
+                    ; read_write_enable <-- vdd
+                    ; when_ (addr2.value ==:. -1) [ sm.set_next Sync_twiddles ]
+                    ] )
+              ; if_twiddle_supported
+                  ( Sync_twiddles
+                  , [ sync_count <-- sync_count_next
+                    ; when_
+                        (sync_count.value ==:. sync_cycles - 1)
+                        [ twiddle_stage <--. 0
+                        ; last_stage <-- gnd
+                        ; done_ <--. 1
+                        ; (match block with
+                           | None -> proc []
+                           | Some block -> block <-- block.value +:. 1)
+                        ; sm.set_next Idle
+                        ]
+                    ] )
               ]
           ]);
       { O.done_ = done_.value
@@ -172,67 +276,41 @@ module Make (P : Size) = struct
       ; m = m.value
       ; addr1 = addr1.value
       ; addr2 = addr2.value
-      ; omegas
+      ; omegas =
+          List.mapi omegas ~f:(fun idx omega ->
+            match block with
+            | None -> omega
+            | Some block ->
+              let twiddle_root row =
+                Gf_z.pow Roots.inverse.(logn * 2) (row * (idx + 1))
+                |> Gf_z.to_z
+                |> Gf.of_z
+                |> Gf.to_bits
+              in
+              (* XXX aray: We should fix this rom.  We need to either pack it into block ram,
+                 or probably better, calculate the initial omegas iteratively through the
+                 multiplier. *)
+              let twiddle_root =
+                mux
+                  block.value
+                  (List.init
+                     (1 lsl twiddle_4step_config.log_num_iterations)
+                     ~f:(fun block ->
+                     twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration))))
+              in
+              mux2 twiddle_stage.value twiddle_root omega)
       ; start_twiddles = start_twiddles.value
       ; first_stage = first_stage.value
       ; last_stage = last_stage.value
+      ; twiddle_stage = twiddle_stage.value
       ; read_write_enable = read_write_enable.value
       ; flip = flip.value
       }
     ;;
 
-    let hierarchy scope =
+    let hierarchy ?row scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"ctrl" ~scope create
-    ;;
-  end
-
-  let gf_mul ~clock a b =
-    let pipe x =
-      Gf.to_bits x |> Signal.pipeline (Reg_spec.create ~clock ()) ~n:1 |> Gf.of_bits
-    in
-    Gf.mul ~pipe (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-  ;;
-
-  module Twiddle_factor_stream = struct
-    module I = struct
-      type 'a t =
-        { clock : 'a
-        ; start_twiddles : 'a
-        ; omegas : 'a Omegas.t
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module O = struct
-      type 'a t = { w : 'a [@bits Gf.num_bits] } [@@deriving sexp_of, hardcaml]
-    end
-
-    module State = struct
-      type t =
-        | Stream_multiplier_output
-        | Omega1
-        | Omega2
-        | Omega3
-      [@@deriving compare, enumerate, sexp_of, variants]
-    end
-
-    let create (i : _ I.t) =
-      let spec = Reg_spec.create ~clock:i.clock () in
-      let sm = Always.State_machine.create (module State) spec in
-      let w = Always.Variable.reg ~width:Gf.num_bits spec in
-      let multiplier_output = gf_mul ~clock:i.clock w.value i.omegas.omega4 in
-      Always.(
-        compile
-          [ sm.switch
-              [ Stream_multiplier_output, [ w <-- multiplier_output ]
-              ; Omega1, [ w <-- i.omegas.omega1; sm.set_next Omega2 ]
-              ; Omega2, [ w <-- i.omegas.omega2; sm.set_next Omega3 ]
-              ; Omega3, [ w <-- i.omegas.omega3; sm.set_next Stream_multiplier_output ]
-              ]
-          ; when_ i.start_twiddles [ w <-- Gf.to_bits Gf.one; sm.set_next Omega1 ]
-          ]);
-      { O.w = w.value }
+      Hier.hierarchical ~name:"ctrl" ~scope (create ?row)
     ;;
   end
 
@@ -246,8 +324,9 @@ module Make (P : Size) = struct
         ; clear : 'a
         ; d1 : 'a [@bits Gf.num_bits]
         ; d2 : 'a [@bits Gf.num_bits]
-        ; omegas : 'a Omegas.t
+        ; omegas : 'a list [@bits Gf.num_bits] [@length Twiddle_factor_stream.pipe_length]
         ; start_twiddles : 'a
+        ; twiddle_stage : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -269,9 +348,11 @@ module Make (P : Size) = struct
       let ( -- ) = Scope.naming scope in
       let spec_with_clear = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let spec_no_clear = Reg_spec.create ~clock:i.clock () in
-      (* the latency of the input data must be adjusted to match the latency of the twiddle factor calculation *)
+      (* The latency of the input data must be adjusted to match the latency of
+         the twiddle factor calculation *)
       let { Twiddle_factor_stream.O.w } =
-        Twiddle_factor_stream.create
+        Twiddle_factor_stream.hierarchy
+          scope
           { clock = i.clock
           ; start_twiddles =
               pipeline ~n:ram_output_pipelining spec_with_clear i.start_twiddles
@@ -285,7 +366,18 @@ module Make (P : Size) = struct
       let d1 =
         pipeline spec_no_clear ~n:(multiply_latency + ram_output_pipelining) i.d1
       in
-      { O.q1 = reg spec_no_clear (d1 +: t); q2 = reg spec_no_clear (d1 -: t) }
+      { O.q1 = reg spec_no_clear (d1 +: t)
+      ; q2 =
+          reg
+            spec_no_clear
+            (mux2
+               (pipeline
+                  spec_no_clear
+                  ~n:(multiply_latency + ram_output_pipelining)
+                  i.twiddle_stage)
+               t
+               (d1 -: t))
+      }
     ;;
 
     let hierarchy scope =
@@ -302,6 +394,7 @@ module Make (P : Size) = struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; d1 : 'a [@bits Gf.num_bits]
         ; d2 : 'a [@bits Gf.num_bits]
         }
@@ -320,18 +413,24 @@ module Make (P : Size) = struct
         ; write_enable_out : 'a
         ; first_stage : 'a
         ; last_stage : 'a
+        ; twiddle_stage : 'a
         ; flip : 'a
         ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
 
-    let create scope (i : _ I.t) =
+    let create ?row scope (i : _ I.t) =
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let controller =
         Controller.hierarchy
+          ?row
           scope
-          { Controller.I.clock = i.clock; clear = i.clear; start = i.start }
+          { Controller.I.clock = i.clock
+          ; clear = i.clear
+          ; start = i.start
+          ; first_4step_pass = i.first_4step_pass
+          }
       in
       let datapath =
         Datapath.hierarchy
@@ -342,6 +441,7 @@ module Make (P : Size) = struct
           ; d2 = i.d2
           ; omegas = controller.omegas
           ; start_twiddles = controller.start_twiddles
+          ; twiddle_stage = controller.twiddle_stage
           }
       in
       let pipe = pipeline spec ~n:(datapath_latency + 1) in
@@ -355,14 +455,15 @@ module Make (P : Size) = struct
       ; write_enable_out = controller.read_write_enable |> pipe
       ; first_stage = controller.first_stage
       ; last_stage = controller.last_stage
+      ; twiddle_stage = controller.twiddle_stage
       ; flip = controller.flip
       ; done_ = controller.done_
       }
     ;;
 
-    let hierarchy scope =
+    let hierarchy ?row scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"core" ~scope create
+      Hier.hierarchical ~name:"core" ~scope (create ?row)
     ;;
   end
 
@@ -374,6 +475,7 @@ module Make (P : Size) = struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; flip : 'a
         ; wr_d : 'a [@bits Gf.num_bits]
         ; wr_en : 'a
@@ -392,8 +494,9 @@ module Make (P : Size) = struct
       [@@deriving sexp_of, hardcaml]
     end
 
-    let input_ram build_mode (i : _ I.t) (core : _ Core.O.t) =
+    let input_ram scope build_mode (i : _ I.t) (core : _ Core.O.t) =
       Bram.create_dual
+        (Scope.sub_scope scope "ram_in")
         ~build_mode
         ~size:n
         ~clock:i.clock
@@ -405,9 +508,10 @@ module Make (P : Size) = struct
         ~read_port_b:{ address = reverse core.addr2_in; enable = core.read_enable_in }
     ;;
 
-    let transpose_ram build_mode (i : _ I.t) (core : _ Core.O.t) ~flip ~last_stage =
+    let transpose_ram scope build_mode (i : _ I.t) (core : _ Core.O.t) ~flip ~last_stage =
       let q0, q1 =
         Bram.create_dual
+          (Scope.sub_scope scope "ram_transp")
           ~build_mode
           ~size:n
           ~clock:i.clock
@@ -429,9 +533,17 @@ module Make (P : Size) = struct
       q0, q1
     ;;
 
-    let output_ram build_mode (i : _ I.t) (core : _ Core.O.t) ~last_stage =
+    let output_ram
+      scope
+      build_mode
+      (i : _ I.t)
+      (core : _ Core.O.t)
+      ~last_stage
+      ~twiddle_stage
+      =
       let q, _ =
         Bram.create_dual
+          (Scope.sub_scope scope "ram_out")
           ~build_mode
           ~size:n
           ~clock:i.clock
@@ -440,7 +552,7 @@ module Make (P : Size) = struct
           ~write_port_a:
             { address = core.addr1_out
             ; data = core.q1
-            ; enable = core.write_enable_out &: last_stage
+            ; enable = core.write_enable_out &: (last_stage &: ~:twiddle_stage)
             }
           ~write_port_b:
             { address = core.addr2_out
@@ -453,35 +565,46 @@ module Make (P : Size) = struct
       q
     ;;
 
-    let create ~build_mode scope (i : _ I.t) =
+    let create ?row ~build_mode scope (i : _ I.t) =
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let core = Core.O.Of_signal.wires () in
       let piped_first_stage = pipeline spec ~n:1 core.first_stage in
       let piped_last_stage = pipeline spec ~n:1 core.last_stage in
+      let piped_twiddle_stage = pipeline spec ~n:1 core.twiddle_stage in
       (* input and output rams *)
-      let d_in_0, d_in_1 = input_ram build_mode i core in
+      let d_in_0, d_in_1 = input_ram scope build_mode i core in
       let d_out_0, d_out_1 =
-        transpose_ram build_mode i core ~flip:core.flip ~last_stage:core.last_stage
+        transpose_ram scope build_mode i core ~flip:core.flip ~last_stage:core.last_stage
       in
       (* core *)
       Core.O.iter2
         core
         (Core.hierarchy
+           ?row
            scope
            { clock = i.clock
            ; clear = i.clear
            ; start = i.start
+           ; first_4step_pass = i.first_4step_pass
            ; d1 = mux2 piped_first_stage d_in_0 d_out_0
            ; d2 = mux2 piped_first_stage d_in_1 d_out_1
            })
         ~f:( <== );
-      let d_out = output_ram build_mode i core ~last_stage:piped_last_stage in
+      let d_out =
+        output_ram
+          scope
+          build_mode
+          i
+          core
+          ~last_stage:piped_last_stage
+          ~twiddle_stage:piped_twiddle_stage
+      in
       { O.done_ = core.done_; rd_q = d_out }
     ;;
 
-    let hierarchy ?instance ~build_mode scope =
+    let hierarchy ?row ?instance ~build_mode scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"ntt_with_rams" ?instance ~scope (create ~build_mode)
+      Hier.hierarchical ~name:"ntt_with_rams" ?instance ~scope (create ?row ~build_mode)
     ;;
   end
 end

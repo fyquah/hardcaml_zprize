@@ -7,6 +7,7 @@ let%expect_test "addressing" =
   let module Ntt =
     Ntts_r_fun.Ntt.Make (struct
       let logn = 3
+      let twiddle_4step_config = None
     end)
   in
   let module Sim = Cyclesim.With_interface (Ntt.Controller.I) (Ntt.Controller.O) in
@@ -30,6 +31,8 @@ let%expect_test "addressing" =
     │                  ││  └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─│
     │clear             ││────┐                                                               │
     │                  ││    └───────────────────────────────────────────────────────────────│
+    │first_4step_pass  ││                                                                    │
+    │                  ││────────────────────────────────────────────────────────────────────│
     │start             ││    ┌───┐                                                           │
     │                  ││────┘   └───────────────────────────────────────────────────────────│
     │                  ││────────────┬───┬───┬───┬───────────────────────┬───┬───┬───┬───┬───│
@@ -59,9 +62,7 @@ let%expect_test "addressing" =
     │m                 ││ 0      │1                                      │2                  │
     │                  ││────────┴───────────────────────────────────────┴───────────────────│
     │                  ││────────────────────────────────────────────────┬───────────────────│
-    │omega1            ││ FFFFFFFF00000000                               │0001000000000000   │
-    │                  ││────────────────────────────────────────────────┴───────────────────│
-    │                  ││────────────────────────────────────────────────┬───────────────────│
+    │omegas0           ││ FFFFFFFF00000000                               │0001000000000000   │
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
@@ -85,6 +86,7 @@ let inverse_ntt_test ~waves input_coefs =
   let module Ntt =
     Ntts_r_fun.Ntt.Make (struct
       let logn = logn
+      let twiddle_4step_config = None
     end)
   in
   let module Sim = Cyclesim.With_interface (Ntt.With_rams.I) (Ntt.With_rams.O) in
@@ -111,9 +113,9 @@ let inverse_ntt_test ~waves input_coefs =
   (* load the ram *)
   inputs.wr_en <-- 1;
   Array.iteri input_coefs ~f:(fun addr coef ->
-      inputs.wr_addr <-- addr;
-      inputs.wr_d := Gf.to_bits coef;
-      Cyclesim.cycle sim);
+    inputs.wr_addr <-- addr;
+    inputs.wr_d := Gf.to_bits coef;
+    Cyclesim.cycle sim);
   inputs.wr_en <-- 0;
   (* flip rams *)
   inputs.flip <-- 1;
@@ -172,13 +174,13 @@ let%expect_test "8pt linear" =
     inverse_ntt_test
       ~waves:false
       (Array.init 8 ~f:(function
-          | 0 -> Gf.one
-          | 1 -> Gf.two
-          | _ -> Gf.zero))
+        | 0 -> Gf.one
+        | 1 -> Gf.two
+        | _ -> Gf.zero))
   in
   let result =
     Array.map result ~f:(fun b ->
-        Gf.to_bits b |> Bits.to_constant |> Constant.to_hex_string ~signedness:Unsigned)
+      Gf.to_bits b |> Bits.to_constant |> Constant.to_hex_string ~signedness:Unsigned)
   in
   print_s [%message (result : string array)];
   Option.iter waves ~f:print_waves;
@@ -212,7 +214,7 @@ let%expect_test "8pt random" =
   in
   let result =
     Array.map result ~f:(fun b ->
-        Gf.to_bits b |> Bits.to_constant |> Constant.to_hex_string ~signedness:Unsigned)
+      Gf.to_bits b |> Bits.to_constant |> Constant.to_hex_string ~signedness:Unsigned)
   in
   print_s [%message (result : string array)];
   Option.iter waves ~f:print_waves;

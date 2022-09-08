@@ -1,24 +1,40 @@
 open! Base
 open! Hardcaml
 
-module type Size = sig
+type twiddle_4step_config =
+  { rows_per_iteration : int
+  ; log_num_iterations : int
+  }
+
+module type Config = sig
   val logn : int
+  val twiddle_4step_config : twiddle_4step_config option
 end
 
 module Gf : module type of Gf_bits.Make (Signal)
 
-module Make (P : Size) : sig
+module Make (Config : Config) : sig
   val n : int
   val logn : int
 
-  module Omegas : sig
-    type 'a t =
-      { omega1 : 'a
-      ; omega2 : 'a
-      ; omega3 : 'a
-      ; omega4 : 'a
-      }
-    [@@deriving sexp_of, hardcaml]
+  module Twiddle_factor_stream : sig
+    val pipe_length : int
+
+    module I : sig
+      type 'a t =
+        { clock : 'a
+        ; start_twiddles : 'a
+        ; omegas : 'a list
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O : sig
+      type 'a t = { w : 'a } [@@deriving sexp_of, hardcaml]
+    end
+
+    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module Controller : sig
@@ -27,6 +43,7 @@ module Make (P : Size) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -40,18 +57,19 @@ module Make (P : Size) : sig
         ; m : 'a
         ; addr1 : 'a
         ; addr2 : 'a
-        ; omegas : 'a Omegas.t
+        ; omegas : 'a list
         ; start_twiddles : 'a
         ; first_stage : 'a
         ; last_stage : 'a
+        ; twiddle_stage : 'a
         ; read_write_enable : 'a
         ; flip : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
 
-    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val create : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module Datapath : sig
@@ -61,8 +79,9 @@ module Make (P : Size) : sig
         ; clear : 'a
         ; d1 : 'a
         ; d2 : 'a
-        ; omegas : 'a Omegas.t
+        ; omegas : 'a list
         ; start_twiddles : 'a
+        ; twiddle_stage : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -85,6 +104,7 @@ module Make (P : Size) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; d1 : 'a
         ; d2 : 'a
         }
@@ -103,14 +123,15 @@ module Make (P : Size) : sig
         ; write_enable_out : 'a
         ; first_stage : 'a
         ; last_stage : 'a
+        ; twiddle_stage : 'a
         ; flip : 'a
         ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
 
-    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val create : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module With_rams : sig
@@ -119,6 +140,7 @@ module Make (P : Size) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; flip : 'a
         ; wr_d : 'a
         ; wr_en : 'a
@@ -138,12 +160,14 @@ module Make (P : Size) : sig
     end
 
     val create
-      :  build_mode:Build_mode.t
+      :  ?row:int
+      -> build_mode:Build_mode.t
       -> Scope.t
       -> Signal.t Interface.Create_fn(I)(O).t
 
     val hierarchy
-      :  ?instance:string
+      :  ?row:int
+      -> ?instance:string
       -> build_mode:Build_mode.t
       -> Scope.t
       -> Signal.t Interface.Create_fn(I)(O).t

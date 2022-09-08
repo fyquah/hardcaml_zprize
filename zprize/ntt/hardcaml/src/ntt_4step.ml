@@ -1,28 +1,17 @@
 open Base
 open Hardcaml
 open Signal
-(* Multipass NTT algorithm using the 4 step method.*)
 
-(* Initially, for simplicity, we are going to do "square matrices". Both steps
-   across rows and columns of the input will perform ntts of the same size.
+module Make (Config : Ntt.Config) = struct
+  open Config
 
-   That's not so unreasonable, as we intend to do 2^12 base ntts to perform the
-   full 2^24 ntt anyway. It's not so hard to fix later should we need to (we
-   might!).
-*)
-
-(* We might also just use a single core to start with. But frankly we must deal
-   with mutliple cores (as much as memory can support!) so we need to keep this
-   in mind.
-*)
-
-module Make (Size : sig
-  (* Overall, we are going to compute an ntt of 2^(logn + logn) *)
-
-  val logn : int
-end) =
-struct
-  open Size
+  let () =
+    if Config.logn < 4
+    then
+      raise_s
+        [%message
+          "Minimum logn for 4step algorithm is 4 (256 point total)" (Config.logn : int)]
+  ;;
 
   (* Specifying this as a log is probably not as flexible as we want (if we can
    fit 29 cores, this would limit us to 16). But it greatly simplifies things to
@@ -31,10 +20,7 @@ struct
   let cores = 1 lsl logcores
 
   module Gf = Gf_bits.Make (Hardcaml.Signal)
-
-  module Ntt = Ntt.Make (struct
-    let logn = logn
-  end)
+  module Ntt = Ntt.Make (Config)
 
   module Parallel_cores = struct
     module I = struct
@@ -42,6 +28,7 @@ struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; flip : 'a
         ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
         ; wr_en : 'a [@bits cores]
@@ -64,12 +51,14 @@ struct
       let cores =
         Array.init cores ~f:(fun index ->
             Ntt.With_rams.hierarchy
+              ~row:index
               ~build_mode
               ~instance:("ntt" ^ Int.to_string index)
               scope
               { Ntt.With_rams.I.clock = i.clock
               ; clear = i.clear
               ; start = i.start
+              ; first_4step_pass = i.first_4step_pass
               ; flip = i.flip
               ; wr_d = i.wr_d.(index)
               ; wr_en = i.wr_en.:(index)
@@ -84,56 +73,6 @@ struct
     let hierarchy ~build_mode scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
       Hier.hierarchical ~name:"parallel_cores" ~scope (create ~build_mode)
-    ;;
-  end
-
-  module Twiddle_controller = struct
-    module I = struct
-      type 'a t =
-        { clock : 'a
-        ; clear : 'a
-        ; start : 'a
-        ; d : 'a [@bits Gf.num_bits]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module O = struct
-      type 'a t =
-        { done_ : 'a
-        ; addr : 'a [@bits logn]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module State = struct
-      type t =
-        | Idle
-        | Twiddle_loop
-      [@@deriving compare, enumerate, sexp_of, variants]
-    end
-
-    module Var = Always.Variable
-
-    let create _scope (i : _ I.t) =
-      let open Signal in
-      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
-      let sm = Always.State_machine.create (module State) spec in
-      let j = Var.reg spec ~width:logn in
-      let j_next = j.value +:. 1 in
-      Always.(
-        compile
-          [ sm.switch
-              [ Idle, [ j <--. 0; when_ i.start [ sm.set_next Twiddle_loop ] ]
-              ; Twiddle_loop, [ j <-- j_next; when_ (j_next ==:. 0) [ sm.set_next Idle ] ]
-              ]
-          ]);
-      { O.done_ = sm.is Idle; addr = j.value }
-    ;;
-
-    let hierarchy scope =
-      let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"twiddle" ~scope create
     ;;
   end
 
@@ -255,6 +194,7 @@ struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
         ; wr_en : 'a [@bits cores]
         ; wr_addr : 'a [@bits logn]
@@ -289,7 +229,6 @@ struct
           ; cores_done
           }
       in
-      (* let twiddler = Twiddle_controller.create {} *)
       let cores =
         Parallel_cores.hierarchy
           ~build_mode
@@ -297,6 +236,7 @@ struct
           { Parallel_cores.I.clock = i.clock
           ; clear = i.clear
           ; start = controller.start_cores
+          ; first_4step_pass = i.first_4step_pass
           ; flip = controller.flip
           ; wr_d = i.wr_d
           ; wr_en = i.wr_en
@@ -327,6 +267,7 @@ struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_4step_pass : 'a
         ; data_in : 'a Axi512.Stream.Source.t
         ; data_out_dest : 'a Axi512.Stream.Dest.t
         }
@@ -452,6 +393,7 @@ struct
           { Core.I.clock = i.clock
           ; clear = i.clear
           ; start = i.start
+          ; first_4step_pass = i.first_4step_pass
           ; wr_d = i.data_in.tdata |> split_lsb ~part_width:Gf.num_bits |> Array.of_list
           ; wr_en = repeat (i.data_in.tvalid &: load_sm.tready) cores
           ; wr_addr = load_sm.wr_addr
@@ -507,15 +449,23 @@ struct
     let create
         ~build_mode
         scope
-        { I.ap_clk; ap_rst_n; controller_to_compute; compute_to_controller_dest }
+        { I.ap_clk = clock
+        ; ap_rst_n = clear_n
+        ; controller_to_compute
+        ; compute_to_controller_dest
+        }
       =
+      let clear = ~:clear_n in
+      let spec = Reg_spec.create ~clock ~clear () in
       let start = wire 1 in
+      let first_4step_pass = reg_fb spec ~enable:start ~width:1 ~f:( ~: ) -- "4STEP" in
       let { Kernel.O.data_out; data_in_dest; done_ } =
         Kernel.hierarchy
           ~build_mode
           scope
-          { clock = ap_clk
-          ; clear = ~:ap_rst_n
+          { clock
+          ; clear
+          ; first_4step_pass
           ; data_in = controller_to_compute
           ; data_out_dest = compute_to_controller_dest
           ; start
