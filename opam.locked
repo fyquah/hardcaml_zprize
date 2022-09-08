@@ -17,12 +17,15 @@ depends: [
   "bin_prot" {= "v0.15.0"}
   "cmdliner" {= "1.1.1"}
   "conf-gmp" {= "4"}
+  "conf-libffi" {= "2.0.0"}
+  "conf-pkg-config" {= "2"}
   "core" {= "v0.15.0"}
   "core_kernel" {= "v0.15.0"}
   "core_unix" {= "v0.15.0"}
   "cppo" {= "1.6.9"}
   "csexp" {= "1.5.1"}
   "ctypes" {= "0.20.1"}
+  "ctypes-foreign" {= "0.18.0"}
   "dune" {= "3.2.0"}
   "dune-configurator" {= "3.2.0"}
   "expect_test_helpers_core" {= "v0.15.0"}
@@ -31,6 +34,7 @@ depends: [
   "hardcaml_circuits" {= "v0.15.0"}
   "hardcaml_verify" {= "v0.15.0"}
   "hardcaml_waveterm" {= "v0.15.0"}
+  "hardcaml_xilinx" {= "v0.15.0"}
   "int_repr" {= "v0.15.0"}
   "integers" {= "0.7.0"}
   "jane-street-headers" {= "v0.15.0"}

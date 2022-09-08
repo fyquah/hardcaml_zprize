@@ -6,9 +6,11 @@ depends: [
   "bignum"
   "core"
   "ctypes"
+  "ctypes-foreign"
   "hardcaml"
   "hardcaml_circuits"
   "hardcaml_verify"
+  "hardcaml_xilinx"
   "zarith"
 
   # preprocessors follow
