@@ -10,6 +10,10 @@ let command_kernel =
         let module Ntt_4step =
           Ntts_r_fun.Ntt_4step.Make (struct
             let logn = logn
+
+            let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
+              Some { rows_per_iteration = 8; log_num_iterations = logn - 3 }
+            ;;
           end)
         in
         let module Kernel_for_vitis = Ntt_4step.Kernel_for_vitis in
@@ -27,13 +31,14 @@ let command_kernel =
 
 let command_ntt =
   Command.basic
-    ~summary:"Generate NTT kernel"
+    ~summary:"Generate NTT core"
     [%map_open.Command
       let logn = anon ("LOGN" %: int) in
       fun () ->
         let module Ntts =
           Ntts_r_fun.Ntt.Make (struct
             let logn = logn
+            let twiddle_4step_config = None
           end)
         in
         let module Ntt = Ntts.With_rams in
