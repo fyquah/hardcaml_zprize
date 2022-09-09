@@ -21,31 +21,6 @@ std::ostream& operator<<(std::ostream &os, CoreType core_type)
   assert(false);
 }
 
-static void
-apply_twiddles_in_place(uint64_t *data, uint64_t log_row_size, GF *precomputed_w_powers)
-{
-  GF w = OMEGA[2 * log_row_size];
-  uint64_t row_size = 1 << log_row_size;
-
-  {
-    GF acc = 1;
-    for (uint64_t i = 0; i < row_size; i++) {
-      precomputed_w_powers[i] = acc;
-      acc = acc * w;
-    }
-  }
-
-  // row 0 and column 0 is always scaled by 1, so we bypass it altogether.
-  for (uint64_t i = 1; i < row_size; i++) {
-    GF scale_factor = precomputed_w_powers[i];
-
-    for (uint64_t j = 1; j < row_size; j++) {
-      data[(i* row_size) + j] = (GF(data[(i * row_size) + j]) * scale_factor).to_uint64();
-      scale_factor = scale_factor * precomputed_w_powers[i];
-    }
-  }
-}
-
 
 class LogTimeTaken {
 private:
@@ -104,8 +79,7 @@ NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) :
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
 	  host_buffer_points(matrix_size),
-    host_buffer_intermediate(matrix_size),
-    precomputed_w_powers(std::vector<GF>(row_size))
+    host_buffer_intermediate(matrix_size)
 {
 }
 
@@ -141,8 +115,8 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
         OCL_CHECK(err, err = q.finish());
     });
 
-    bench("Doing phase 1 work", [&]() {
-      OCL_CHECK(err, err = krnl_controller.setArg(5, false));
+    bench("Doing phase 1 work (including twiddling)", [&]() {
+      OCL_CHECK(err, err = krnl_controller.setArg(5, (uint8_t) 0b01));
       // The reverse core uses the C++ HLS ap_ctrl_handshake mechanism, hence it needs to be
       // explicitly enqueued. The NTT core operates solely based on axi streams without any
       // control signals., so we don't need to enqueue it.
@@ -153,22 +127,8 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
       OCL_CHECK(err, err = q.finish());
     });
 
-    bench("Copying phase 1 result to host", [&]() {
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_intermediate}, CL_MIGRATE_MEM_OBJECT_HOST));
-      OCL_CHECK(err, err = q.finish());
-    });
-
-    bench("Applying twiddles", [&]() {
-      apply_twiddles_in_place(host_buffer_intermediate.data(), log_row_size, precomputed_w_powers.data());
-    });
-
-    bench("Copying twiddle result to device", [&]() {
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_intermediate}, 0 /* 0 means from host*/, nullptr, nullptr));
-      OCL_CHECK(err, err = q.finish());
-    });
-
     bench("Doing phase 2 work", [&]() {
-      OCL_CHECK(err, err = krnl_controller.setArg(5, true));
+      OCL_CHECK(err, err = krnl_controller.setArg(5, (uint8_t) 0b10));
       // See comment in "Doing phase 1 work"
       if (core_type == CoreType::REVERSE) {
         OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
@@ -177,7 +137,7 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
       OCL_CHECK(err, err = q.finish());
     });
 
-    bench("Copying phase 2 result to host", [&]() {
+    bench("Copying final result to host", [&]() {
       OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, CL_MIGRATE_MEM_OBJECT_HOST));
       OCL_CHECK(err, err = q.finish());
     });

@@ -59,7 +59,6 @@ private:
   cl::Buffer cl_buffer_intermediate;
   vec64 host_buffer_points;
   vec64 host_buffer_intermediate;
-  std::vector<GF> precomputed_w_powers;
 
 public:
   NttFpgaDriver(NttFpgaDriverArg driver_arg);
