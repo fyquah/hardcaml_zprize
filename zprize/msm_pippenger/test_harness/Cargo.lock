@@ -135,6 +135,7 @@ dependencies = [
  "ark-std",
  "blst",
  "cc",
+ "cmake",
  "criterion",
  "rand",
  "rand_chacha",
@@ -187,6 +188,15 @@ dependencies = [
  "bitflags",
  "textwrap",
  "unicode-width",
+]
+
+[[package]]
+name = "cmake"
+version = "0.1.48"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8ad8cef104ac57b68b89df3208164d228503abbdce70f6880ffa3d970e7443a"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

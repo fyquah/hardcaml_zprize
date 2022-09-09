@@ -28,6 +28,7 @@ ark-bls12-377 = { version = "0.3.0" }
 [build-dependencies]
 cc = "^1.0.70"
 which = "^4.0"
+cmake = "^0.1.48"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = [ "html_reports" ] }

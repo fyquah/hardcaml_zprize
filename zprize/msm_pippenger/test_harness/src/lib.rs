@@ -13,6 +13,10 @@ use blst::*;
 
 pub mod util;
 
+extern "C" {
+    fn testcall_cpp(x: f32) -> ();
+}
+
 #[repr(C)]
 pub struct MultiScalarMultContext {
     context: *mut c_void,
@@ -24,6 +28,7 @@ pub fn multi_scalar_mult_init<G: AffineCurve>(
     let mut ret = MultiScalarMultContext {
         context: std::ptr::null_mut(),
     };
+    unsafe { testcall_cpp(1.0) };
     ret = ret;
 
     // TODO: Complete me. Use the below as reference!
