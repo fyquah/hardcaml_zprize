@@ -12,6 +12,7 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
   module Test_kernel = Test_kernel.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
 
+  (* Derived parameters *)
   let logn = Config.logn
   let n = 1 lsl logn
   let logcores = Ntt_4step.logcores
@@ -19,9 +20,13 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
   let log_passes = logn - logcores
   let num_passes = 1 lsl log_passes
   let () = assert (1 lsl (logn + logn) = n * num_cores * num_passes)
+
+  (* Common functions *)
   let random_input_coef_matrix = Test_kernel.random_input_coef_matrix
   let print_matrix = Test_kernel.print_matrix
   let copy_matrix = Test_kernel.copy_matrix
+  let get_results = Test_kernel.get_results
+  let transpose = Ntt_sw.transpose
 
   let create_sim waves =
     let sim =
@@ -52,56 +57,80 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
     cycle ()
   ;;
 
-  let run
-    ?(verbose = false)
-    ?(waves = false)
-    ~first_4step_pass
-    (input_coefs : Z.t array array)
-    =
+  (* Perform the reference intt by using a standard full size single pass,
+     rather than the 4step algorithm the hw uses. *)
+  let reference_intt coefs =
+    let coefs = Array.concat (Array.to_list (Array.copy coefs)) in
+    Ntt_sw.inverse_dit coefs;
+    Array.init n ~f:(fun row -> Array.init n ~f:(fun col -> coefs.((row * n) + col)))
+  ;;
+
+  let expected ~verbose input_coefs hw_results =
+    let sw_results = reference_intt input_coefs in
+    if verbose
+    then
+      List.iter
+        [ "inputs", input_coefs; "sw", sw_results; "hw", hw_results ]
+        ~f:(fun (n, m) ->
+          printf "\n%s\n\n" n;
+          print_matrix m);
+    if [%equal: Gf_z.t array array] hw_results sw_results
+    then print_s [%message "Hardware and software reference results match!"]
+    else raise_s [%message "ERROR: Hardware and software results do not match :("]
+  ;;
+
+  let run ?(verbose = false) ?(waves = false) (input_coefs : Z.t array array) =
     let sim, waves, inputs, outputs = create_sim waves in
     let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf_z.of_z) in
     let results = ref [] in
+    let num_results = ref 0 in
     let cycle ?(n = 1) () =
       assert (n > 0);
       if Bits.to_bool !(outputs.compute_to_controller.tvalid)
-      then results := !(outputs.compute_to_controller.tdata) :: !results;
+      then (
+        results := !(outputs.compute_to_controller.tdata) :: !results;
+        Int.incr num_results);
       for _ = 1 to n do
         Cyclesim.cycle sim
       done
     in
     start_sim inputs cycle;
-    for pass = 0 to num_passes - 1 do
-      (* wait for tready *)
-      while not (Bits.to_bool !(outputs.controller_to_compute_dest.tready)) do
+    let run_pass coefs =
+      (* cheat - force the core to [start] *)
+      inputs.controller_to_compute.tvalid := Bits.vdd;
+      cycle ();
+      num_results := 0;
+      results := [];
+      for pass = 0 to num_passes - 1 do
+        (* wait for tready *)
+        while not (Bits.to_bool !(outputs.controller_to_compute_dest.tready)) do
+          cycle ()
+        done;
+        for i = 0 to n - 1 do
+          inputs.controller_to_compute.tvalid := Bits.vdd;
+          inputs.controller_to_compute.tdata
+            := List.init num_cores ~f:(fun core -> coefs.((pass * num_cores) + core).(i))
+               |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
+               |> Bits.concat_lsb;
+          cycle ()
+        done;
+        inputs.controller_to_compute.tvalid := Bits.gnd;
+        (* tready should be low. *)
+        assert (not (Bits.to_bool !(outputs.controller_to_compute_dest.tready)));
+        (* A few cycles of flushing after each pass *)
+        cycle ~n:4 ()
+      done;
+      (* wait for the core to return all results. *)
+      while !num_results <> n * n / num_cores do
         cycle ()
       done;
-      for i = 0 to n - 1 do
-        inputs.controller_to_compute.tvalid := Bits.vdd;
-        inputs.controller_to_compute.tdata
-          := List.init num_cores ~f:(fun core ->
-               input_coefs.((pass * num_cores) + core).(i))
-             |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
-             |> Bits.concat_lsb;
-        cycle ()
-      done;
-      inputs.controller_to_compute.tvalid := Bits.gnd;
-      (* wait for tready to go low. *)
-      while Bits.to_bool !(outputs.controller_to_compute_dest.tready) do
-        cycle ()
-      done;
-      (* A few cycles of flushing after each pass *)
-      cycle ~n:4 ()
-    done;
-    (* wait for the core to complete. *)
-    while not (Bits.to_bool !(outputs.done_)) do
-      cycle ()
-    done;
+      get_results !results
+    in
+    let pass1 = run_pass (transpose input_coefs) in
+    let pass2 = transpose (run_pass (transpose pass1)) in
     cycle ~n:4 ();
-    (try
-       let hw_results = get_results !results in
-       expected ~verbose ~first_4step_pass input_coefs hw_results
-     with
-     | e -> print_s [%message "RAISED :(" (e : exn)]);
+    (try expected ~verbose input_coefs pass2 with
+    | e -> print_s [%message "RAISED :(" (e : exn)]);
     waves
   ;;
 end
