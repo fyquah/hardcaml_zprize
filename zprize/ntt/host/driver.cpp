@@ -21,31 +21,6 @@ std::ostream& operator<<(std::ostream &os, CoreType core_type)
   assert(false);
 }
 
-static void
-apply_twiddles_in_place(uint64_t *data, uint64_t log_row_size, GF *precomputed_w_powers)
-{
-  GF w = OMEGA[2 * log_row_size];
-  uint64_t row_size = 1 << log_row_size;
-
-  {
-    GF acc = 1;
-    for (uint64_t i = 0; i < row_size; i++) {
-      precomputed_w_powers[i] = acc;
-      acc = acc * w;
-    }
-  }
-
-  // row 0 and column 0 is always scaled by 1, so we bypass it altogether.
-  for (uint64_t i = 1; i < row_size; i++) {
-    GF scale_factor = precomputed_w_powers[i];
-
-    for (uint64_t j = 1; j < row_size; j++) {
-      data[(i* row_size) + j] = (GF(data[(i * row_size) + j]) * scale_factor).to_uint64();
-      scale_factor = scale_factor * precomputed_w_powers[i];
-    }
-  }
-}
-
 
 class LogTimeTaken {
 private:
@@ -104,8 +79,7 @@ NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) :
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
 	  host_buffer_points(matrix_size),
-    host_buffer_intermediate(matrix_size),
-    precomputed_w_powers(std::vector<GF>(row_size))
+    host_buffer_intermediate(matrix_size)
 {
 }
 
