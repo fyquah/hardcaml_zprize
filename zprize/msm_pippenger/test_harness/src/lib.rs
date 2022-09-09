@@ -2,19 +2,30 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::os::raw::c_void;
-// use ark_bls12_377::{Fr, G1Affine};
+use ark_bls12_377::{Fr, G1Affine};
 use ark_ec::AffineCurve;
 use ark_ff::PrimeField;
 use ark_std::Zero;
+use std::os::raw::c_void;
 
 #[allow(unused_imports)]
 use blst::*;
 
 pub mod util;
 
+#[cfg_attr(feature = "quiet", allow(improper_ctypes))]
 extern "C" {
-    fn testcall_cpp(x: f32) -> ();
+    fn zprize_msm_fpga_init(
+        points: *const G1Affine,
+        npoints: usize,
+    ) -> *mut c_void;
+
+    fn zprize_msm_fpga_mult(
+        context: *mut c_void,
+        out: *mut u64,
+        batch_size: usize,
+        scalars: *const Fr,
+    ) -> ();
 }
 
 #[repr(C)]
@@ -23,33 +34,21 @@ pub struct MultiScalarMultContext {
 }
 
 pub fn multi_scalar_mult_init<G: AffineCurve>(
-    _points: &[G],
+    points: &[G],
 ) -> MultiScalarMultContext {
-    let mut ret = MultiScalarMultContext {
-        context: std::ptr::null_mut(),
+    let ret = unsafe {
+        let context = zprize_msm_fpga_init(
+            points as *const _ as *const G1Affine,
+            points.len(),
+        );
+        MultiScalarMultContext { context }
     };
-    unsafe { testcall_cpp(1.0) };
-    ret = ret;
-
-    // TODO: Complete me. Use the below as reference!
-    //
-    // let err = unsafe {
-    //     mult_pippenger_init(
-    //         &mut ret,
-    //         points as *const _ as *const G1Affine,
-    //         points.len(),
-    //         std::mem::size_of::<G1Affine>(),
-    //     )
-    // };
-    // if err.code != 0 {
-    //     panic!("{}", String::from(err));
-    // }
 
     ret
 }
-    
+
 pub fn multi_scalar_mult<G: AffineCurve>(
-    _context: &mut MultiScalarMultContext,
+    context: &mut MultiScalarMultContext,
     points: &[G],
     scalars: &[<G::ScalarField as PrimeField>::BigInt],
 ) -> Vec<G::Projective> {
@@ -60,26 +59,20 @@ pub fn multi_scalar_mult<G: AffineCurve>(
 
     let batch_size = scalars.len() / npoints;
     let mut ret = vec![G::Projective::zero(); batch_size];
-    ret = ret;
 
-    // TODO: Complete me. Use the below as reference!
-    // let err = unsafe {
-    //     let result_ptr = 
-    //         &mut *(&mut ret as *mut Vec<G::Projective>
-    //                as *mut Vec<u64>);
+    unsafe {
+        let result_ptr =
+            &mut *(&mut ret as *mut Vec<G::Projective> as *mut Vec<u64>);
 
-    //     mult_pippenger_inf(
-    //         context,
-    //         result_ptr.as_mut_ptr(),
-    //         points as *const _ as *const G1Affine,
-    //         npoints, batch_size,
-    //         scalars as *const _ as *const Fr,
-    //         std::mem::size_of::<G1Affine>(),
-    //     )
-    // };
-    // if err.code != 0 {
-    //     panic!("{}", String::from(err));
-    // }
+        zprize_msm_fpga_mult(
+            context.context,
+            result_ptr.as_mut_ptr(),
+            batch_size,
+            scalars as *const _ as *const Fr,
+        );
+    };
+
+    println!("{:?}", ret);
 
     ret
 }
