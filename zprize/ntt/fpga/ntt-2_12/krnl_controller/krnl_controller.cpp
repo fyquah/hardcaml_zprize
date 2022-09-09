@@ -156,7 +156,7 @@ void krnl_controller(
     ap_uint<MEMORY_DWIDTH>* gmem_a,
     ap_uint<MEMORY_DWIDTH>* gmem_b,
     ap_uint<16>             row_size,
-    bool                    phase) {
+    ap_uint<2>              phase) {
 #pragma HLS INTERFACE m_axi     port = gmem_a offset = slave bundle = gmem_a
 #pragma HLS INTERFACE m_axi     port = gmem_b offset = slave bundle = gmem_b
 #pragma HLS INTERFACE axis      port = compute_to_controller
@@ -166,9 +166,11 @@ void krnl_controller(
 #pragma HLS INTERFACE s_axilite port = row_size
 #pragma HLS INTERFACE s_axilite port = return
 
-  if (phase == 0) {
+  if (phase(0, 0)) {
     phase1(compute_to_controller, controller_to_compute, gmem_a, gmem_b, row_size);
-  } else {
+  }
+
+  if (phase(1, 1)) {
     phase2(compute_to_controller, controller_to_compute, gmem_b, gmem_a, row_size);
   }
 }

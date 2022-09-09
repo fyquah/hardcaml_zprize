@@ -141,8 +141,8 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
         OCL_CHECK(err, err = q.finish());
     });
 
-    bench("Doing phase 1 work", [&]() {
-      OCL_CHECK(err, err = krnl_controller.setArg(5, false));
+    bench("Doing phase 1 work (including twiddling)", [&]() {
+      OCL_CHECK(err, err = krnl_controller.setArg(5, (uint8_t) 0b01));
       // The reverse core uses the C++ HLS ap_ctrl_handshake mechanism, hence it needs to be
       // explicitly enqueued. The NTT core operates solely based on axi streams without any
       // control signals., so we don't need to enqueue it.
@@ -153,22 +153,8 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
       OCL_CHECK(err, err = q.finish());
     });
 
-    bench("Copying phase 1 result to host", [&]() {
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_intermediate}, CL_MIGRATE_MEM_OBJECT_HOST));
-      OCL_CHECK(err, err = q.finish());
-    });
-
-    bench("Applying twiddles", [&]() {
-      apply_twiddles_in_place(host_buffer_intermediate.data(), log_row_size, precomputed_w_powers.data());
-    });
-
-    bench("Copying twiddle result to device", [&]() {
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_intermediate}, 0 /* 0 means from host*/, nullptr, nullptr));
-      OCL_CHECK(err, err = q.finish());
-    });
-
     bench("Doing phase 2 work", [&]() {
-      OCL_CHECK(err, err = krnl_controller.setArg(5, true));
+      OCL_CHECK(err, err = krnl_controller.setArg(5, (uint8_t) 0b10));
       // See comment in "Doing phase 1 work"
       if (core_type == CoreType::REVERSE) {
         OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
@@ -177,7 +163,7 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
       OCL_CHECK(err, err = q.finish());
     });
 
-    bench("Copying phase 2 result to host", [&]() {
+    bench("Copying final result to host", [&]() {
       OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, CL_MIGRATE_MEM_OBJECT_HOST));
       OCL_CHECK(err, err = q.finish());
     });
