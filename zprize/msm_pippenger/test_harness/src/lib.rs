@@ -72,7 +72,5 @@ pub fn multi_scalar_mult<G: AffineCurve>(
         );
     };
 
-    println!("{:?}", ret);
-
     ret
 }
