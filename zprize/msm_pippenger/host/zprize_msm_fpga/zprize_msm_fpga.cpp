@@ -41,7 +41,8 @@ extern "C" void zprize_msm_fpga_mult(ZprizeMsmFpgaDriver *context,
                                      g1_projective_t *out,
                                      uint64_t batch_size,
                                      biginteger256_t *scalars) {
-  for (uint64_t i = 0; i < batch_size; i++) {
-    context->naive_msm(out + i, scalars + (i * context->numPoints()));
-  }
+  // TODO(fyquah): I don't think this works yet ...
+  // for (uint64_t i = 0; i < batch_size; i++) {
+  //   context->naive_msm(out + i, scalars + (i * context->numPoints()));
+  // }
 }
