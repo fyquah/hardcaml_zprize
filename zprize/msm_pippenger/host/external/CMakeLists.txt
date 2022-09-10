@@ -9,7 +9,7 @@ ExternalProject_Add(gmp_external
   URL https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.xz
   TIMEOUT 5
   PREFIX ${GMP_PREFIX}
-  CONFIGURE_COMMAND ${GMP_PREFIX}/src/gmp/configure --prefix=${GMP_PREFIX} --enable-cxx
+  CONFIGURE_COMMAND ${GMP_PREFIX}/src/gmp_external/configure --prefix=${GMP_PREFIX} --enable-cxx
   TEST_COMMAND make check
   TEST_BEFORE_INSTALL 1
   BUILD_COMMAND make

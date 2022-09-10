@@ -1,0 +1,2 @@
+add_library(zprize_msm_fpga STATIC zprize_msm_fpga.cpp zprize_msm_fpga_driver.cpp)
+target_link_libraries(zprize_msm_fpga PUBLIC gmp PRIVATE msm_compute)

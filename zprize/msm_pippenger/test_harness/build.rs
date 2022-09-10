@@ -8,7 +8,7 @@ use cmake::Config;
 // https://flames-of-code.netlify.app/blog/rust-and-cmake-cplusplus/
 
 fn main() {
-    let dst = Config::new("libzprize_msm_fpga").build();
+    let dst = Config::new("cxx").build();
 
     // Now - emitting some cargo commands to build and link the lib.
     // This turns to be common to both our libs, so we do it once.

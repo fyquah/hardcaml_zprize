@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstring>
 
+#include "rust_types.h"
+
 namespace bls12_377_g1 {
 
 const int NUM_BITS = 377;
@@ -48,8 +50,8 @@ static void init_empty(mpz_t v) {
   mpz_init2(v, NUM_BITS + mp_bits_per_limb);  // https://gmplib.org/manual/Initializing-Integers
 }
 static const int WORDS_MOST_SIGNIFICANT = 1;
-// const int WORDS_LEAST_SIGNIFICANT = -1;
-// const int BYTES_MOST_SIGNIFICANT = 1;
+static const int WORDS_LEAST_SIGNIFICANT = -1;
+static const int BYTES_MOST_SIGNIFICANT = 1;
 static const int BYTES_LEAST_SIGNIFICANT = -1;
 static void set_words(mpz_t v, const uint32_t words[]) {
   mpz_import(v, NUM_32B_WORDS, WORDS_MOST_SIGNIFICANT, sizeof(uint32_t), BYTES_LEAST_SIGNIFICANT, 0,
@@ -128,6 +130,18 @@ class GFq {
     mpz_invert(b_inverse, b.v, q);
     mpz_mul(v, a.v, b_inverse);
     reduce();
+  }
+
+  void copy_to_rust_type(biginteger384_t &b) {
+     mpz_export(
+         /* rop */ (void*) b.data,
+         /* countp */ nullptr,
+         /* order */ WORDS_LEAST_SIGNIFICANT,
+         /* size */ sizeof(uint64_t),
+         /* endian */ BYTES_LEAST_SIGNIFICANT,
+         /* nails */ 0,
+         /* op */ v
+         );
   }
 
   // debugging
@@ -317,6 +331,19 @@ class Xyzt {
   void println(const char *label) {
     gmp_printf("%s: (X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)\n", label, x.v, y.v, z.v, t.v);
   }
+
+   void copy_from_rust_type(const g1_affine_t& affine) {
+    // TODO(fyquah): Handle infinities
+    x.set((uint32_t*) affine.x.data);
+    y.set((uint32_t*) affine.y.data);
+    z.set(ONE_WORDS);
+  }
+
+   void copy_to_rust_type(g1_projective_t& projective) {
+     x.copy_to_rust_type(projective.x);
+     y.copy_to_rust_type(projective.y);
+     z.copy_to_rust_type(projective.z);
+   }
 };
 
 }  // namespace bls12_377_g1
