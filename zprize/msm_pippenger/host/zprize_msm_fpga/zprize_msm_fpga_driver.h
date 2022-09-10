@@ -12,7 +12,7 @@ private:
   std::vector<bls12_377_g1::Xyzt> points;
 
 public:
-  ZprizeMsmFpgaDriver(std::vector<bls12_377_g1::Xyzt>&& points) : points(points) {}
+  ZprizeMsmFpgaDriver(const std::vector<bls12_377_g1::Xyzt> & points) : points(points) {}
 
   inline uint64_t numPoints () { return points.size(); }
 

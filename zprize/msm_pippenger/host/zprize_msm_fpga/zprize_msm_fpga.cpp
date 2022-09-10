@@ -29,16 +29,17 @@ std::ostream &operator<<(std::ostream &os, const g1_affine_t &point) {
 extern "C" ZprizeMsmFpgaDriver *zprize_msm_fpga_init(g1_affine_t *rust_points,
                                                       ssize_t npoints) {
 
-  std::vector<bls12_377_g1::Xyzt> points;
+  std::vector<bls12_377_g1::Xyzt> points(npoints);
   for (ssize_t i = 0; i < npoints; i++) {
-    points.push_back(bls12_377_g1::Xyzt());
-    points.back().copy_from_rust_type(rust_points[i]);
+    points[i].copy_from_rust_type(rust_points[i]);
   }
-  return new ZprizeMsmFpgaDriver(std::move(points));
+  auto *driver = new ZprizeMsmFpgaDriver(points);
+  return driver;
 }
 
 extern "C" void zprize_msm_fpga_mult(ZprizeMsmFpgaDriver *context,
-                                     g1_projective_t *out, uint64_t batch_size,
+                                     g1_projective_t *out,
+                                     uint64_t batch_size,
                                      biginteger256_t *scalars) {
   for (uint64_t i = 0; i < batch_size; i++) {
     context->naive_msm(out + i, scalars + (i * context->numPoints()));
