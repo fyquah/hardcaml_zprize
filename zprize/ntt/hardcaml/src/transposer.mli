@@ -19,9 +19,4 @@ module O : sig
   [@@deriving sexp_of, hardcaml]
 end
 
-val create
-  :  build_mode:Build_mode.t
-  -> transposer_depth_in_cycles:int
-  -> Scope.t
-  -> Signal.t I.t
-  -> Signal.t O.t
+val create : transposer_depth_in_cycles:int -> Scope.t -> Signal.t I.t -> Signal.t O.t
