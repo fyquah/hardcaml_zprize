@@ -15,4 +15,7 @@ depends: [
 
   # preprocessors follow
   "ppx_jane"
+
+  # Styling
+  "ocamlformat"
 ]

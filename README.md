@@ -5,3 +5,5 @@ exposing a reference implementation of the bls12-377 g1 curve. This is
 necessary for the expect tests to work expectedly.
 
 z3 should be installed to run tests.
+
+Installing ocaml deps: `opam install . --deps-only`
