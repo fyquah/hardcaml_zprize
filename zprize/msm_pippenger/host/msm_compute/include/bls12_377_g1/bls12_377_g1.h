@@ -256,10 +256,9 @@ class Xyzt {
     t.set_mul(x, y);
   }
   void twistedEdwardsExtendedToAffine() {
-    z.set_div(z, COFACTOR);
     x.set_div(x, z);
     y.set_div(y, z);
-    z.set(COFACTOR_WORDS);
+    z.set(ONE_WORDS);
     t.set(ZERO_WORDS);
   }
   void affineWeierstrassToMontgomery() {
@@ -270,7 +269,7 @@ class Xyzt {
   void affineMontgomeryToWeierstrass() {
     GFq temp;
     temp.set_mul(three, montgomery_params.c_B);
-    temp.set_add(montgomery_params.c_A, temp);
+    temp.set_div(montgomery_params.c_A, temp);
     x.set_div(x, montgomery_params.c_B);
     x.set_add(x, temp);
     y.set_div(y, montgomery_params.c_B);
@@ -305,6 +304,9 @@ class Xyzt {
     twistedEdwardsExtendedToAffine();
     affineTwistedEdwardsToMontgomery();
     affineMontgomeryToWeierstrass();
+    x.set_mul(x, COFACTOR);
+    y.set_mul(y, COFACTOR);
+    z.set(COFACTOR);
   }
 
   void generalUnifiedAddInto(const Xyzt &other) {
