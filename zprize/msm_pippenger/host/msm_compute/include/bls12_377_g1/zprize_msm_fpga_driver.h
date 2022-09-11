@@ -26,6 +26,8 @@ class ZprizeMsmFpgaDriver {
     ans.setToIdentity();
     for (size_t i = 0; i < numPoints(); i++) {
       std::cout << "POINT " << i << std::endl;
+      std::cout << "SCALAR[" << i << "] = ";
+      std::cout << scalars[i] << std::endl;
       auto point = points[i];
       for (size_t j = 0; j < SCALAR_NUM_BITS; j++) {
         std::cout << "SCALAR BIT " << j << std::endl;

@@ -35,4 +35,17 @@ struct g1_projective_t {
   biginteger384_t z;
 };
 
+namespace {
+std::ostream &operator<<(std::ostream &os, const biginteger256_t &point) {
+  os << "(";
+  for (int i = 0; i < 4; i++) {
+    if (i != 0) {
+      os << ", ";
+    }
+    os << point.data[i];
+  }
+  return os << ")";
+}
+}  // namespace
+
 #endif

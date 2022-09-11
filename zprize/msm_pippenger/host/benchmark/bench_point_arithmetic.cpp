@@ -19,9 +19,9 @@ static void bench_point_arithmetic(benchmark::State &state) {
 
 static void bench_twisted_edwards_to_weierstrass(benchmark::State &state) {
   bls12_377_g1::init();
-  uint32_t RAND_WORDS[4][bls12_377_g1::NUM_32B_WORDS];
+  uint64_t RAND_WORDS[4][bls12_377_g1::NUM_64B_WORDS];
   for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < bls12_377_g1::NUM_32B_WORDS; j++) {
+    for (int j = 0; j < bls12_377_g1::NUM_64B_WORDS; j++) {
       RAND_WORDS[i][j] = std::rand() % (1 << 29);
     }
   }
