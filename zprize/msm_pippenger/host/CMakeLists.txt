@@ -47,3 +47,5 @@ add_subdirectory(msm_compute)
 # ------ Tests and executables ------
 enable_testing()
 add_subdirectory(executable)
+add_subdirectory(test)
+add_subdirectory(benchmark)
