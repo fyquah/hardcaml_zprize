@@ -23,7 +23,6 @@ class ZprizeMsmFpgaDriver {
   void naive_msm(g1_projective_t *out, biginteger256_t *scalars) {
     bls12_377_g1::init();
     bls12_377_g1::Xyzt ans;
-    std::cout << "HELLO HERE" << std::endl;
     ans.setToIdentity();
     for (size_t i = 0; i < numPoints(); i++) {
       std::cout << "POINT " << i << std::endl;

@@ -55,9 +55,14 @@ static const int WORDS_MOST_SIGNIFICANT = 1;
 static const int WORDS_LEAST_SIGNIFICANT = -1;
 static const int BYTES_MOST_SIGNIFICANT = 1;
 static const int BYTES_LEAST_SIGNIFICANT = -1;
-static void set_words(mpz_t v, const uint32_t words[]) {
-  mpz_import(v, NUM_32B_WORDS, WORDS_MOST_SIGNIFICANT, sizeof(uint32_t), BYTES_LEAST_SIGNIFICANT, 0,
-             words);
+static void set_words(mpz_t v, const uint32_t words[], bool words_most_sig = true) {
+  if (words_most_sig) {
+    mpz_import(v, NUM_32B_WORDS, WORDS_MOST_SIGNIFICANT, sizeof(uint32_t), BYTES_LEAST_SIGNIFICANT,
+               0, words);
+  } else {
+    mpz_import(v, 6, WORDS_LEAST_SIGNIFICANT, sizeof(uint64_t), BYTES_LEAST_SIGNIFICANT, 0,
+               (uint64_t *)words);
+  }
 }
 
 mpz_t q;
@@ -78,7 +83,9 @@ class GFq {
  public:
   mpz_t v;
 
-  void set(const uint32_t words[]) { set_words(v, words); }
+  void set(const uint32_t words[], bool words_most_sig = true) {
+    set_words(v, words, words_most_sig);
+  }
   void set(const GFq &other) { mpz_set(v, other.v); }
   // assumes [NUM_32B_WORDS] words
   explicit GFq(const uint32_t words[]) {
@@ -100,7 +107,8 @@ class GFq {
   // does not set a value
   GFq() { init_empty(v); }
 
-  ~GFq() { mpz_clear(v); }
+  ~GFq() { /*mpz_clear(v);*/
+  }
 
   // arithmetic
   void divBy2() {
@@ -152,20 +160,20 @@ class GFq {
   void print() { gmp_printf("%Zd", v); }
 
   void dumpToWords(const char *str) {
-    uint32_t words[NUM_32B_WORDS];
+    uint64_t words[NUM_32B_WORDS];
     size_t countp;
-    assert(sizeof(words) == NUM_32B_WORDS * 4);
+    // assert(sizeof(words) == NUM_32B_WORDS * 4);
     memset(words, 0, sizeof(words));
 
-    mpz_export(words, &countp, WORDS_MOST_SIGNIFICANT, sizeof(uint32_t), BYTES_LEAST_SIGNIFICANT, 0,
-               v);
+    mpz_export(words, &countp, WORDS_LEAST_SIGNIFICANT, sizeof(uint64_t), BYTES_LEAST_SIGNIFICANT,
+               0, v);
     assert(countp <= NUM_32B_WORDS);
-    printf("const uint32_t %s_WORDS[NUM_32B_WORDS] = {", str);
+    printf("const uint64_t %s_WORDS[NUM_32B_WORDS] = {", str);
     for (int i = 0; i < NUM_32B_WORDS; i++) {
       if (i == 0) {
-        printf("%u", words[i]);
+        printf("%lu", words[i]);
       } else {
-        printf(", %u", words[i]);
+        printf(", %lu", words[i]);
       }
     }
     printf("};\n");
@@ -335,18 +343,24 @@ class Xyzt {
   void println(const char *label) {
     gmp_printf("%s: (X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)\n", label, x.v, y.v, z.v, t.v);
   }
+  void dump() {
+    x.dumpToWords("x");
+    y.dumpToWords("y");
+    z.dumpToWords("y");
+    t.dumpToWords("y");
+  }
 
   void copy_from_rust_type(const g1_affine_t &affine) {
     // TODO(fyquah): Handle infinities
-    x.set((uint32_t *)affine.x.data);
-    y.set((uint32_t *)affine.y.data);
+    x.set((uint32_t *)affine.x.data, false);
+    y.set((uint32_t *)affine.y.data, false);
+    dump();
 
     affineWeierstrassToExtendedTwistedEdwards();
   }
 
   void copy_to_rust_type(g1_projective_t &projective) {
     println();
-    std::cout << "HELLO" << std::endl;
     x.copy_to_rust_type(projective.x);
     y.copy_to_rust_type(projective.y);
     z.copy_to_rust_type(projective.z);
