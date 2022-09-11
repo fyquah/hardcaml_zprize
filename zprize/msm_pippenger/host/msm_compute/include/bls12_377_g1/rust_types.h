@@ -1,6 +1,7 @@
 #ifndef RUST_TYPES_H
 #define RUST_TYPES_H
 
+#include <iostream>
 #include <stdint.h>
 
 struct biginteger256_t {
@@ -8,7 +9,10 @@ struct biginteger256_t {
 
   inline uint64_t &operator[](uint64_t i) { return data[i]; }
 
-  inline uint64_t getBit(uint64_t i) { return (data[i / 64] >> (i % 64)) & 1; }
+  inline uint64_t getBit(uint64_t i) {
+    std::cout << "getBit" << std::endl;
+    return (data[i / 64] >> (i % 64)) & 1;
+  }
 };
 
 struct biginteger384_t {

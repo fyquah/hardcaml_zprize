@@ -2,6 +2,7 @@
 #ifndef BLS12_377_G1
 #define BLS12_377_G1
 
+#include <iostream>
 #include <stdio.h>
 #include <gmp.h>
 #include <cstdint>
@@ -47,7 +48,8 @@ const uint32_t C_B_WORDS[NUM_32B_WORDS] = {27084756,   364248928,  2826603387, 3
                                            127017407,  726390572,  1359407591, 265052502};
 
 static void init_empty(mpz_t v) {
-  mpz_init2(v, NUM_BITS + mp_bits_per_limb);  // https://gmplib.org/manual/Initializing-Integers
+  mpz_init(v);
+  // mpz_init2(v, 384 + mp_bits_per_limb);  // https://gmplib.org/manual/Initializing-Integers
 }
 static const int WORDS_MOST_SIGNIFICANT = 1;
 static const int WORDS_LEAST_SIGNIFICANT = -1;
@@ -61,12 +63,15 @@ static void set_words(mpz_t v, const uint32_t words[]) {
 mpz_t q;
 static bool initialized = false;
 void init() {
+  if (initialized) {
 #ifndef NDEBUG
-  assert(!initialized);
-  initialized = true;
+    printf("Already initialized!");
 #endif
-  init_empty(q);
-  set_words(q, Q_WORDS);
+  } else {
+    initialized = true;
+    init_empty(q);
+    set_words(q, Q_WORDS);
+  }
 }
 
 class GFq {
@@ -133,15 +138,14 @@ class GFq {
   }
 
   void copy_to_rust_type(biginteger384_t &b) {
-     mpz_export(
-         /* rop */ (void*) b.data,
-         /* countp */ nullptr,
-         /* order */ WORDS_LEAST_SIGNIFICANT,
-         /* size */ sizeof(uint64_t),
-         /* endian */ BYTES_LEAST_SIGNIFICANT,
-         /* nails */ 0,
-         /* op */ v
-         );
+    mpz_export(
+        /* rop */ (void *)b.data,
+        /* countp */ nullptr,
+        /* order */ WORDS_LEAST_SIGNIFICANT,
+        /* size */ sizeof(uint64_t),
+        /* endian */ BYTES_LEAST_SIGNIFICANT,
+        /* nails */ 0,
+        /* op */ v);
   }
 
   // debugging
@@ -224,7 +228,7 @@ class Xyzt {
   void twistedEdwardsExtendedToAffine() {
     x.set_div(x, z);
     y.set_div(y, z);
-    z.set(ZERO_WORDS);
+    z.set(ONE_WORDS);
     t.set(ZERO_WORDS);
   }
   void affineWeierstrassToMontgomery() {
@@ -332,18 +336,21 @@ class Xyzt {
     gmp_printf("%s: (X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)\n", label, x.v, y.v, z.v, t.v);
   }
 
-   void copy_from_rust_type(const g1_affine_t& affine) {
+  void copy_from_rust_type(const g1_affine_t &affine) {
     // TODO(fyquah): Handle infinities
-    x.set((uint32_t*) affine.x.data);
-    y.set((uint32_t*) affine.y.data);
-    z.set(ONE_WORDS);
+    x.set((uint32_t *)affine.x.data);
+    y.set((uint32_t *)affine.y.data);
+
+    affineWeierstrassToExtendedTwistedEdwards();
   }
 
-   void copy_to_rust_type(g1_projective_t& projective) {
-     x.copy_to_rust_type(projective.x);
-     y.copy_to_rust_type(projective.y);
-     z.copy_to_rust_type(projective.z);
-   }
+  void copy_to_rust_type(g1_projective_t &projective) {
+    println();
+    std::cout << "HELLO" << std::endl;
+    x.copy_to_rust_type(projective.x);
+    y.copy_to_rust_type(projective.y);
+    z.copy_to_rust_type(projective.z);
+  }
 };
 
 }  // namespace bls12_377_g1

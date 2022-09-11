@@ -1,5 +1,6 @@
 #include <benchmark/benchmark.h>
 #include "./utils.h"
+#include "bls12_377_g1/bls12_377_g1.h"
 
 static void bench_point_arithmetic(benchmark::State &state) {
   bls12_377_g1::init();
