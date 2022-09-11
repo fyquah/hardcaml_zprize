@@ -21,6 +21,7 @@ let create_params ~a ~b ~alpha =
 ;;
 
 type affine =
-  { x : Z.t
-  ; y : Z.t
+  { x : z
+  ; y : z
   }
+[@@deriving sexp_of]

@@ -20,6 +20,7 @@ module Make (Config : Config.S) : sig
       { all_windows_have_stall : 'a
       ; some_windows_are_full : 'a
       ; all_windows_are_empty : 'a
+      ; current_window_has_stall : 'a
       ; affine_point_out : 'a [@bits affine_point_bits]
       ; scalar_out : 'a [@bits window_size_bits]
       }
