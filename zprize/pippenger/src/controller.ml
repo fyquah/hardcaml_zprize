@@ -136,6 +136,7 @@ module Make (Config : Config.S) = struct
               , [ if_
                     flushing.value
                     [ sm.set_next Execute_stalled
+                    ; executing_stalled <-- vdd
                     ; when_ stalled.all_windows_are_empty [ sm.set_next Start ]
                     ]
                   @@ elif
@@ -169,7 +170,10 @@ module Make (Config : Config.S) = struct
             ; ( Execute_stalled
               , [ executing_stalled <-- vdd
                 ; shift_pipeline <-- vdd
-                ; bubble <-- (is_in_pipeline |: (stalled.scalar_out ==:. 0))
+                ; bubble
+                  <-- (is_in_pipeline
+                      |: (stalled.scalar_out ==:. 0)
+                      |: ~:(stalled.current_window_has_stall))
                 ; pop_stalled_point <-- ~:(bubble.value)
                 ; window <-- window_next
                 ; sm.set_next Wait_stalled

@@ -65,8 +65,14 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
                  (Z.format "x" (Bits.to_z ~signedness:Unsigned !value))))
   in
   let test_outputs = ref [] in
+  let input_valid_cycles = ref [] in
+  let output_valid_cycles = ref [] in
+  let cycle_cnt = ref 0 in
   let cycle () =
+    if Bits.is_vdd !(inputs.valid_in)
+    then input_valid_cycles := !cycle_cnt :: !input_valid_cycles;
     Cyclesim.cycle sim;
+    Int.incr cycle_cnt;
     for i = 1 to 4 do
       dump_stage_if_valid (sprintf "stage%d" i)
     done;
@@ -77,7 +83,8 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
         if montgomery then transform_from_montgomery r else r
       in
       let p3 = Xyzt.map ~f:(fun x -> to_z !x) outputs.p3 in
-      test_outputs := p3 :: !test_outputs)
+      test_outputs := p3 :: !test_outputs;
+      output_valid_cycles := !cycle_cnt :: !output_valid_cycles)
   in
   List.iter test_inputs ~f:(fun (p1, p2) ->
       let of_z a =
@@ -95,6 +102,8 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
     cycle ()
   done;
   let test_outputs = List.rev !test_outputs in
+  let output_valid_cycles = List.rev !output_valid_cycles in
+  let input_valid_cycles = List.rev !input_valid_cycles in
   let len_test_inputs = List.length test_inputs in
   let len_test_outputs = List.length test_outputs in
   if len_test_inputs <> len_test_outputs
@@ -104,6 +113,11 @@ let test ?(debug = false) ~(config : Config.t) ~(sim : Sim.t) ~montgomery test_i
         "len(test_inputs) <> len(test_outputs)"
           (len_test_inputs : int)
           (len_test_outputs : int)];
+  List.iter2_exn
+    input_valid_cycles
+    output_valid_cycles
+    ~f:(fun input_valid_cycle output_valid_cycle ->
+      assert (output_valid_cycle - input_valid_cycle = latency));
   List.map2_exn test_inputs test_outputs ~f:(fun test_input obtained ->
       let expected =
         let a, b = test_input in

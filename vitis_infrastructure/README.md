@@ -1,5 +1,6 @@
 Supported platforms are:
 - `xilinx_u55n_gen3x4_xdma_2_202110_1` for varium-1100
+- `xilinx_aws-vu9p-f1_shell-v04261818_201920_3` for aws
 
 This "infrastructure" provides a few things
 - `scripts/run_build.py` to easily build a xclbin
@@ -10,6 +11,14 @@ Some other things i'd like to figure out
 - Automatically generating the `kernel_ports.tcl` script. This interacts with
   the xilinx IP packager, and the API is quite hard to work with
 - Supporting explicit configs for HLS kernels (which I think we can make use of)
+
+# Prerequisites for building on AWS
+
+Setup the Vitus setup scripts
+```
+source ../aws-fpga/vitus_setup.sh
+source ../aws-fpga/vitis_runtime_setup.sh
+```
 
 # Examples
 

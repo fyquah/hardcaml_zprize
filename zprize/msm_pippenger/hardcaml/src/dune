@@ -1,0 +1,5 @@
+(library
+ (name msm_pippenger)
+ (libraries base field_ops_lib hardcaml hardcaml_axi pippenger twisted_edwards_lib)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

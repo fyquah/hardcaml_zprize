@@ -1,4 +1,6 @@
 name: "fantastic_carnival"
+synopsis: "Hardware cryptography"
+maintainer: ["Hardcamls"]
 opam-version: "2.0"
 depends: [
   "ocaml" {= "4.13.1"}
@@ -11,6 +13,7 @@ depends: [
   "hardcaml_circuits"
   "hardcaml_verify"
   "hardcaml_xilinx"
+  "hardcaml_verilator"
   "zarith"
 
   # preprocessors follow

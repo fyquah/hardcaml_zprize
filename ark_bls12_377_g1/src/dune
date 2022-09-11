@@ -1,4 +1,4 @@
 (library
  (name ark_bls12_377_g1)
- (libraries base core ctypes ctypes.foreign zarith)
+ (libraries base core ctypes ctypes.foreign hardcaml zarith)
  (preprocess (pps ppx_jane)))
