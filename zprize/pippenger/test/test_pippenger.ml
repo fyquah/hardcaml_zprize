@@ -103,27 +103,27 @@ module Model = struct
     in
     let bucket0, bucket1 =
       List.init num_windows ~f:(fun window ->
-          let q =
-            Ram.create
-              ~collision_mode:Write_before_read
-              ~size:(1 lsl window_size_bits)
-              ~read_ports:
-                [| { read_clock = i.clock; read_address = ctrl.bucket; read_enable = vdd }
-                 ; { read_clock = i.clock
-                   ; read_address = i.bucket_address
-                   ; read_enable = i.bucket_read_enable
-                   }
-                |]
-              ~write_ports:
-                [| { write_clock = i.clock
-                   ; write_address = dp.bucket
-                   ; write_enable = dp.write_enable &: (dp.window ==:. window)
-                   ; write_data = dp.result
-                   }
-                |]
-              ()
-          in
-          q.(0), q.(1))
+        let q =
+          Ram.create
+            ~collision_mode:Write_before_read
+            ~size:(1 lsl window_size_bits)
+            ~read_ports:
+              [| { read_clock = i.clock; read_address = ctrl.bucket; read_enable = vdd }
+               ; { read_clock = i.clock
+                 ; read_address = i.bucket_address
+                 ; read_enable = i.bucket_read_enable
+                 }
+              |]
+            ~write_ports:
+              [| { write_clock = i.clock
+                 ; write_address = dp.bucket
+                 ; write_enable = dp.write_enable &: (dp.window ==:. window)
+                 ; write_data = dp.result
+                 }
+              |]
+            ()
+        in
+        q.(0), q.(1))
       |> List.unzip
     in
     (* This is a basic model of the affine point adder. *)
@@ -149,7 +149,6 @@ end
 module Sim = Cyclesim.With_interface (Model.I) (Model.O)
 
 let ( <-. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
-let () = Random.set_state (Random.State.make [| 1 |])
 
 module Msm_input = struct
   type 'a t =
@@ -160,35 +159,35 @@ module Msm_input = struct
 
   let random_inputs () =
     Array.init (1 lsl Model.Config.log_num_scalars) ~f:(fun _ ->
-        { scalar =
-            Array.init Model.Config.num_windows ~f:(fun _ ->
-                Bits.random ~width:Model.Config.window_size_bits)
-        ; affine_point = Bits.random ~width:Model.Config.affine_point_bits
-        })
+      { scalar =
+          Array.init Model.Config.num_windows ~f:(fun _ ->
+            Bits.random ~width:Model.Config.window_size_bits)
+      ; affine_point = Bits.random ~width:Model.Config.affine_point_bits
+      })
   ;;
 
   let of_scalars scalars =
     Array.mapi scalars ~f:(fun idx scalar ->
-        { scalar =
-            Array.init Model.Config.num_windows ~f:(fun w ->
-                Bits.of_int
-                  ~width:Model.Config.window_size_bits
-                  (scalar lsr (w * Model.Config.window_size_bits)))
-        ; affine_point = Bits.of_int ~width:Model.Config.affine_point_bits (idx + 1)
-        })
+      { scalar =
+          Array.init Model.Config.num_windows ~f:(fun w ->
+            Bits.of_int
+              ~width:Model.Config.window_size_bits
+              (scalar lsr (w * Model.Config.window_size_bits)))
+      ; affine_point = Bits.of_int ~width:Model.Config.affine_point_bits (idx + 1)
+      })
   ;;
 
   let sort_window_into_buckets (i : Bits.t t array) ~window =
     let a = Array.create ~len:(1 lsl Model.Config.window_size_bits) [] in
     Array.iter i ~f:(fun { scalar; affine_point } ->
-        let index = Bits.to_int scalar.(window) in
-        a.(index) <- affine_point :: a.(index));
+      let index = Bits.to_int scalar.(window) in
+      a.(index) <- affine_point :: a.(index));
     a
   ;;
 
   let sort_into_buckets (i : Bits.t t array) =
     Array.init Model.Config.num_windows ~f:(fun window ->
-        sort_window_into_buckets i ~window)
+      sort_window_into_buckets i ~window)
   ;;
 
   let reduce0 ~f l =
@@ -206,7 +205,8 @@ module Msm_input = struct
     let buckets = Array.map buckets ~f:(Array.map ~f:(List.map ~f:Bits.to_int)) in
     let sums = Array.map sums ~f:(Array.map ~f:Bits.to_int) in
     print_s
-      [%message (buckets : Int.Hex.t list array array) (sums : Int.Hex.t array array)]
+      [%message
+        "REFERENCE" (buckets : Int.Hex.t list array array) (sums : Int.Hex.t array array)]
   ;;
 end
 
@@ -218,22 +218,30 @@ let poll ~timeout ~f cycle =
   done
 ;;
 
-let test ?(auto_label_hierarchical_ports = true) coefs =
-  print_s
-    [%message
-      (Array.map coefs ~f:(Msm_input.map ~f:Bits.to_int) : Int.Hex.t Msm_input.t array)];
+let test ?(waves = false) ?(verbose = false) ?(auto_label_hierarchical_ports = true) coefs
+  =
+  if verbose
+  then (
+    let inputs = Array.map coefs ~f:(Msm_input.map ~f:Bits.to_int) in
+    print_s [%message (inputs : Int.Hex.t Msm_input.t array)]);
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
       (Model.create (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports ()))
   in
-  let waves, sim = Waveform.create sim in
+  let waveform, sim =
+    if waves
+    then (
+      let waves, sim = Waveform.create sim in
+      Some waves, sim)
+    else None, sim
+  in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   let cycle_num = ref 0 in
   let results =
     Array.init Model.Config.num_windows ~f:(fun _ ->
-        Array.init (1 lsl Model.Config.window_size_bits) ~f:(Fn.const 0))
+      Array.init (1 lsl Model.Config.window_size_bits) ~f:(Fn.const 0))
   in
   let cycle =
     let b = ref 0 in
@@ -286,11 +294,11 @@ let test ?(auto_label_hierarchical_ports = true) coefs =
   done;
   inputs.bucket_read_enable <-. 0;
   cycle ();
-  print_s [%message (results : Int.Hex.t array array)];
+  if verbose then print_s [%message "HW-RESULTS" ~_:(results : Int.Hex.t array array)];
   let final_sum =
     Array.foldi results ~init:0 ~f:(fun index acc window ->
-        let r = Array.foldi window ~init:0 ~f:(fun index acc e -> acc + (e * index)) in
-        acc + (r lsl (index * Model.Config.window_size_bits)))
+      let r = Array.foldi window ~init:0 ~f:(fun index acc e -> acc + (e * index)) in
+      acc + (r lsl (index * Model.Config.window_size_bits)))
     land ((1 lsl Model.Config.affine_point_bits) - 1)
   in
   let expected_sum =
@@ -305,8 +313,15 @@ let test ?(auto_label_hierarchical_ports = true) coefs =
                Model.Config.affine_point_bits))
     |> Bits.to_int
   in
-  print_s [%message (final_sum : Int.Hex.t) (expected_sum : Int.Hex.t)];
-  waves
+  if verbose
+  then (
+    Msm_input.print_results coefs;
+    print_s [%message "RESULTS" (final_sum : Int.Hex.t) (expected_sum : Int.Hex.t)]);
+  if final_sum <> expected_sum
+  then (
+    let m = [%message "TEST FAILED :("] in
+    if waves then print_s m else raise_s m);
+  waveform
 ;;
 
 let test_with_stalls =
@@ -321,17 +336,24 @@ let test_1_stall =
   Msm_input.of_scalars [| 0x21; 0x43; 0x61; 0x87; 0xa9; 0xcb; 0xed; 0x0f |]
 ;;
 
+let test_fully_stall_window0 =
+  Msm_input.of_scalars [| 0x13; 0x23; 0x33; 0x43; 0x53; 0x63; 0x73; 0x83 |]
+;;
+
 let runtest example =
-  let waves = test ~auto_label_hierarchical_ports:false example in
-  Msm_input.print_results example;
-  Waveform.print ~display_height:50 ~display_width:135 ~wave_width:0 waves
+  let waves =
+    test ~waves:true ~verbose:true ~auto_label_hierarchical_ports:false example
+  in
+  Option.iter
+    waves
+    ~f:(Waveform.print ~display_height:50 ~display_width:135 ~wave_width:0)
 ;;
 
 let%expect_test "no stalls" =
   runtest test_no_stalls;
   [%expect
     {|
-    ("Array.map coefs ~f:(Msm_input.map ~f:Bits.to_int)"
+    (inputs
      (((scalar (0x2 0x1)) (affine_point 0x1))
       ((scalar (0x4 0x3)) (affine_point 0x2))
       ((scalar (0x6 0x5)) (affine_point 0x3))
@@ -340,16 +362,17 @@ let%expect_test "no stalls" =
       ((scalar (0xc 0xb)) (affine_point 0x6))
       ((scalar (0xe 0xd)) (affine_point 0x7))
       ((scalar (0x0 0xf)) (affine_point 0x8))))
-    (results
+    (HW-RESULTS
      ((0x0 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)
       (0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8)))
-    ((final_sum 0x1858) (expected_sum 0x1858))
-    ((buckets
+    (REFERENCE
+     (buckets
       (((0x8) () (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) ())
        (() (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) () (0x8))))
      (sums
       ((0x8 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)
        (0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8))))
+    (RESULTS (final_sum 0x1858) (expected_sum 0x1858))
     ┌Signals───────────┐┌Waves────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
     │                  ││────┬───────┬───────┬───────┬───────┬───────┬───────┬───────┬────────────────────────────────────────────────────│
     │i$affine_point    ││ 00.│0001   │0002   │0003   │0004   │0005   │0006   │0007   │0008                                                │
@@ -402,9 +425,11 @@ let%expect_test "no stalls" =
     └──────────────────┘└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
-let%expect_test "1 stalls" = runtest test_1_stall;
-  [%expect {|
-    ("Array.map coefs ~f:(Msm_input.map ~f:Bits.to_int)"
+let%expect_test "1 stalls" =
+  runtest test_1_stall;
+  [%expect
+    {|
+    (inputs
      (((scalar (0x1 0x2)) (affine_point 0x1))
       ((scalar (0x3 0x4)) (affine_point 0x2))
       ((scalar (0x1 0x6)) (affine_point 0x3))
@@ -413,16 +438,17 @@ let%expect_test "1 stalls" = runtest test_1_stall;
       ((scalar (0xb 0xc)) (affine_point 0x6))
       ((scalar (0xd 0xe)) (affine_point 0x7))
       ((scalar (0xf 0x0)) (affine_point 0x8))))
-    (results
+    (HW-RESULTS
      ((0x0 0x4 0x0 0x2 0x0 0x0 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8)
       (0x0 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)))
-    ((final_sum 0x12e8) (expected_sum 0x12e8))
-    ((buckets
+    (REFERENCE
+     (buckets
       ((() (0x3 0x1) () (0x2) () () () (0x4) () (0x5) () (0x6) () (0x7) () (0x8))
        ((0x8) () (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) ())))
      (sums
       ((0x0 0x4 0x0 0x2 0x0 0x0 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8)
        (0x8 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0))))
+    (RESULTS (final_sum 0x12e8) (expected_sum 0x12e8))
     ┌Signals───────────┐┌Waves────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
     │                  ││────┬───────┬───────┬───────┬───────┬───────┬───────┬───────┬────────────────────────────────────────────────────│
     │i$affine_point    ││ 00.│0001   │0002   │0003   │0004   │0005   │0006   │0007   │0008                                                │
@@ -473,9 +499,13 @@ let%expect_test "1 stalls" = runtest test_1_stall;
     │ctrl$bpipes$bp_1$s││ 0                  │2      │4      │6      │8      │A      │C      │E      │0                                   │
     │                  ││────────────────────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴────────────────────────────────────│
     └──────────────────┘└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ |}]
-let%expect_test "has stalls" = runtest test_with_stalls;
-  [%expect {|
-    ("Array.map coefs ~f:(Msm_input.map ~f:Bits.to_int)"
+;;
+
+let%expect_test "has stalls" =
+  runtest test_with_stalls;
+  [%expect
+    {|
+    (inputs
      (((scalar (0x2 0x1)) (affine_point 0x1))
       ((scalar (0x1 0x2)) (affine_point 0x2))
       ((scalar (0x2 0x3)) (affine_point 0x3))
@@ -484,17 +514,18 @@ let%expect_test "has stalls" = runtest test_with_stalls;
       ((scalar (0xc 0xa)) (affine_point 0x6))
       ((scalar (0xf 0xf)) (affine_point 0x7))
       ((scalar (0x1 0x4)) (affine_point 0x8))))
-    (results
+    (HW-RESULTS
      ((0x0 0xa 0x4 0x0 0x4 0x0 0x5 0x0 0x0 0x0 0x0 0x0 0x6 0x0 0x0 0x7)
       (0x0 0x6 0x2 0x3 0x8 0x0 0x0 0x0 0x0 0x0 0x6 0x4 0x0 0x0 0x0 0x7)))
-    ((final_sum 0x1131) (expected_sum 0x1131))
-    ((buckets
+    (REFERENCE
+     (buckets
       ((() (0x8 0x2) (0x3 0x1) () (0x4) () (0x5) () () () () () (0x6) () ()
         (0x7))
        (() (0x5 0x1) (0x2) (0x3) (0x8) () () () () () (0x6) (0x4) () () () (0x7))))
      (sums
       ((0x0 0xa 0x4 0x0 0x4 0x0 0x5 0x0 0x0 0x0 0x0 0x0 0x6 0x0 0x0 0x7)
        (0x0 0x6 0x2 0x3 0x8 0x0 0x0 0x0 0x0 0x0 0x6 0x4 0x0 0x0 0x0 0x7))))
+    (RESULTS (final_sum 0x1131) (expected_sum 0x1131))
     ┌Signals───────────┐┌Waves────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
     │                  ││────┬───────┬───────┬───────┬───────┬───────┬───────┬───────┬────────────────────────────────────────────────────│
     │i$affine_point    ││ 00.│0001   │0002   │0003   │0004   │0005   │0006   │0007   │0008                                                │
@@ -545,3 +576,81 @@ let%expect_test "has stalls" = runtest test_with_stalls;
     │ctrl$bpipes$bp_1$s││ 0                  │1      │2      │3      │B      │1      │A      │F      │4                                   │
     │                  ││────────────────────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴────────────────────────────────────│
     └──────────────────┘└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ |}]
+;;
+
+let%expect_test "fully stall window 0" =
+  runtest test_fully_stall_window0;
+  [%expect
+    {|
+    (inputs
+     (((scalar (0x3 0x1)) (affine_point 0x1))
+      ((scalar (0x3 0x2)) (affine_point 0x2))
+      ((scalar (0x3 0x3)) (affine_point 0x3))
+      ((scalar (0x3 0x4)) (affine_point 0x4))
+      ((scalar (0x3 0x5)) (affine_point 0x5))
+      ((scalar (0x3 0x6)) (affine_point 0x6))
+      ((scalar (0x3 0x7)) (affine_point 0x7))
+      ((scalar (0x3 0x8)) (affine_point 0x8))))
+    (HW-RESULTS
+     ((0x0 0x0 0x0 0x24 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0)
+      (0x0 0x1 0x2 0x3 0x4 0x5 0x6 0x7 0x8 0x0 0x0 0x0 0x0 0x0 0x0 0x0)))
+    (REFERENCE
+     (buckets
+      ((() () () (0x8 0x7 0x6 0x5 0x4 0x3 0x2 0x1) () () () () () () () () () ()
+        () ())
+       (() (0x1) (0x2) (0x3) (0x4) (0x5) (0x6) (0x7) (0x8) () () () () () () ())))
+     (sums
+      ((0x0 0x0 0x0 0x24 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0)
+       (0x0 0x1 0x2 0x3 0x4 0x5 0x6 0x7 0x8 0x0 0x0 0x0 0x0 0x0 0x0 0x0))))
+    (RESULTS (final_sum 0xd2c) (expected_sum 0xd2c))
+    ┌Signals───────────┐┌Waves────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+    │                  ││────┬───────┬───────┬───────┬───────┬───────┬───────┬───────────────┬────────────────────────────────────────────│
+    │i$affine_point    ││ 00.│0001   │0002   │0003   │0004   │0005   │0006   │0007           │0008                                        │
+    │                  ││────┴───────┴───────┴───────┴───────┴───────┴───────┴───────────────┴────────────────────────────────────────────│
+    │                  ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │i$bucket_address  ││ 0                                                                                                               │
+    │                  ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │i$bucket_read_enab││                                                                                                                 │
+    │                  ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │i$bucket_window   ││                                                                                                                 │
+    │                  ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │i$clear           ││──┐                                                                                                              │
+    │                  ││  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │i$clock           ││                                                                                                                 │
+    │                  ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │i$last_scalar     ││                                                                    ┌────────────────────────────────────────────│
+    │                  ││────────────────────────────────────────────────────────────────────┘                                            │
+    │                  ││────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │i$scalar0         ││ 0  │3                                                                                                           │
+    │                  ││────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │                  ││────┬───────┬───────┬───────┬───────┬───────┬───────┬───────────────┬────────────────────────────────────────────│
+    │i$scalar1         ││ 0  │1      │2      │3      │4      │5      │6      │7              │8                                           │
+    │                  ││────┴───────┴───────┴───────┴───────┴───────┴───────┴───────────────┴────────────────────────────────────────────│
+    │i$scalar_valid    ││    ┌───────────────────────────────────────────────────────────────────────────────────────┐                    │
+    │                  ││────┘                                                                                       └────────────────────│
+    │i$start           ││  ┌─┐                                                                                                            │
+    │                  ││──┘ └────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │                  ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │o$bucket          ││ 0000                                                                                                            │
+    │                  ││─────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │o$done_           ││────┐                                                                                                            │
+    │                  ││    └────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+    │o$scalar_read     ││          ┌─┐     ┌─┐     ┌─┐     ┌─┐     ┌─┐     ┌─┐             ┌─┐                     ┌─┐                    │
+    │                  ││──────────┘ └─────┘ └─────┘ └─────┘ └─────┘ └─────┘ └─────────────┘ └─────────────────────┘ └────────────────────│
+    │                  ││────┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬│
+    │ctrl$STATE        ││ 0  │1│3│4│3│1│3│4│3│1│3│4│3│1│3│4│3│1│3│4│3│1│3│4│3│1│5│6│5│1│3│4│3│1│5│6│5│1│5│6│5│1│3│4│3│1│5│6│5│1│5│6│5│1│5││
+    │                  ││────┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴│
+    │                  ││────────┬───────┬───────────────┬───────┬───────────────┬───────┬───────────────┬───────┬───────────────┬───────┬│
+    │ctrl$bpipes$bp_0$s││ 0      │3      │0              │3      │0              │3      │0              │3      │0              │3      ││
+    │                  ││────────┴───────┴───────────────┴───────┴───────────────┴───────┴───────────────┴───────┴───────────────┴───────┴│
+    │                  ││────────────────┬───────┬───────────────┬───────┬───────────────┬───────┬───────────────┬───────┬───────────────┬│
+    │ctrl$bpipes$bp_0$s││ 0              │3      │0              │3      │0              │3      │0              │3      │0              ││
+    │                  ││────────────────┴───────┴───────────────┴───────┴───────────────┴───────┴───────────────┴───────┴───────────────┴│
+    │                  ││────────────┬───────┬───────┬───────┬───────┬───────┬───────┬───────┬───────┬───────────────┬───────┬────────────│
+    │ctrl$bpipes$bp_1$s││ 0          │1      │2      │3      │4      │5      │6      │0      │7      │0              │8      │0           │
+    │                  ││────────────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────────────┴───────┴────────────│
+    │                  ││────────────────────┬───────┬───────┬───────┬───────┬───────┬───────┬───────┬───────┬───────────────┬───────┬────│
+    │ctrl$bpipes$bp_1$s││ 0                  │1      │2      │3      │4      │5      │6      │0      │7      │0              │8      │0   │
+    │                  ││────────────────────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────────────┴───────┴────│
+    └──────────────────┘└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ |}]
+;;
