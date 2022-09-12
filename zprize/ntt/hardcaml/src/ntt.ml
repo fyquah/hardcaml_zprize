@@ -138,18 +138,22 @@ module Make (Config : Config) = struct
 
     module Var = Always.Variable
 
-    let twiddle_roots ~row ~col =
-      let twiddle_root row =
-        Gf_z.pow Roots.inverse.(logn * 2) (row * (col + 1))
-        |> Gf_z.to_z
-        |> Gf.of_z
-        |> Gf.to_bits
-      in
-      List.init (1 lsl twiddle_4step_config.log_num_iterations) ~f:(fun block ->
-        twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration)))
+    let twiddle_root row col =
+      Gf_z.pow Roots.inverse.(logn * 2) (row * (col + 1))
+      |> Gf_z.to_z
+      |> Gf.of_z
+      |> Gf.to_bits
     ;;
 
-    let twiddle_scale = 
+    let twiddle_roots ~row ~col =
+      List.init (1 lsl twiddle_4step_config.log_num_iterations) ~f:(fun block ->
+        twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration)) col)
+    ;;
+
+    let twiddle_scale row =
+      List.init Twiddle_factor_stream.pipe_length ~f:(fun col ->
+        twiddle_root (row + twiddle_4step_config.rows_per_iteration) col)
+    ;;
 
     let create ?(row = 0) scope (inputs : _ I.t) =
       let open Signal in
@@ -189,7 +193,11 @@ module Make (Config : Config) = struct
       let last_stage = Var.reg spec ~width:1 in
       let twiddle_stage = Var.reg spec ~width:1 in
       let twiddle_update = Var.reg spec ~width:1 in
-      let sync_cycles = max (Twiddle_factor_stream.pipe_length + ram_output_pipelining + 1) (datapath_latency + 1) in
+      let sync_cycles =
+        max
+          (Twiddle_factor_stream.pipe_length + ram_output_pipelining + 1)
+          (datapath_latency + 1)
+      in
       let sync_count = Var.reg spec ~width:(max 1 (Int.ceil_log2 sync_cycles)) in
       let sync_count_next = sync_count.value +:. 1 in
       let flip = Var.wire ~default:gnd in
@@ -323,7 +331,7 @@ module Make (Config : Config) = struct
       ; twiddle_stage = twiddle_stage.value
       ; twiddle_update =
           { valid = twiddle_update.value
-          ; factors = Array.init 2 ~f:(fun _ -> Gf.one |> Gf.to_bits)
+          ; factors = [| Gf.to_bits Gf.one; mux sync_count.value (twiddle_scale row) |]
           }
       ; read_write_enable = read_write_enable.value
       ; flip = flip.value
