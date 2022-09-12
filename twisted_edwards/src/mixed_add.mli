@@ -31,6 +31,7 @@ module Make (Num_bits : Num_bits.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a
+      ; clear : 'a
       ; valid_in : 'a
       ; p1 : 'a Xyzt.t
       ; p2 : 'a Xyt.t
