@@ -80,20 +80,41 @@ let display_rules =
     ]
 ;;
 
-let test_2_read_after_2_writes
+let create_sim ~transposer_depth_in_cycles =
+  let scope = Scope.create ~auto_label_hierarchical_ports:true ~flatten_design:true () in
+  let config = Cyclesim.Config.trace_all in
+  Waveform.create
+    (Sim.create ~config (Transposer.create ~transposer_depth_in_cycles scope))
+;;
+
+let test_back_to_back_read_write
   ?waveform_name
+  ?(num_iters = 5)
   ~transposer_depth_in_cycles
-  ?(wave_width = 0)
   ()
   =
-  let waves, sim =
-    let scope =
-      Scope.create ~auto_label_hierarchical_ports:true ~flatten_design:true ()
-    in
-    let config = Cyclesim.Config.trace_all in
-    Waveform.create
-      (Sim.create ~config (Transposer.create ~transposer_depth_in_cycles scope))
-  in
+  let waves, sim = create_sim ~transposer_depth_in_cycles in
+  try
+    for iter = 0 to num_iters - 1 do
+      pump_data ~transposer_depth_in_cycles ~iter sim;
+      receive_and_check_data ~iter ~transposer_depth_in_cycles sim
+    done
+  with
+  | exn ->
+    Option.iter waveform_name ~f:(fun waveform_name ->
+      let fname = Printf.sprintf "%s.hardcamlwaveform" waveform_name in
+      Waveform.Serialize.marshall waves fname;
+      Stdio.printf "Test failed -- saving waveform to %s" fname);
+    Exn.reraise exn "test failed"
+;;
+
+let test_2_read_after_2_writes
+  ?waveform_name
+  ?(wave_width = 0)
+  ~transposer_depth_in_cycles
+  ()
+  =
+  let waves, sim = create_sim ~transposer_depth_in_cycles in
   try
     let outputs = Cyclesim.outputs sim in
     pump_data ~transposer_depth_in_cycles ~iter:0 sim;
@@ -190,4 +211,16 @@ let%expect_test "Read data after two writes (transposer depth = 2)" =
     │                  ││                                                                    │
     │                  ││                                                                    │
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
+;;
+
+let%expect_test "back-to-back read writes (transposer depth = 1)" =
+  test_back_to_back_read_write ~transposer_depth_in_cycles:1 ()
+;;
+
+let%expect_test "back-to-back read writes (transposer depth = 2)" =
+  test_back_to_back_read_write ~transposer_depth_in_cycles:2 ()
+;;
+
+let%expect_test "back-to-back read writes (transposer depth = 4)" =
+  test_back_to_back_read_write ~transposer_depth_in_cycles:4 ()
 ;;
