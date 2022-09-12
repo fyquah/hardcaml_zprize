@@ -149,6 +149,8 @@ module Make (Config : Config) = struct
         twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration)))
     ;;
 
+    let twiddle_scale = 
+
     let create ?(row = 0) scope (inputs : _ I.t) =
       let open Signal in
       let ( -- ) = Scope.naming scope in
@@ -187,7 +189,7 @@ module Make (Config : Config) = struct
       let last_stage = Var.reg spec ~width:1 in
       let twiddle_stage = Var.reg spec ~width:1 in
       let twiddle_update = Var.reg spec ~width:1 in
-      let sync_cycles = datapath_latency + 1 in
+      let sync_cycles = max (Twiddle_factor_stream.pipe_length + ram_output_pipelining + 1) (datapath_latency + 1) in
       let sync_count = Var.reg spec ~width:(max 1 (Int.ceil_log2 sync_cycles)) in
       let sync_count_next = sync_count.value +:. 1 in
       let flip = Var.wire ~default:gnd in
