@@ -86,50 +86,88 @@ module Make (Config : Ntts_r_fun.Ntt_4step.Config) = struct
     let num_results = ref 0 in
     let cycle ?(n = 1) () =
       assert (n > 0);
-      if Bits.to_bool !(outputs.compute_to_controller.tvalid)
-      then (
-        results := !(outputs.compute_to_controller.tdata) :: !results;
-        Int.incr num_results);
       for _ = 1 to n do
+        if Bits.to_bool !(outputs.compute_to_controller.tvalid)
+        then (
+          results := !(outputs.compute_to_controller.tdata) :: !results;
+          Int.incr num_results);
         Cyclesim.cycle sim
       done
     in
     start_sim inputs cycle;
-    let run_pass coefs =
-      (* cheat - force the core to [start] *)
-      inputs.controller_to_compute.tvalid := Bits.vdd;
-      cycle ();
+    let run_pass ~which coefs =
+      let controller_to_compute =
+        match which with
+        | `First -> inputs.controller_to_compute_phase_1
+        | `Second -> inputs.controller_to_compute_phase_2
+      in
+      let controller_to_compute_dest =
+        match which with
+        | `First -> outputs.controller_to_compute_phase_1_dest
+        | `Second -> outputs.controller_to_compute_phase_2_dest
+      in
       num_results := 0;
       results := [];
-      for pass = 0 to num_passes - 1 do
-        (* wait for tready *)
-        while not (Bits.to_bool !(outputs.controller_to_compute_dest.tready)) do
-          cycle ()
-        done;
-        for i = 0 to n - 1 do
-          inputs.controller_to_compute.tvalid := Bits.vdd;
-          inputs.controller_to_compute.tdata
-            := List.init num_cores ~f:(fun core -> coefs.((pass * num_cores) + core).(i))
-               |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
-               |> Bits.concat_lsb;
-          cycle ()
-        done;
-        inputs.controller_to_compute.tvalid := Bits.gnd;
-        (* tready should be low. *)
-        assert (not (Bits.to_bool !(outputs.controller_to_compute_dest.tready)));
-        (* A few cycles of flushing after each pass *)
-        cycle ~n:4 ()
-      done;
+      (match which with
+       | `First ->
+         (* cheat - force the core to [start] *)
+         controller_to_compute.tvalid := Bits.vdd;
+         cycle ();
+         (* wait for tready *)
+         assert (Bits.to_bool !(controller_to_compute_dest.tready));
+         for pass = 0 to num_passes - 1 do
+           for i = 0 to n - 1 do
+             controller_to_compute.tvalid := Bits.vdd;
+             controller_to_compute.tdata
+               := List.init num_cores ~f:(fun core ->
+                    coefs.((pass * num_cores) + core).(i))
+                  |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
+                  |> Bits.concat_lsb;
+             while Bits.is_gnd !(controller_to_compute_dest.tready) do
+               cycle ()
+             done;
+             cycle ()
+           done;
+           controller_to_compute.tvalid := Bits.gnd;
+           (* assert (not (Bits.to_bool !(controller_to_compute_dest.tready))) *)
+           (* A few cycles of flushing after each pass *)
+           cycle ~n:4 ()
+         done
+       | `Second ->
+         while not (Bits.to_bool !(controller_to_compute_dest.tready)) do
+           cycle ()
+         done;
+         for i = 0 to (n / 8) - 1 do
+           for j = 0 to (n / 8) - 1 do
+             for k = 0 to 8 - 1 do
+               let indices = List.init 8 ~f:(fun l -> (8 * i) + k, (8 * j) + l) in
+               controller_to_compute.tvalid := Bits.vdd;
+               controller_to_compute.tdata
+                 := List.map indices ~f:(fun (r, c) -> coefs.(r).(c))
+                    |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
+                    |> Bits.concat_lsb;
+               while Bits.is_gnd !(controller_to_compute_dest.tready) do
+                 cycle ()
+               done;
+               cycle ()
+             done
+           done
+         done;
+         controller_to_compute.tvalid := Bits.gnd;
+         (* A few cycles of flushing after each pass *)
+         cycle ~n:4 ());
       (* wait for the core to return all results. *)
       while !num_results <> n * n / num_cores do
         cycle ()
       done;
       get_results !results
     in
-    let pass1 = run_pass (transpose input_coefs) in
-    let pass2 = transpose (run_pass (transpose pass1)) in
-    cycle ~n:4 ();
-    (try expected ~verbose input_coefs pass2 with
+    (try
+       let pass1 = run_pass ~which:`First (transpose input_coefs) in
+       let pass2 = transpose (run_pass ~which:`Second (transpose pass1)) in
+       cycle ~n:4 ();
+       expected ~verbose input_coefs pass2
+     with
      | e -> print_s [%message "RAISED :(" (e : exn)]);
     waves
   ;;
