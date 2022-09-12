@@ -5,6 +5,7 @@ type twiddle_4step_config =
   { rows_per_iteration : int
   ; log_num_iterations : int
   }
+[@@deriving sexp_of]
 
 module type Config = sig
   val logn : int
@@ -121,6 +122,7 @@ module Make (Config : Config) = struct
         | Looping
         | Sync
         | Twiddle
+        | Twiddle_update
         | Sync_twiddles
       [@@deriving compare, enumerate, sexp_of, variants]
     end
@@ -153,6 +155,7 @@ module Make (Config : Config) = struct
       let k_next = k.value +: m_next in
       let addr1 = Var.reg spec ~width:logn in
       let addr2 = Var.reg spec ~width:logn in
+      let addr2_plus1 = addr2.value +:. 1 in
       let omegas =
         List.init logn ~f:(fun i ->
           Twiddle_factor_stream.initial_pipeline_factors (i + 1))
@@ -163,6 +166,7 @@ module Make (Config : Config) = struct
       let first_stage = Var.reg spec ~width:1 in
       let last_stage = Var.reg spec ~width:1 in
       let twiddle_stage = Var.reg spec ~width:1 in
+      let twiddle_update = Var.reg spec ~width:1 in
       let sync_cycles = datapath_latency + 1 in
       let sync_count = Var.reg spec ~width:(max 1 (Int.ceil_log2 sync_cycles)) in
       let sync_count_next = sync_count.value +:. 1 in
@@ -189,6 +193,7 @@ module Make (Config : Config) = struct
                       ; first_stage <--. 1
                       ; last_stage <--. 0
                       ; twiddle_stage <--. 0
+                      ; twiddle_update <--. 0
                       ; sm.set_next Looping
                       ]
                   ] )
@@ -196,7 +201,7 @@ module Make (Config : Config) = struct
                 , [ j <-- j_next
                   ; read_write_enable <-- vdd
                   ; addr1 <-- addr1.value +:. 1
-                  ; addr2 <-- addr2.value +:. 1
+                  ; addr2 <-- addr2_plus1
                   ; when_
                       (j_next ==: m.value)
                       [ if_
@@ -249,9 +254,21 @@ module Make (Config : Config) = struct
                   ] )
               ; if_twiddle_supported
                   ( Twiddle
-                  , [ addr2 <-- addr2.value +:. 1
+                  , [ addr2 <-- addr2_plus1
                     ; read_write_enable <-- vdd
-                    ; when_ (addr2.value ==:. -1) [ sm.set_next Sync_twiddles ]
+                    ; when_
+                        (addr2.value ==:. -1)
+                        [ addr2 <--. 0
+                        ; twiddle_update <--. 1
+                        ; twiddle_stage <--. 0
+                        ; sm.set_next Sync_twiddles
+                        ]
+                    ] )
+              ; if_twiddle_supported
+                  ( Twiddle_update
+                  , [ addr2 <-- addr2_plus1
+                    ; twiddle_stage <--. 0
+                    ; sm.set_next Sync_twiddles
                     ] )
               ; if_twiddle_supported
                   ( Sync_twiddles
@@ -259,6 +276,7 @@ module Make (Config : Config) = struct
                     ; when_
                         (sync_count.value ==:. sync_cycles - 1)
                         [ twiddle_stage <--. 0
+                        ; twiddle_update <--. 0
                         ; last_stage <-- gnd
                         ; done_ <--. 1
                         ; (match block with
@@ -366,17 +384,15 @@ module Make (Config : Config) = struct
       let d1 =
         pipeline spec_no_clear ~n:(multiply_latency + ram_output_pipelining) i.d1
       in
+      let piped_twiddle_stage =
+        pipeline
+          spec_no_clear
+          ~n:(multiply_latency + ram_output_pipelining + 1)
+          i.twiddle_stage
+        -- "piped_twiddle_stage"
+      in
       { O.q1 = reg spec_no_clear (d1 +: t)
-      ; q2 =
-          reg
-            spec_no_clear
-            (mux2
-               (pipeline
-                  spec_no_clear
-                  ~n:(multiply_latency + ram_output_pipelining)
-                  i.twiddle_stage)
-               t
-               (d1 -: t))
+      ; q2 = reg spec_no_clear (mux2 piped_twiddle_stage t (d1 -: t))
       }
     ;;
 
@@ -509,9 +525,11 @@ module Make (Config : Config) = struct
     ;;
 
     let transpose_ram scope build_mode (i : _ I.t) (core : _ Core.O.t) ~flip ~last_stage =
+      let scope = Scope.sub_scope scope "ram_transp" in
+      let ( -- ) = Scope.naming scope in
       let q0, q1 =
         Bram.create_dual
-          (Scope.sub_scope scope "ram_transp")
+          scope
           ~build_mode
           ~size:n
           ~clock:i.clock
@@ -530,7 +548,7 @@ module Make (Config : Config) = struct
           ~read_port_a:{ address = core.addr1_in; enable = core.read_enable_in }
           ~read_port_b:{ address = core.addr2_in; enable = core.read_enable_in }
       in
-      q0, q1
+      q0 -- "q0", q1 -- "q1"
     ;;
 
     let output_ram
@@ -568,9 +586,7 @@ module Make (Config : Config) = struct
     let create ?row ~build_mode scope (i : _ I.t) =
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let core = Core.O.Of_signal.wires () in
-      let piped_first_stage = pipeline spec ~n:1 core.first_stage in
-      let piped_last_stage = pipeline spec ~n:1 core.last_stage in
-      let piped_twiddle_stage = pipeline spec ~n:1 core.twiddle_stage in
+      let pipe ~n d = pipeline spec ~n d in
       (* input and output rams *)
       let d_in_0, d_in_1 = input_ram scope build_mode i core in
       let d_out_0, d_out_1 =
@@ -582,13 +598,14 @@ module Make (Config : Config) = struct
         (Core.hierarchy
            ?row
            scope
-           { clock = i.clock
-           ; clear = i.clear
-           ; start = i.start
-           ; first_4step_pass = i.first_4step_pass
-           ; d1 = mux2 piped_first_stage d_in_0 d_out_0
-           ; d2 = mux2 piped_first_stage d_in_1 d_out_1
-           })
+           (let first_stage = pipe ~n:1 core.first_stage in
+            { clock = i.clock
+            ; clear = i.clear
+            ; start = i.start
+            ; first_4step_pass = i.first_4step_pass
+            ; d1 = mux2 first_stage d_in_0 d_out_0
+            ; d2 = mux2 first_stage d_in_1 d_out_1
+            }))
         ~f:( <== );
       let d_out =
         output_ram
@@ -596,8 +613,8 @@ module Make (Config : Config) = struct
           build_mode
           i
           core
-          ~last_stage:piped_last_stage
-          ~twiddle_stage:piped_twiddle_stage
+          ~last_stage:(pipe ~n:(datapath_latency + 1) core.last_stage)
+          ~twiddle_stage:(pipe ~n:(datapath_latency + 1) core.twiddle_stage)
       in
       { O.done_ = core.done_; rd_q = d_out }
     ;;

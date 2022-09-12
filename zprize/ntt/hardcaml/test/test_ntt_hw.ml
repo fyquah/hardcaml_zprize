@@ -70,23 +70,45 @@ module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
-let compare_results coefs sim_result =
+let compare_results ~logn ~row ~twiddle_4step_config coefs sim_result =
   let module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf) in
   Ntt.inverse_dit coefs;
+  (* if twiddling is enabled (as used for the 4step implementation), model it. *)
+  (match (twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option) with
+   | None -> ()
+   | Some { rows_per_iteration = _; log_num_iterations = _ } ->
+     let scl = ref Gf.one in
+     let step = ref Gf.one in
+     let n2 = Ntts_r_fun.Roots.inverse.(logn + logn) |> Ntts_r_fun.Gf_z.to_z |> Gf.of_z in
+     for _ = 0 to row - 1 do
+       step := Gf.mul !step n2
+     done;
+     for col = 0 to (1 lsl logn) - 1 do
+       coefs.(col) <- Gf.mul coefs.(col) !scl;
+       scl := Gf.mul !scl !step
+     done);
   if not ([%equal: Gf.t array] coefs sim_result)
   then
     print_s
       [%message
-        "Simulation results are incorrect." (coefs : Gf.t array) (sim_result : Gf.t array)]
+        "Simulation results are incorrect."
+          (coefs : Gf.Hex.t array)
+          (sim_result : Gf.Hex.t array)]
 ;;
 
-let inverse_ntt_test ~waves input_coefs =
+let inverse_ntt_test
+  ?twiddle_4step_config
+  ?(row = 0)
+  ?(first_4step_pass = false)
+  ~waves
+  input_coefs
+  =
   let n = Array.length input_coefs in
   let logn = Int.ceil_log2 n in
   let module Ntt =
     Ntts_r_fun.Ntt.Make (struct
       let logn = logn
-      let twiddle_4step_config = None
+      let twiddle_4step_config = twiddle_4step_config
     end)
   in
   let module Sim = Cyclesim.With_interface (Ntt.With_rams.I) (Ntt.With_rams.O) in
@@ -94,6 +116,7 @@ let inverse_ntt_test ~waves input_coefs =
     Sim.create
       ~config:Cyclesim.Config.trace_all
       (Ntt.With_rams.create
+         ~row
          ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
   in
@@ -124,6 +147,7 @@ let inverse_ntt_test ~waves input_coefs =
   Cyclesim.cycle sim;
   (* start the core *)
   inputs.start <-- 1;
+  inputs.first_4step_pass := Bits.of_bool first_4step_pass;
   Cyclesim.cycle sim;
   inputs.start <-- 0;
   (* poll for done *)
@@ -153,7 +177,7 @@ let inverse_ntt_test ~waves input_coefs =
   for _ = 0 to 11 do
     Cyclesim.cycle sim
   done;
-  compare_results input_coefs result;
+  compare_results ~logn ~row ~twiddle_4step_config input_coefs result;
   waves, result
 ;;
 

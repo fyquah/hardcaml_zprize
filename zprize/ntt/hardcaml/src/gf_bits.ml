@@ -7,6 +7,16 @@ module Make (Bits : Comb.S) = struct
 
   type nonrec t = t
 
+  module Hex = struct
+    type nonrec t = t
+
+    let sexp_of_t t =
+      Bits.to_constant t
+      |> Constant.to_hex_string ~signedness:Unsigned
+      |> String.sexp_of_t
+    ;;
+  end
+
   let compare a b = if equal (a <: b) vdd then -1 else if equal (a >: b) vdd then 1 else 0
   let equal a b = equal (a ==: b) vdd
 

@@ -5,6 +5,7 @@ type twiddle_4step_config =
   { rows_per_iteration : int
   ; log_num_iterations : int
   }
+[@@deriving sexp_of]
 
 module type Config = sig
   val logn : int
