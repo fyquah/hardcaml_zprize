@@ -83,7 +83,7 @@ struct
     end
 
     module O = struct
-      type 'a t = { read_data : 'a array [@length transposer_height] [@bits 64] }
+      type 'a t = { read_data : 'a array [@length transposer_height] [@bits 512] }
       [@@deriving sexp_of, hardcaml]
     end
 

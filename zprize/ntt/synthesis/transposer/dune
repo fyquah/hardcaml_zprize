@@ -1,0 +1,4 @@
+(rule
+(mode promote)
+ (action (with-stdout-to transposer.v (run ../../hardcaml/bin/generate.exe transposer -transposer-depth-in-cycles 1))))
+
