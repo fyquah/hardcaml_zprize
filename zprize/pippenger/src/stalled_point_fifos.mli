@@ -23,6 +23,7 @@ module Make (Config : Config.S) : sig
       ; current_window_has_stall : 'a
       ; affine_point_out : 'a [@bits affine_point_bits]
       ; scalar_out : 'a [@bits window_size_bits]
+      ; scalar_out_valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

@@ -84,13 +84,13 @@ module Make (Config : Config.S) = struct
 
     let names =
       List.map all ~f:(function
-          | Start -> "-"
-          | Choose_mode -> "M"
-          | Bubble_mode -> "Mb"
-          | Execute_scalar -> "Es"
-          | Wait_scalar -> "Ws"
-          | Execute_stalled -> "E-"
-          | Wait_stalled -> "W-")
+        | Start -> "-"
+        | Choose_mode -> "M"
+        | Bubble_mode -> "Mb"
+        | Execute_scalar -> "Es"
+        | Wait_scalar -> "Ws"
+        | Execute_stalled -> "E-"
+        | Wait_stalled -> "W-")
     ;;
   end
 
@@ -172,7 +172,7 @@ module Make (Config : Config.S) = struct
                 ; shift_pipeline <-- vdd
                 ; bubble
                   <-- (is_in_pipeline
-                      |: (stalled.scalar_out ==:. 0)
+                      |: (stalled.scalar_out_valid &: (stalled.scalar_out ==:. 0))
                       |: ~:(stalled.current_window_has_stall))
                 ; pop_stalled_point <-- ~:(bubble.value)
                 ; window <-- window_next
@@ -193,6 +193,7 @@ module Make (Config : Config.S) = struct
          ; window = window.value
          ; scalar_in = i.scalar
          ; stalled_scalar = stalled.scalar_out
+         ; stalled_scalar_valid = stalled.scalar_out_valid
          ; process_stalled = executing_stalled
          ; bubble = is_in_pipeline
          ; shift = shift_pipeline.value
