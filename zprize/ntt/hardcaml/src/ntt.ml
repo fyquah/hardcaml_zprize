@@ -92,6 +92,15 @@ module Make (Config : Config) = struct
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
+        ; twiddle_update_in : 'a [@bits Gf.num_bits]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module Twiddle_update = struct
+      type 'a t =
+        { valid : 'a
+        ; factors : 'a array [@bits Gf.num_bits] [@length 2]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -110,6 +119,7 @@ module Make (Config : Config) = struct
         ; first_stage : 'a
         ; last_stage : 'a
         ; twiddle_stage : 'a
+        ; twiddle_update : 'a Twiddle_update.t
         ; read_write_enable : 'a
         ; flip : 'a
         }
@@ -122,12 +132,22 @@ module Make (Config : Config) = struct
         | Looping
         | Sync
         | Twiddle
-        | Twiddle_update
         | Sync_twiddles
       [@@deriving compare, enumerate, sexp_of, variants]
     end
 
     module Var = Always.Variable
+
+    let twiddle_roots ~row ~col =
+      let twiddle_root row =
+        Gf_z.pow Roots.inverse.(logn * 2) (row * (col + 1))
+        |> Gf_z.to_z
+        |> Gf.of_z
+        |> Gf.to_bits
+      in
+      List.init (1 lsl twiddle_4step_config.log_num_iterations) ~f:(fun block ->
+        twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration)))
+    ;;
 
     let create ?(row = 0) scope (inputs : _ I.t) =
       let open Signal in
@@ -265,12 +285,6 @@ module Make (Config : Config) = struct
                         ]
                     ] )
               ; if_twiddle_supported
-                  ( Twiddle_update
-                  , [ addr2 <-- addr2_plus1
-                    ; twiddle_stage <--. 0
-                    ; sm.set_next Sync_twiddles
-                    ] )
-              ; if_twiddle_supported
                   ( Sync_twiddles
                   , [ sync_count <-- sync_count_next
                     ; when_
@@ -295,32 +309,20 @@ module Make (Config : Config) = struct
       ; addr1 = addr1.value
       ; addr2 = addr2.value
       ; omegas =
-          List.mapi omegas ~f:(fun idx omega ->
+          List.mapi omegas ~f:(fun col omega ->
             match block with
             | None -> omega
             | Some block ->
-              let twiddle_root row =
-                Gf_z.pow Roots.inverse.(logn * 2) (row * (idx + 1))
-                |> Gf_z.to_z
-                |> Gf.of_z
-                |> Gf.to_bits
-              in
-              (* XXX aray: We should fix this rom.  We need to either pack it into block ram,
-                 or probably better, calculate the initial omegas iteratively through the
-                 multiplier. *)
-              let twiddle_root =
-                mux
-                  block.value
-                  (List.init
-                     (1 lsl twiddle_4step_config.log_num_iterations)
-                     ~f:(fun block ->
-                     twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration))))
-              in
+              let twiddle_root = mux block.value (twiddle_roots ~row ~col) in
               mux2 twiddle_stage.value twiddle_root omega)
       ; start_twiddles = start_twiddles.value
       ; first_stage = first_stage.value
       ; last_stage = last_stage.value
       ; twiddle_stage = twiddle_stage.value
+      ; twiddle_update =
+          { valid = twiddle_update.value
+          ; factors = Array.init 2 ~f:(fun _ -> Gf.one |> Gf.to_bits)
+          }
       ; read_write_enable = read_write_enable.value
       ; flip = flip.value
       }
@@ -345,6 +347,7 @@ module Make (Config : Config) = struct
         ; omegas : 'a list [@bits Gf.num_bits] [@length Twiddle_factor_stream.pipe_length]
         ; start_twiddles : 'a
         ; twiddle_stage : 'a
+        ; twiddle_update : 'a Controller.Twiddle_update.t
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -353,6 +356,7 @@ module Make (Config : Config) = struct
       type 'a t =
         { q1 : 'a [@bits Gf.num_bits]
         ; q2 : 'a [@bits Gf.num_bits]
+        ; twiddle_update_q : 'a [@bits Gf.num_bits]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -366,33 +370,43 @@ module Make (Config : Config) = struct
       let ( -- ) = Scope.naming scope in
       let spec_with_clear = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let spec_no_clear = Reg_spec.create ~clock:i.clock () in
+      let pipe ?(clear = false) ~n d =
+        pipeline ~n (if clear then spec_with_clear else spec_no_clear) d
+      in
       (* The latency of the input data must be adjusted to match the latency of
          the twiddle factor calculation *)
       let { Twiddle_factor_stream.O.w } =
         Twiddle_factor_stream.hierarchy
           scope
           { clock = i.clock
-          ; start_twiddles =
-              pipeline ~n:ram_output_pipelining spec_with_clear i.start_twiddles
+          ; start_twiddles = pipe ~n:ram_output_pipelining ~clear:true i.start_twiddles
           ; omegas = i.omegas
           }
       in
       let w = w -- "twiddle_factor" in
       let t =
-        gf_mul ~clock:i.clock (pipeline ~n:ram_output_pipelining spec_no_clear i.d2) w
+        let a =
+          mux2
+            (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.valid)
+            i.twiddle_update.factors.(0)
+            (pipe ~n:ram_output_pipelining i.d2)
+        in
+        let b =
+          mux2
+            (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.valid)
+            i.twiddle_update.factors.(1)
+            w
+        in
+        gf_mul ~clock:i.clock a b
       in
-      let d1 =
-        pipeline spec_no_clear ~n:(multiply_latency + ram_output_pipelining) i.d1
-      in
+      let d1 = pipe ~n:(multiply_latency + ram_output_pipelining) i.d1 in
       let piped_twiddle_stage =
-        pipeline
-          spec_no_clear
-          ~n:(multiply_latency + ram_output_pipelining + 1)
-          i.twiddle_stage
+        pipe ~n:(multiply_latency + ram_output_pipelining + 1) i.twiddle_stage
         -- "piped_twiddle_stage"
       in
       { O.q1 = reg spec_no_clear (d1 +: t)
       ; q2 = reg spec_no_clear (mux2 piped_twiddle_stage t (d1 -: t))
+      ; twiddle_update_q = t
       }
     ;;
 
@@ -438,6 +452,7 @@ module Make (Config : Config) = struct
 
     let create ?row scope (i : _ I.t) =
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+      let datapath = Datapath.O.Of_signal.wires () in
       let controller =
         Controller.hierarchy
           ?row
@@ -446,20 +461,22 @@ module Make (Config : Config) = struct
           ; clear = i.clear
           ; start = i.start
           ; first_4step_pass = i.first_4step_pass
+          ; twiddle_update_in = datapath.twiddle_update_q
           }
       in
-      let datapath =
-        Datapath.hierarchy
-          scope
-          { Datapath.I.clock = i.clock
-          ; clear = i.clear
-          ; d1 = i.d1
-          ; d2 = i.d2
-          ; omegas = controller.omegas
-          ; start_twiddles = controller.start_twiddles
-          ; twiddle_stage = controller.twiddle_stage
-          }
-      in
+      Datapath.O.Of_signal.assign
+        datapath
+        (Datapath.hierarchy
+           scope
+           { Datapath.I.clock = i.clock
+           ; clear = i.clear
+           ; d1 = i.d1
+           ; d2 = i.d2
+           ; omegas = controller.omegas
+           ; start_twiddles = controller.start_twiddles
+           ; twiddle_stage = controller.twiddle_stage
+           ; twiddle_update = controller.twiddle_update
+           });
       let pipe = pipeline spec ~n:(datapath_latency + 1) in
       { O.q1 = datapath.q1
       ; q2 = datapath.q2

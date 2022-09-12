@@ -45,6 +45,15 @@ module Make (Config : Config) : sig
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
+        ; twiddle_update_in : 'a [@bits Gf.num_bits]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module Twiddle_update : sig
+      type 'a t =
+        { valid : 'a
+        ; factors : 'a array [@bits Gf.num_bits] [@length 2]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -63,6 +72,7 @@ module Make (Config : Config) : sig
         ; first_stage : 'a
         ; last_stage : 'a
         ; twiddle_stage : 'a
+        ; twiddle_update : 'a Twiddle_update.t
         ; read_write_enable : 'a
         ; flip : 'a
         }
@@ -83,6 +93,7 @@ module Make (Config : Config) : sig
         ; omegas : 'a list
         ; start_twiddles : 'a
         ; twiddle_stage : 'a
+        ; twiddle_update : 'a Controller.Twiddle_update.t
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -91,6 +102,7 @@ module Make (Config : Config) : sig
       type 'a t =
         { q1 : 'a
         ; q2 : 'a
+        ; twiddle_update_q : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
