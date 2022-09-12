@@ -22,8 +22,7 @@
 
 #define NUM_POINTS 8
 
-// Calculate this from the testbed
-#define NUM_OUTPUT_POINTS 10
+#define NUM_OUTPUT_POINTS 90091
 
 #define BITS_PER_INPUT_POINT 377*3
 #define BITS_PER_OUTPUT_POINT 377*3

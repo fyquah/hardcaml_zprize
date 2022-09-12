@@ -15,3 +15,5 @@ test/*.csv
 test/xrt.ini
 test/*.protoinst
 test/*.wcfg
+test/*run_summary
+test/*.wdb
