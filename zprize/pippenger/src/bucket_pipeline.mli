@@ -29,6 +29,7 @@ module Make (Config : Config.S) : sig
       ; window : 'a
       ; scalar_in : 'a array
       ; stalled_scalar : 'a
+      ; stalled_scalar_valid : 'a
       ; process_stalled : 'a
       ; bubble : 'a
       ; shift : 'a

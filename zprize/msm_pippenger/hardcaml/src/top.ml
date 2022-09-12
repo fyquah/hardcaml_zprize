@@ -258,6 +258,7 @@ module Make (Config : Config.S) = struct
         scope
         ~config:adder_config
         { clock
+        ; clear
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
         ; p1 =
@@ -373,7 +374,7 @@ module Make (Config : Config.S) = struct
     fifo_q_has_space <== (fifo_q.used <:. fifo_capacity - 2);
     { O.result_point = Mixed_add.Xyzt.Of_signal.unpack (lsbs fifo_q.q)
     ; result_point_valid = ~:(fifo_q.empty)
-    ; last_result_point = msb fifo_q.q
+    ; last_result_point = msb fifo_q.q &: ~:(fifo_q.empty)
     ; scalar_and_input_point_ready = ctrl.scalar_read
     }
   ;;
