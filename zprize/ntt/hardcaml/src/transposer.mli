@@ -1,6 +1,8 @@
 open Hardcaml
 module Axi512 = Hardcaml_axi.Axi512
 
+val transposer_height : int
+
 module I : sig
   type 'a t =
     { clock : 'a

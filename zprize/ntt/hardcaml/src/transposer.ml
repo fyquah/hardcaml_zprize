@@ -7,21 +7,22 @@ module I = struct
   type 'a t =
     { clock : 'a
     ; clear : 'a
-    ; transposer_in : 'a Axi512.Stream.Source.t [@rtlmangle true]
-    ; transposer_out_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "transposer_out_"]
+    ; transposer_in : 'a Axi512.Stream.Source.t [@rtlprefix "in_"]
+    ; transposer_out_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "out_"]
     }
   [@@deriving sexp_of, hardcaml]
 end
 
 module O = struct
   type 'a t =
-    { transposer_out : 'a Axi512.Stream.Source.t [@rtlmangle true]
-    ; transposer_in_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "transposer_in_"]
+    { transposer_out : 'a Axi512.Stream.Source.t [@rtlprefix "out_"]
+    ; transposer_in_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "in_"]
     }
   [@@deriving sexp_of, hardcaml]
 end
 
 let () = Hardcaml.Caller_id.set_mode Full_trace
+let transposer_height = 512 / 64
 
 module Make (M : sig
   val transposer_depth_in_cycles : int
@@ -29,7 +30,6 @@ end) =
 struct
   include M
 
-  let transposer_height = 512 / 64
   let transposer_memory_depth = 2 * transposer_depth_in_cycles
 
   module Writer = struct
@@ -113,12 +113,14 @@ struct
   end
 
   let create_reader
+    ~scope
     ~spec
     ~(writer : _ Writer.O.t)
     ~(transposer_out_dest : 'a Axi512.Stream.Dest.t)
     ~transposer_depth_in_cycles
     ~read_data
     =
+    let ( -- ) = Scope.naming scope in
     let currently_waiting_for = Always.Variable.reg ~width:2 spec in
     let data_is_available =
       let currently_writing = writer.currently_writing in
@@ -133,10 +135,9 @@ struct
         ~width:(Int.max 1 (Int.ceil_log2 transposer_depth_in_cycles))
         spec
     in
-    let element_offset =
-      Always.Variable.reg ~width:(Int.ceil_log2 transposer_height) spec
-    in
+    let element_offset = Always.Variable.reg ~width:(Int.ceil_log2 8) spec in
     let tvalid = Always.Variable.reg ~width:1 spec in
+    ignore (element_offset.value -- "element_offset" : Signal.t);
     Always.(
       compile
         [ sm.switch
@@ -149,7 +150,7 @@ struct
                     transposer_out_dest.tready
                     [ element_offset <-- element_offset.value +:. 1
                     ; when_
-                        (element_offset.value ==:. transposer_height - 1)
+                        (element_offset.value ==:. 8 - 1)
                         [ sub_address <-- sub_address.value +:. 1
                         ; when_
                             (sub_address.value ==:. transposer_depth_in_cycles - 1)
@@ -253,6 +254,7 @@ struct
   ;;
 
   let create (scope : Scope.t) { I.clock; clear; transposer_in; transposer_out_dest } =
+    let ( -- ) = Scope.naming scope in
     let writer = Writer.O.Of_signal.wires () in
     let reader = Reader.O.Of_signal.wires () in
     let memories =
@@ -272,11 +274,14 @@ struct
     Reader.O.Of_signal.assign
       reader
       (create_reader
+         ~scope:(Scope.sub_scope scope "reader")
          ~spec
          ~writer
          ~transposer_out_dest
          ~transposer_depth_in_cycles
          ~read_data:memories.read_data);
+    ignore (writer.currently_writing -- "wr_pos");
+    ignore (reader.currently_waiting_for -- "rd_pos");
     { O.transposer_out = reader.transposer_out
     ; transposer_in_dest = writer.transposer_in_dest
     }
