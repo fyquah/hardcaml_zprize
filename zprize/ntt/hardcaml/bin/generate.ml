@@ -50,9 +50,29 @@ let command_ntt =
         Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
 ;;
 
+let command_transposer =
+  Command.basic
+    ~summary:"Generate transposer core (for synthesis)"
+    [%map_open.Command
+      let transposer_depth_in_cycles =
+        flag "transposer-depth-in-cycles" (required int) ~doc:""
+      in
+      fun () ->
+        let module I = Ntts_r_fun.Transposer.I in
+        let module O = Ntts_r_fun.Transposer.O in
+        let module Circuit = Circuit.With_interface (I) (O) in
+        let scope = Scope.create ~flatten_design:false () in
+        let circ =
+          Circuit.create_exn
+            ~name:"transposer"
+            (Ntts_r_fun.Transposer.create ~transposer_depth_in_cycles scope)
+        in
+        Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
+;;
+
 let () =
   Command_unix.run
     (Command.group
        ~summary:"RTL generation"
-       [ "kernel", command_kernel; "ntt", command_ntt ])
+       [ "kernel", command_kernel; "ntt", command_ntt; "transposer", command_transposer ])
 ;;
