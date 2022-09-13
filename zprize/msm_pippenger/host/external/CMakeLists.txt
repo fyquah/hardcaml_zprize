@@ -18,5 +18,6 @@ ExternalProject_Get_Property(gmp_external INSTALL_DIR)
 set(gmp_INSTALL_DIR ${INSTALL_DIR})
 
 add_library(gmp STATIC stub.cpp)
+add_dependencies(gmp gmp_external)
 target_include_directories(gmp PUBLIC "${gmp_INSTALL_DIR}/include/")
 target_link_libraries(gmp PUBLIC "${gmp_INSTALL_DIR}/lib/libgmp.a")
