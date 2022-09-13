@@ -10,16 +10,16 @@ module Make (Config : Config.S) = struct
     type 'a t =
       { ap_clk : 'a
       ; ap_rst_n : 'a
-      ; host_to_fpga : 'a Axi512.Stream.Source.t [@rtlprefix "host_to_fpga_"]
-      ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "fpga_to_host_"]
+      ; host_to_fpga : 'a Axi512.Stream.Source.t [@rtlprefix "host_to_fpga$"]
+      ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "fpga_to_host$"]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
     type 'a t =
-      { fpga_to_host : 'a Axi512.Stream.Source.t [@rtlprefix "fpga_to_host_"]
-      ; host_to_fpga_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "host_to_fpga_"]
+      { fpga_to_host : 'a Axi512.Stream.Source.t [@rtlprefix "fpga_to_host$"]
+      ; host_to_fpga_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "host_to_fpga$"]
       }
     [@@deriving sexp_of, hardcaml]
   end
