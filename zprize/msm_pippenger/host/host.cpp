@@ -56,8 +56,6 @@ int test_streaming(const std::string& binaryFile, std::string& input_points)
     	std::string line;
     	unsigned int point = 0;
     	while (std::getline(file, line)) {
-            printf("%s\n", line.c_str());
-
             for (unsigned int i = 0; i < line.length(); i += 8) {
               std::string byteString = line.substr(line.length() - i - 8, 8);
               uint32_t word =  strtol(byteString.c_str(), NULL, 16);
