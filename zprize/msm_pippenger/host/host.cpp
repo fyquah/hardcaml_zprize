@@ -18,31 +18,52 @@
 #include <experimental/xrt_device.h>
 #include <experimental/xrt_kernel.h>
 
+#include <fstream>
 #include <vector>
 
 #define NUM_POINTS 8
-#define BITS_PER_POINT 377*3
+
+#define NUM_OUTPUT_POINTS 90091
+
+#define BITS_PER_INPUT_POINT 377*3
+#define BITS_PER_OUTPUT_POINT 377*3
 #define SCALAR_BITS 253
 #define DDR_BITS 512
 
 // We round up our points to the nearest multiple of the AXI stream / DDR
-#define BYTES_PER_INPUT (((SCALAR_BITS + BITS_PER_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_INPUT (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 
-int test_streaming(const std::string& binaryFile)
+int test_streaming(const std::string& binaryFile, std::string& input_points)
 {
-    auto size = 4096;// BYTES_PER_INPUT * NUM_POINTS;
+    auto input_size = (BYTES_PER_INPUT * NUM_POINTS) / 4;
+    auto output_size = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
+
     cl_int err;
     cl::CommandQueue q;
     cl::Context context;
     cl::Kernel krnl_mm2s, krnl_msm_pippenger, krnl_s2mm;
     // Allocate Memory in Host Memory
-    size_t vector_size_bytes = sizeof(int) * size;
-    std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input(size);
-    std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(size);
+    size_t vector_input_size_bytes = sizeof(int) * input_size;
+    size_t vector_output_size_bytes = sizeof(int) * output_size;
 
-    // Create the test data and Software Result
-    for (int i = 0; i < size; i++) {
-	source_kernel_input[i] = i;
+    std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input(input_size);
+    std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(output_size);
+
+    // Load input points from the test file
+    std::ifstream file(input_points);
+    if (file.is_open()) {
+    	std::string line;
+    	unsigned int point = 0;
+    	while (std::getline(file, line)) {
+            for (unsigned int i = 0; i < line.length(); i += 8) {
+              std::string byteString = line.substr(line.length() - i - 8, 8);
+              uint32_t word =  strtol(byteString.c_str(), NULL, 16);
+              source_kernel_input[point+(i/8)] = word;
+            }
+            point = point + (BYTES_PER_INPUT/4);
+    	}
+    	file.close();
     }
 
     // OPENCL HOST CODE AREA START
@@ -80,18 +101,18 @@ int test_streaming(const std::string& binaryFile)
     }
 
     // Allocate Buffer in Global Memory
-    OCL_CHECK(err, cl::Buffer buffer_input(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, vector_size_bytes,
+    OCL_CHECK(err, cl::Buffer buffer_input(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, vector_input_size_bytes,
                                            source_kernel_input.data(), &err));
-    OCL_CHECK(err, cl::Buffer buffer_output(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, vector_size_bytes,
+    OCL_CHECK(err, cl::Buffer buffer_output(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, vector_output_size_bytes,
                                        	   source_kernel_output.data(), &err));
 
     // Set the "Kernel 0" Arguments
     OCL_CHECK(err, err = krnl_mm2s.setArg(0, buffer_input));
-    OCL_CHECK(err, err = krnl_mm2s.setArg(2, size));
+    OCL_CHECK(err, err = krnl_mm2s.setArg(2, input_size));
 
     // Set the "Kernel 1" Arguments
     OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
-    OCL_CHECK(err, err = krnl_s2mm.setArg(2, size));
+    OCL_CHECK(err, err = krnl_s2mm.setArg(2, output_size));
 
     // Copy input data to device global memory
     cl::Event write_event;
@@ -116,33 +137,23 @@ int test_streaming(const std::string& binaryFile)
 
     // OPENCL HOST CODE AREA END
 
-    // Compare the results of the Device to the simulation
-    int match = 0;
-    for (int i = 0; i < size; i++) {
-        if (__builtin_bswap32(source_kernel_input[i]) != source_kernel_output[i]) {
-            std::cout << "Error: Result mismatch" << std::endl;
-            std::cout << "i = " << i << " Input data = " << source_kernel_input[i]
-                      << " Output data = " << source_kernel_output[i] << std::endl;
-            match = 1;
-            break;
-        }
-    }
 
-    std::cout << "STREAMING TEST " << (match ? "FAILED" : "PASSED") << std::endl;
-    return match;
+    std::cout << "STREAMING TEST FINISHED" << std::endl;
+    return 0;
 }
 
 
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cout << "Usage: " << argv[0] << " <XCLBIN File>" << std::endl;
+    if (argc != 3) {
+        std::cout << "Usage: " << argv[0] << " <XCLBIN File> <INPUT POINT File>" << std::endl;
         return EXIT_FAILURE;
     }
 
     int res = 0;
     std::string binaryFile = argv[1];
-    res |= test_streaming(binaryFile);
+    std::string input_points = argv[2];
+    res |= test_streaming(binaryFile, input_points);
 
     return res;
 }
