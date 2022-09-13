@@ -19,7 +19,9 @@ let command_test_vectors =
           input_filename
           ~data:
             (Array.map num_points ~f:(fun data ->
-               Utils.Affine_point_with_t.Of_bits.pack data.affine_point_with_t
+               Bits.(
+                 data.scalar
+                 @: Utils.Affine_point_with_t.Of_bits.pack data.affine_point_with_t)
                |> Bits.to_constant
                |> Constant.to_hex_string ~signedness:Unsigned)
             |> Array.to_list
