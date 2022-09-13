@@ -19,9 +19,14 @@ let command_test_vectors =
           input_filename
           ~data:
             (Array.map num_points ~f:(fun data ->
-               Bits.(
-                 data.scalar
-                 @: Utils.Affine_point_with_t.Of_bits.pack data.affine_point_with_t)
+               let bits =
+                 Bits.(
+                   data.scalar
+                   @: Utils.Affine_point_with_t.Of_bits.pack data.affine_point_with_t)
+               in
+               Bits.uresize
+                 bits
+                 (512 * Msm_pippenger_test.Test_kernel_for_vitis.num_clocks_per_input)
                |> Bits.to_constant
                |> Constant.to_hex_string ~signedness:Unsigned)
             |> Array.to_list
