@@ -4,6 +4,19 @@ type t = Z.t [@@deriving compare, equal]
 
 let sexp_of_t t = Z.to_string t |> [%sexp_of: String.t]
 
+module Hex = struct
+  open Hardcaml
+
+  type nonrec t = t
+
+  let sexp_of_t t =
+    Bits.of_z ~width:64 t
+    |> Bits.to_constant
+    |> Constant.to_hex_string ~signedness:Unsigned
+    |> String.sexp_of_t
+  ;;
+end
+
 (* This is a solinas prime (2^64 - 2^32 + 1) which has a fast modular
      reduction algorithm. *)
 let modulus = Z.((one lsl 64) - (one lsl 32) + one)
