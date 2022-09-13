@@ -18,6 +18,7 @@
 #include <experimental/xrt_device.h>
 #include <experimental/xrt_kernel.h>
 
+#include <fstream>
 #include <vector>
 
 #define NUM_POINTS 8
@@ -33,7 +34,7 @@
 #define BYTES_PER_INPUT (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 
-int test_streaming(const std::string& binaryFile)
+int test_streaming(const std::string& binaryFile, std::string& input_points)
 {
     auto input_size = (BYTES_PER_INPUT * NUM_POINTS) / 4;
     auto output_size = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
@@ -49,9 +50,22 @@ int test_streaming(const std::string& binaryFile)
     std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input(input_size);
     std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(output_size);
 
-    // Create the test data and Software Result
-    for (int i = 0; i < input_size; i++) {
-	source_kernel_input[i] = i;
+    // Load input points from the test file
+    std::ifstream file(input_points);
+    if (file.is_open()) {
+    	std::string line;
+    	unsigned int point = 0;
+    	while (std::getline(file, line)) {
+            printf("%s\n", line.c_str());
+
+            for (unsigned int i = 0; i < line.length(); i += 8) {
+              std::string byteString = line.substr(i, 8);
+              uint32_t word =  strtol(byteString.c_str(), NULL, 16);
+              source_kernel_input[point+(i/8)] = word;
+            }
+            point = point + (BYTES_PER_INPUT/4);
+    	}
+    	file.close();
     }
 
     // OPENCL HOST CODE AREA START
@@ -127,17 +141,17 @@ int test_streaming(const std::string& binaryFile)
 
     // Print the input and output data
     std::cout << "Input data:\n"; 
-    for (int i = 0; i < output_size; i++) {
-	std::cout << source_kernel_output[i];
+    for (int i = 0; i < input_size; i++) {
+      std::cout << source_kernel_input[i];
     }
     std::cout << std::endl;
 
     std::cout << "Output data:\n"; 
-    for (int i = 0; i < input_size; i++) {
-	std::cout << source_kernel_input[i];
+    for (int i = 0; i < output_size; i++) {
+      std::cout << source_kernel_output[i];
     }
     std::cout << std::endl;
-    
+
 
     std::cout << "STREAMING TEST FINISHED" << std::endl;
     return 0;
@@ -146,14 +160,15 @@ int test_streaming(const std::string& binaryFile)
 
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cout << "Usage: " << argv[0] << " <XCLBIN File>" << std::endl;
+    if (argc != 3) {
+        std::cout << "Usage: " << argv[0] << " <XCLBIN File> <INPUT POINT File>" << std::endl;
         return EXIT_FAILURE;
     }
 
     int res = 0;
     std::string binaryFile = argv[1];
-    res |= test_streaming(binaryFile);
+    std::string input_points = argv[2];
+    res |= test_streaming(binaryFile, input_points);
 
     return res;
 }
