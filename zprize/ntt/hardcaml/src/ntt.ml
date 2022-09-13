@@ -138,22 +138,28 @@ module Make (Config : Config) = struct
 
     module Var = Always.Variable
 
-    let twiddle_root row col =
-      Gf_z.pow Roots.inverse.(logn * 2) (row * (col + 1))
-      |> Gf_z.to_z
-      |> Gf.of_z
-      |> Gf.to_bits
-    ;;
+    let twiddle_root row iter = Gf_z.pow Roots.inverse.(logn * 2) (row * (iter + 1))
 
-    let twiddle_roots ~row ~col =
+    let twiddle_roots_z ~row ~iter =
       List.init (1 lsl twiddle_4step_config.log_num_iterations) ~f:(fun block ->
-        twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration)) col)
+        twiddle_root (row + (block * twiddle_4step_config.rows_per_iteration)) iter)
     ;;
 
-    let twiddle_scale row =
+    let gf_z_to_bits g = Gf_z.to_z g |> Gf.of_z |> Gf.to_bits
+    let twiddle_roots ~row ~iter = twiddle_roots_z ~row ~iter |> List.map ~f:gf_z_to_bits
+
+    let twiddle_scale_z =
       List.init Twiddle_factor_stream.pipe_length ~f:(fun col ->
-        twiddle_root (row + twiddle_4step_config.rows_per_iteration) col)
+        twiddle_root twiddle_4step_config.rows_per_iteration col)
     ;;
+
+    let twiddle_scale = twiddle_scale_z |> List.map ~f:gf_z_to_bits
+
+    let twiddle_omega_z row =
+      List.init Twiddle_factor_stream.pipe_length ~f:(fun col -> twiddle_root row col)
+    ;;
+
+    let twiddle_omega row = twiddle_omega_z row |> List.map ~f:gf_z_to_bits
 
     let create ?(row = 0) scope (inputs : _ I.t) =
       let open Signal in
@@ -319,11 +325,11 @@ module Make (Config : Config) = struct
       ; addr1 = addr1.value
       ; addr2 = addr2.value
       ; omegas =
-          List.mapi omegas ~f:(fun col omega ->
+          List.mapi omegas ~f:(fun iter omega ->
             match block with
             | None -> omega
             | Some block ->
-              let twiddle_root = mux block.value (twiddle_roots ~row ~col) in
+              let twiddle_root = mux block.value (twiddle_roots ~row ~iter) in
               mux2 twiddle_stage.value twiddle_root omega)
       ; start_twiddles = start_twiddles.value
       ; first_stage = first_stage.value
@@ -331,7 +337,10 @@ module Make (Config : Config) = struct
       ; twiddle_stage = twiddle_stage.value
       ; twiddle_update =
           { valid = twiddle_update.value
-          ; factors = [| Gf.to_bits Gf.one; mux sync_count.value (twiddle_scale row) |]
+          ; factors =
+              [| mux sync_count.value (twiddle_omega row)
+               ; mux sync_count.value twiddle_scale
+              |]
           }
       ; read_write_enable = read_write_enable.value
       ; flip = flip.value
@@ -398,16 +407,16 @@ module Make (Config : Config) = struct
         let a =
           mux2
             (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.valid)
-            i.twiddle_update.factors.(0)
+            (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.factors.(0))
             (pipe ~n:ram_output_pipelining i.d2)
         in
         let b =
           mux2
             (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.valid)
-            i.twiddle_update.factors.(1)
+            (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.factors.(1))
             w
         in
-        gf_mul ~clock:i.clock a b
+        gf_mul ~clock:i.clock a b -- "T"
       in
       let d1 = pipe ~n:(multiply_latency + ram_output_pipelining) i.d1 in
       let piped_twiddle_stage =

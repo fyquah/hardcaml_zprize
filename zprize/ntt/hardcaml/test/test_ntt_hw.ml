@@ -70,23 +70,27 @@ module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
-let compare_results ~logn ~row ~twiddle_4step_config coefs sim_result =
+let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim_result =
   let module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf) in
   Ntt.inverse_dit coefs;
   (* if twiddling is enabled (as used for the 4step implementation), model it. *)
-  (match (twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option) with
-   | None -> ()
-   | Some { rows_per_iteration = _; log_num_iterations = _ } ->
-     let scl = ref Gf.one in
-     let step = ref Gf.one in
-     let n2 = Ntts_r_fun.Roots.inverse.(logn + logn) |> Ntts_r_fun.Gf_z.to_z |> Gf.of_z in
-     for _ = 0 to row - 1 do
-       step := Gf.mul !step n2
-     done;
-     for col = 0 to (1 lsl logn) - 1 do
-       coefs.(col) <- Gf.mul coefs.(col) !scl;
-       scl := Gf.mul !scl !step
-     done);
+  if first_4step_pass
+  then (
+    match (twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option) with
+    | None -> ()
+    | Some { rows_per_iteration = _; log_num_iterations = _ } ->
+      let scl = ref Gf.one in
+      let step = ref Gf.one in
+      let n2 =
+        Ntts_r_fun.Roots.inverse.(logn + logn) |> Ntts_r_fun.Gf_z.to_z |> Gf.of_z
+      in
+      for _ = 0 to row - 1 do
+        step := Gf.mul !step n2
+      done;
+      for col = 0 to (1 lsl logn) - 1 do
+        coefs.(col) <- Gf.mul coefs.(col) !scl;
+        scl := Gf.mul !scl !step
+      done);
   if not ([%equal: Gf.t array] coefs sim_result)
   then
     print_s
@@ -127,6 +131,44 @@ let inverse_ntt_test
       Some waves, sim)
     else None, sim
   in
+  (* twiddle factor debugging*)
+  let show_twiddles ~row =
+    (*
+     {v
+        (twiddle_4step_config (((rows_per_iteration 4) (log_num_iterations 1))))
+        ((omega (9458d4b40d34071e 6e09f5fb7ea3e241 9c6608d4bcc7fa24 6084e6845a912f4d))
+        (scale (9d8f2ad78bfed972 1905d02a5c411f4e 6084e6845a912f4d bf79143ce60ca966))
+        (factors (
+          (9458d4b40d34071e e096f67d425dc907)
+          (6e09f5fb7ea3e241 ef9b216187a69747)
+          (9c6608d4bcc7fa24 e9f2da6cbe22ce11)
+          (6084e6845a912f4d 54d7ae14ff783309))))
+    v}
+
+       {v
+        (twiddle_4step_config (((rows_per_iteration 8) (log_num_iterations 1))))
+        ((omega (9c6608d4bcc7fa24 3aa7040808edacd5 53a620f7879db5e1 e50ec5b5d3093580))
+        (scale (1905d02a5c411f4e bf79143ce60ca966 ba25eb5cd1970aeb f80007ff08000001))
+        (factors (
+          (9c6608d4bcc7fa24 49a282146535171d)
+          (3aa7040808edacd5 341d1690db490d27)
+          (53a620f7879db5e1 856cd3bff20269d1)
+          (e50ec5b5d3093580 c70224c5386a93ec))))
+    v}
+         
+  *)
+    let scale = Ntt.Controller.twiddle_scale_z in
+    let omega = Ntt.Controller.twiddle_omega_z row in
+    let factors =
+      List.init 4 ~f:(fun iter -> Ntt.Controller.twiddle_roots_z ~row ~iter)
+    in
+    print_s
+      [%message
+        (omega : Ntts_r_fun.Gf_z.Hex.t list)
+          (scale : Ntts_r_fun.Gf_z.Hex.t list)
+          (factors : Ntts_r_fun.Gf_z.Hex.t list list)]
+  in
+  Option.iter twiddle_4step_config ~f:(fun _ -> show_twiddles ~row);
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   inputs.clear := Bits.vdd;
@@ -177,7 +219,7 @@ let inverse_ntt_test
   for _ = 0 to 11 do
     Cyclesim.cycle sim
   done;
-  compare_results ~logn ~row ~twiddle_4step_config input_coefs result;
+  compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass input_coefs result;
   waves, result
 ;;
 

@@ -79,6 +79,9 @@ module Make (Config : Config) : sig
       [@@deriving sexp_of, hardcaml]
     end
 
+    val twiddle_roots_z : row:int -> iter:int -> Gf_z.t list
+    val twiddle_scale_z : Gf_z.t list
+    val twiddle_omega_z : int -> Gf_z.t list
     val create : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
     val hierarchy : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
