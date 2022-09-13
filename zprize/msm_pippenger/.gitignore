@@ -17,3 +17,4 @@ test/*.protoinst
 test/*.wcfg
 test/*run_summary
 test/*.wdb
+test/input.points

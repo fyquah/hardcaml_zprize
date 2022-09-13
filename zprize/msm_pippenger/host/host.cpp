@@ -59,7 +59,7 @@ int test_streaming(const std::string& binaryFile, std::string& input_points)
             printf("%s\n", line.c_str());
 
             for (unsigned int i = 0; i < line.length(); i += 8) {
-              std::string byteString = line.substr(i, 8);
+              std::string byteString = line.substr(line.length() - i - 8, 8);
               uint32_t word =  strtol(byteString.c_str(), NULL, 16);
               source_kernel_input[point+(i/8)] = word;
             }
@@ -138,19 +138,6 @@ int test_streaming(const std::string& binaryFile, std::string& input_points)
     OCL_CHECK(err, err = q.finish());
 
     // OPENCL HOST CODE AREA END
-
-    // Print the input and output data
-    std::cout << "Input data:\n"; 
-    for (int i = 0; i < input_size; i++) {
-      std::cout << source_kernel_input[i];
-    }
-    std::cout << std::endl;
-
-    std::cout << "Output data:\n"; 
-    for (int i = 0; i < output_size; i++) {
-      std::cout << source_kernel_output[i];
-    }
-    std::cout << std::endl;
 
 
     std::cout << "STREAMING TEST FINISHED" << std::endl;
