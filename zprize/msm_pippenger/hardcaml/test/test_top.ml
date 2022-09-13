@@ -71,6 +71,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     i.scalar_valid := Bits.gnd;
     reset_cycle_cnt ();
     let result_points = ref [] in
+    let result_point_cnt = ref 0 in
     while Bits.is_gnd !(o.result_point_valid) && !cycle_cnt < timeout do
       Cyclesim.cycle sim;
       Int.incr cycle_cnt
@@ -80,7 +81,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
     let window = ref 0 in
     print_s [%message "Expecting" (Top.num_result_points : int)];
-    while List.length !result_points < Top.num_result_points && !cycle_cnt < timeout do
+    while !result_point_cnt < Top.num_result_points && !cycle_cnt < timeout do
       if Bits.is_vdd !(o.result_point_valid)
       then (
         let result_point =
@@ -102,6 +103,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         result_points
           := { Utils.point = affine; bucket = !bucket; window = !window }
              :: !result_points;
+        Int.incr result_point_cnt;
         bucket
           := if !bucket = 1
              then (

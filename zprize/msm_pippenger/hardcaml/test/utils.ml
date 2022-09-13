@@ -110,28 +110,36 @@ module Make (Config : Msm_pippenger.Config.S) = struct
 
   let pidentity = Ark_bls12_377_g1.create ~x:Z.zero ~y:Z.one ~infinity:true
 
-  (* Does the slow calculation. *)
+  let double p ~times =
+    let p_int = ref p in
+    for _ = 0 to times - 1 do
+      p_int := Ark_bls12_377_g1.mul !p_int ~by:2
+    done;
+    !p_int
+  ;;
+
   let calculate_result_from_fpga (from_fpga : window_bucket_point list) =
-    let result = ref pidentity in
-    let double p ~times =
-      let p_int = ref p in
-      for _ = 0 to times - 1 do
-        p_int := Ark_bls12_377_g1.mul !p_int ~by:2
-      done;
-      !p_int
+    let sorted_by_window =
+      List.group from_fpga ~break:(fun a b -> a.window <> b.window)
     in
-    List.iter from_fpga ~f:(fun p ->
-      let point =
+    let total_result = ref pidentity in
+    List.iteri sorted_by_window ~f:(fun window_idx window ->
+      (* sum this window *)
+      let cnt1 = ref pidentity in
+      let cnt2 = ref pidentity in
+      List.iter window ~f:(fun p ->
         match p.point with
-        | Some p -> ark_bls12_377_of_weiertrass_affine p
-        | None -> pidentity
-      in
-      result
-        := Ark_bls12_377_g1.(
-             mul point ~by:p.bucket
-             |> double ~times:(Config.window_size_bits * p.window)
-             |> add !result));
-    !result
+        | None -> cnt2 := Ark_bls12_377_g1.add !cnt2 !cnt1
+        | Some p ->
+          let p = ark_bls12_377_of_weiertrass_affine p in
+          cnt1 := Ark_bls12_377_g1.add !cnt1 p;
+          cnt2 := Ark_bls12_377_g1.add !cnt2 !cnt1);
+      (* add to running sum *)
+      total_result
+        := Ark_bls12_377_g1.add
+             !total_result
+             (double !cnt2 ~times:(Config.window_size_bits * window_idx)));
+    !total_result
   ;;
 
   let expected (points : Bits.t Msm_input.t array) =
