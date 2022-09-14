@@ -61,7 +61,13 @@ let command_kernel_for_vitis =
           (optional_with_default 3 int)
           ~doc:" Log number of parallel cores"
       and waves = flag "-waves" no_arg ~doc:" Display interactive waveform"
-      and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed" in
+      and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed"
+      and verilator =
+        flag
+          "verilator"
+          no_arg
+          ~doc:" Use verilator (rather than the hardcaml simulator) for simulation"
+      in
       fun () ->
         let rand_state = Random.State.make [| seed |] in
         Random.set_state rand_state;
@@ -88,7 +94,7 @@ let command_kernel_for_vitis =
               Array.init (1 lsl logn) ~f:(fun col ->
                 Z.of_string coefs.((row * (1 lsl logn)) + col)))
         in
-        let waves = Test.run ~verbose ~waves input_coefs in
+        let waves = Test.run ~verilator ~verbose ~waves input_coefs in
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 

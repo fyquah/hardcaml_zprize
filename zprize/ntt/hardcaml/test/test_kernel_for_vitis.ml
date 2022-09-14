@@ -11,6 +11,7 @@ module Make (Config : Ntts_r_fun.Ntt_4step.Config) = struct
   module Kernel = Ntt_4step.Kernel_for_vitis
   module Test_kernel = Test_kernel.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
+  module VSim = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O)
 
   (* Derived parameters *)
   let logn = Config.logn
@@ -28,13 +29,24 @@ module Make (Config : Ntts_r_fun.Ntt_4step.Config) = struct
   let get_results = Test_kernel.get_results
   let transpose = Ntt_sw.transpose
 
-  let create_sim waves =
+  let create_sim ~verilator waves =
     let sim =
-      Sim.create
-        ~config:Cyclesim.Config.trace_all
-        (Kernel.create
-           ~build_mode:Simulation
-           (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
+      if verilator
+      then (
+        let cache_dir = Sys.getenv_exn "HOME" ^/ ".hardcaml-verilator-cache" in
+        VSim.create
+          ~cache_dir
+          ~verbose:true
+          ~clock_names:[ "ap_clk" ]
+          (Kernel.create
+             ~build_mode:Simulation
+             (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ())))
+      else
+        Sim.create
+          ~config:Cyclesim.Config.trace_all
+          (Kernel.create
+             ~build_mode:Simulation
+             (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
     in
     let inputs = Cyclesim.inputs sim in
     let outputs = Cyclesim.outputs sim in
@@ -79,8 +91,13 @@ module Make (Config : Ntts_r_fun.Ntt_4step.Config) = struct
     else raise_s [%message "ERROR: Hardware and software results do not match :("]
   ;;
 
-  let run ?(verbose = false) ?(waves = false) (input_coefs : Z.t array array) =
-    let sim, waves, inputs, outputs = create_sim waves in
+  let run
+    ?(verbose = false)
+    ?(waves = false)
+    ?(verilator = false)
+    (input_coefs : Z.t array array)
+    =
+    let sim, waves, inputs, outputs = create_sim ~verilator waves in
     let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf_z.of_z) in
     let results = ref [] in
     let num_results = ref 0 in

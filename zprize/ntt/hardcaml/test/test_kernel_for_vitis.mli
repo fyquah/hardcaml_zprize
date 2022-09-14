@@ -11,6 +11,7 @@ module Make (Config : Ntts_r_fun.Ntt_4step.Config) : sig
   val run
     :  ?verbose:bool
     -> ?waves:bool
+    -> ?verilator:bool
     -> Z.t array array
     -> Hardcaml_waveterm.Waveform.t option
 end
