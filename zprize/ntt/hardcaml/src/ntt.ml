@@ -91,6 +91,7 @@ module Make (Config : Config) = struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_iter : 'a
         ; first_4step_pass : 'a
         ; twiddle_update_in : 'a [@bits Gf.num_bits]
         }
@@ -147,6 +148,7 @@ module Make (Config : Config) = struct
     ;;
 
     let twiddle_scale = twiddle_scale_z |> List.map ~f:gf_z_to_bits
+    let for_ lo hi f = List.range lo (hi + 1) |> List.map ~f |> Always.proc
 
     let create ?(row = 0) scope (inputs : _ I.t) =
       let open Signal in
@@ -226,6 +228,12 @@ module Make (Config : Config) = struct
                       ; last_stage <--. 0
                       ; twiddle_stage <--. 0
                       ; twiddle_update <--. 0
+                      ; when_
+                          inputs.first_iter
+                          [ for_ 0 (Twiddle_factor_stream.pipe_length - 1) (fun col ->
+                              twiddle_omegas.(col)
+                              <-- (twiddle_root row col |> gf_z_to_bits))
+                          ]
                       ; sm.set_next Looping
                       ]
                   ] )
@@ -460,6 +468,7 @@ module Make (Config : Config) = struct
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_iter : 'a
         ; first_4step_pass : 'a
         ; d1 : 'a [@bits Gf.num_bits]
         ; d2 : 'a [@bits Gf.num_bits]
@@ -496,6 +505,7 @@ module Make (Config : Config) = struct
           { Controller.I.clock = i.clock
           ; clear = i.clear
           ; start = i.start
+          ; first_iter = i.first_iter
           ; first_4step_pass = i.first_4step_pass
           ; twiddle_update_in = datapath.twiddle_update_q
           }
@@ -545,6 +555,7 @@ module Make (Config : Config) = struct
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
+        ; first_iter : 'a
         ; flip : 'a
         ; wr_d : 'a [@bits Gf.num_bits]
         ; wr_en : 'a
@@ -655,6 +666,7 @@ module Make (Config : Config) = struct
             { clock = i.clock
             ; clear = i.clear
             ; start = i.start
+            ; first_iter = i.first_iter
             ; first_4step_pass = i.first_4step_pass
             ; d1 = mux2 first_stage d_in_0 d_out_0
             ; d2 = mux2 first_stage d_in_1 d_out_1

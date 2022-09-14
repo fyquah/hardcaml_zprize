@@ -36,6 +36,7 @@ module Make (Config : Config) = struct
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
+        ; first_iter : 'a
         ; flip : 'a
         ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
         ; wr_en : 'a [@bits cores]
@@ -65,6 +66,7 @@ module Make (Config : Config) = struct
             { Ntt.With_rams.I.clock = i.clock
             ; clear = i.clear
             ; start = i.start
+            ; first_iter = i.first_iter
             ; first_4step_pass = i.first_4step_pass
             ; flip = i.flip
             ; wr_d = i.wr_d.(index)
@@ -102,6 +104,7 @@ module Make (Config : Config) = struct
         ; start_input : 'a
         ; start_output : 'a
         ; start_cores : 'a
+        ; first_iter : 'a
         ; flip : 'a
         }
       [@@deriving sexp_of, hardcaml]
@@ -138,6 +141,7 @@ module Make (Config : Config) = struct
       let start_input = Var.wire ~default:gnd in
       let start_output = Var.wire ~default:gnd in
       let start_cores = Var.wire ~default:gnd in
+      let first_iter = Var.wire ~default:gnd in
       let log_num_iterations = logn - logcores in
       let iteration = Var.reg spec ~width:log_num_iterations in
       let iteration_next = iteration.value +:. 1 in
@@ -157,6 +161,7 @@ module Make (Config : Config) = struct
                       [ iteration <--. 1
                       ; start_input <-- vdd
                       ; start_cores <-- vdd
+                      ; first_iter <--. 1
                       ; sm.set_next Main_iter
                       ]
                   ] )
@@ -185,6 +190,7 @@ module Make (Config : Config) = struct
       ; start_input = start_input.value
       ; start_output = start_output.value
       ; start_cores = start_cores.value
+      ; first_iter = first_iter.value
       ; flip = start_cores.value |: start_output.value
       }
     ;;
@@ -243,6 +249,7 @@ module Make (Config : Config) = struct
           { Parallel_cores.I.clock = i.clock
           ; clear = i.clear
           ; start = controller.start_cores
+          ; first_iter = controller.first_iter
           ; first_4step_pass = i.first_4step_pass
           ; flip = controller.flip
           ; wr_d = i.wr_d

@@ -22,6 +22,7 @@ module Make (Config : Config) : sig
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
+        ; first_iter : 'a
         ; flip : 'a
         ; wr_d : 'a array
         ; wr_en : 'a
@@ -70,6 +71,7 @@ module Make (Config : Config) : sig
         ; start_input : 'a
         ; start_output : 'a
         ; start_cores : 'a
+        ; first_iter : 'a
         ; flip : 'a
         }
       [@@deriving sexp_of, hardcaml]
