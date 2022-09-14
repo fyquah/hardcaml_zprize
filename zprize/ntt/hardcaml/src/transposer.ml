@@ -294,3 +294,8 @@ let create ~transposer_depth_in_cycles scope (i : _ I.t) =
   end) in
   create scope i
 ;;
+
+let hierarchical ~transposer_depth_in_cycles scope (i : _ I.t) =
+  let module H = Hierarchy.In_scope (I) (O) in
+  H.hierarchical ~name:"transposer" ~scope (create ~transposer_depth_in_cycles) i
+;;

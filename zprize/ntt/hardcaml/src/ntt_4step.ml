@@ -36,6 +36,7 @@ module Make (Config : Config) = struct
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
+        ; first_iter : 'a
         ; flip : 'a
         ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
         ; wr_en : 'a [@bits cores]
@@ -65,6 +66,7 @@ module Make (Config : Config) = struct
             { Ntt.With_rams.I.clock = i.clock
             ; clear = i.clear
             ; start = i.start
+            ; first_iter = i.first_iter
             ; first_4step_pass = i.first_4step_pass
             ; flip = i.flip
             ; wr_d = i.wr_d.(index)
@@ -102,6 +104,7 @@ module Make (Config : Config) = struct
         ; start_input : 'a
         ; start_output : 'a
         ; start_cores : 'a
+        ; first_iter : 'a
         ; flip : 'a
         }
       [@@deriving sexp_of, hardcaml]
@@ -122,14 +125,14 @@ module Make (Config : Config) = struct
     (* We need to track 3 external states
 
 
-     1. Input ready
-     2. Core ready
-     3. Output ready
+       1. Input ready
+       2. Core ready
+       3. Output ready
 
-     When each of these occurs, we are ready to start a new set of transforms, and
-     request that the IO subsystem run.
+       When each of these occurs, we are ready to start a new set of transforms, and
+       request that the IO subsystem run.
 
-  *)
+    *)
 
     let create scope (i : _ I.t) =
       let ( -- ) = Scope.naming scope in
@@ -138,6 +141,7 @@ module Make (Config : Config) = struct
       let start_input = Var.wire ~default:gnd in
       let start_output = Var.wire ~default:gnd in
       let start_cores = Var.wire ~default:gnd in
+      let first_iter = Var.wire ~default:gnd in
       let log_num_iterations = logn - logcores in
       let iteration = Var.reg spec ~width:log_num_iterations in
       let iteration_next = iteration.value +:. 1 in
@@ -157,6 +161,7 @@ module Make (Config : Config) = struct
                       [ iteration <--. 1
                       ; start_input <-- vdd
                       ; start_cores <-- vdd
+                      ; first_iter <--. 1
                       ; sm.set_next Main_iter
                       ]
                   ] )
@@ -185,6 +190,7 @@ module Make (Config : Config) = struct
       ; start_input = start_input.value
       ; start_output = start_output.value
       ; start_cores = start_cores.value
+      ; first_iter = first_iter.value
       ; flip = start_cores.value |: start_output.value
       }
     ;;
@@ -243,6 +249,7 @@ module Make (Config : Config) = struct
           { Parallel_cores.I.clock = i.clock
           ; clear = i.clear
           ; start = controller.start_cores
+          ; first_iter = controller.first_iter
           ; first_4step_pass = i.first_4step_pass
           ; flip = controller.flip
           ; wr_d = i.wr_d
@@ -435,7 +442,8 @@ module Make (Config : Config) = struct
       type 'a t =
         { ap_clk : 'a
         ; ap_rst_n : 'a
-        ; controller_to_compute : 'a Axi_stream.Source.t [@rtlmangle true]
+        ; controller_to_compute_phase_1 : 'a Axi_stream.Source.t [@rtlmangle true]
+        ; controller_to_compute_phase_2 : 'a Axi_stream.Source.t [@rtlmangle true]
         ; compute_to_controller_dest : 'a Axi_stream.Dest.t
              [@rtlprefix "compute_to_controller_"]
         }
@@ -445,8 +453,10 @@ module Make (Config : Config) = struct
     module O = struct
       type 'a t =
         { compute_to_controller : 'a Axi_stream.Source.t [@rtlmangle true]
-        ; controller_to_compute_dest : 'a Axi_stream.Dest.t
-             [@rtlprefix "controller_to_compute_"]
+        ; controller_to_compute_phase_1_dest : 'a Axi_stream.Dest.t
+             [@rtlprefix "controller_to_compute_phase_1_"]
+        ; controller_to_compute_phase_2_dest : 'a Axi_stream.Dest.t
+             [@rtlprefix "controller_to_compute_phase_2_"]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -456,28 +466,77 @@ module Make (Config : Config) = struct
       scope
       { I.ap_clk = clock
       ; ap_rst_n = clear_n
-      ; controller_to_compute
+      ; controller_to_compute_phase_1
+      ; controller_to_compute_phase_2
       ; compute_to_controller_dest
       }
       =
       let clear = ~:clear_n in
       let spec = Reg_spec.create ~clock ~clear () in
       let start = wire 1 in
+      let transposer_out_dest = Axi_stream.Dest.Of_signal.wires () in
+      let transposer =
+        Transposer.hierarchical
+          ~transposer_depth_in_cycles:1
+          scope
+          { clock
+          ; clear
+          ; transposer_in =
+              (let { Axi_stream.Source.tvalid; tdata; tkeep; tstrb; tlast } =
+                 controller_to_compute_phase_2
+               in
+               assert (width tdata = 512);
+               { tvalid; tdata; tkeep; tstrb; tlast })
+          ; transposer_out_dest =
+              (let { Axi_stream.Dest.tready } = transposer_out_dest in
+               { tready })
+          }
+      in
+      let transposer_out =
+        let { Transposer.Axi512.Stream.Source.tvalid; tdata; tkeep; tstrb; tlast } =
+          transposer.transposer_out
+        in
+        { Axi_stream.Source.tvalid; tdata; tkeep; tstrb; tlast }
+      in
       let first_4step_pass = reg_fb spec ~enable:start ~width:1 ~f:( ~: ) -- "4STEP" in
-      let { Kernel.O.data_out; data_in_dest; done_ } =
+      let data_in_dest = Axi_stream.Dest.Of_signal.wires () in
+      let { Kernel.O.data_out; data_in_dest = data_in_dest'; done_ } =
         Kernel.hierarchy
           ~build_mode
           scope
           { clock
           ; clear
           ; first_4step_pass
-          ; data_in = controller_to_compute
+          ; data_in =
+              (* Strictly speaking, the following register is not AXI spec
+               * compliant. However, our Load_sm will readily assert tready
+               * even if tvalid has not been asserted yet, so we can cheat here
+               * and get away with the following simple pipelining logic
+               * (rather than a full-fledged datapath register).
+               *)
+              Axi_stream.Source.Of_signal.mux2
+                controller_to_compute_phase_1.tvalid
+                controller_to_compute_phase_1
+                transposer_out
           ; data_out_dest = compute_to_controller_dest
           ; start
           }
       in
-      start <== (done_ &: controller_to_compute.tvalid);
-      { O.compute_to_controller = data_out; controller_to_compute_dest = data_in_dest }
+      (* Note that the transposer.out and controller_to_compute_phase1 shares
+       * the same dest. This is okay, because we statically know that the
+       * C++ krnl_controller will never stream both things simultaneously.
+       *)
+      Axi_stream.Dest.Of_signal.( <== ) transposer_out_dest data_in_dest;
+      Axi_stream.Dest.Of_signal.( <== ) data_in_dest data_in_dest';
+      start
+      <== (done_
+          &: (controller_to_compute_phase_1.tvalid |: controller_to_compute_phase_2.tvalid)
+          );
+      { O.compute_to_controller = data_out
+      ; controller_to_compute_phase_1_dest = data_in_dest
+      ; controller_to_compute_phase_2_dest =
+          { tready = transposer.transposer_in_dest.tready }
+      }
     ;;
   end
 end

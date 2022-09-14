@@ -33,6 +33,8 @@ let%expect_test "addressing" =
     │                  ││    └───────────────────────────────────────────────────────────────│
     │first_4step_pass  ││                                                                    │
     │                  ││────────────────────────────────────────────────────────────────────│
+    │first_iter        ││                                                                    │
+    │                  ││────────────────────────────────────────────────────────────────────│
     │start             ││    ┌───┐                                                           │
     │                  ││────┘   └───────────────────────────────────────────────────────────│
     │                  ││────────────────────────────────────────────────────────────────────│
@@ -61,8 +63,6 @@ let%expect_test "addressing" =
     │                  ││────────────────────────────────────────────────┴───────────────────│
     │                  ││────────────────────────┬───────────────────────┬───┬───┬───┬───┬───│
     │j                 ││ 0                      │1                      │0  │1  │0  │1  │2  │
-    │                  ││────────────────────────┴───────────────────────┴───┴───┴───┴───┴───│
-    │                  ││────────────┬───┬───┬───────────────────────────┬───────┬───────────│
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
@@ -104,6 +104,7 @@ let inverse_ntt_test
   ?twiddle_4step_config
   ?(row = 0)
   ?(first_4step_pass = false)
+  ?(num_runs = 1)
   ~waves
   input_coefs
   =
@@ -133,55 +134,59 @@ let inverse_ntt_test
   in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
+  let result = Array.create ~len:n Gf.zero in
   inputs.clear := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.clear := Bits.gnd;
-  Cyclesim.cycle sim;
-  (* load the ram *)
-  inputs.wr_en <-- 1;
-  Array.iteri input_coefs ~f:(fun addr coef ->
-    inputs.wr_addr <-- addr;
-    inputs.wr_d := Gf.to_bits coef;
-    Cyclesim.cycle sim);
-  inputs.wr_en <-- 0;
-  (* flip rams *)
-  inputs.flip <-- 1;
-  Cyclesim.cycle sim;
-  inputs.flip <-- 0;
-  Cyclesim.cycle sim;
-  (* start the core *)
-  inputs.start <-- 1;
-  inputs.first_4step_pass := Bits.of_bool first_4step_pass;
-  Cyclesim.cycle sim;
-  inputs.start <-- 0;
-  (* poll for done *)
-  while not (Bits.to_bool !(outputs.done_)) do
-    Cyclesim.cycle sim
+  for _ = 0 to num_runs - 1 do
+    Cyclesim.cycle sim;
+    (* load the ram *)
+    inputs.wr_en <-- 1;
+    Array.iteri input_coefs ~f:(fun addr coef ->
+      inputs.wr_addr <-- addr;
+      inputs.wr_d := Gf.to_bits coef;
+      Cyclesim.cycle sim);
+    inputs.wr_en <-- 0;
+    (* flip rams *)
+    inputs.flip <-- 1;
+    Cyclesim.cycle sim;
+    inputs.flip <-- 0;
+    Cyclesim.cycle sim;
+    (* start the core *)
+    inputs.start <-- 1;
+    inputs.first_iter <-- 1;
+    inputs.first_4step_pass := Bits.of_bool first_4step_pass;
+    Cyclesim.cycle sim;
+    inputs.first_iter <-- 0;
+    inputs.start <-- 0;
+    (* poll for done *)
+    while not (Bits.to_bool !(outputs.done_)) do
+      Cyclesim.cycle sim
+    done;
+    (* flush *)
+    for _ = 0 to 1 do
+      Cyclesim.cycle sim
+    done;
+    (* flip rams *)
+    inputs.flip <-- 1;
+    Cyclesim.cycle sim;
+    inputs.flip <-- 0;
+    Cyclesim.cycle sim;
+    (* Read results *)
+    inputs.rd_en <-- 1;
+    inputs.rd_addr <-- 0;
+    Cyclesim.cycle sim;
+    for i = 1 to n do
+      inputs.rd_addr <-- i;
+      result.(i - 1) <- Gf.of_bits !(outputs.rd_q);
+      Cyclesim.cycle sim
+    done;
+    inputs.rd_en <-- 0;
+    for _ = 0 to 11 do
+      Cyclesim.cycle sim
+    done;
+    compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass input_coefs result
   done;
-  (* flush *)
-  for _ = 0 to 1 do
-    Cyclesim.cycle sim
-  done;
-  (* flip rams *)
-  inputs.flip <-- 1;
-  Cyclesim.cycle sim;
-  inputs.flip <-- 0;
-  Cyclesim.cycle sim;
-  (* Read results *)
-  let result = Array.create ~len:n Gf.zero in
-  inputs.rd_en <-- 1;
-  inputs.rd_addr <-- 0;
-  Cyclesim.cycle sim;
-  for i = 1 to n do
-    inputs.rd_addr <-- i;
-    result.(i - 1) <- Gf.of_bits !(outputs.rd_q);
-    Cyclesim.cycle sim
-  done;
-  inputs.rd_en <-- 0;
-  for _ = 0 to 11 do
-    Cyclesim.cycle sim
-  done;
-  compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass input_coefs result;
   waves, result
 ;;
 
@@ -257,4 +262,41 @@ let%expect_test "8pt random" =
       ed14bc2fbdc30962
       6c8e69de2cabb133
       9c83c8e1d49cd861)) |}]
+;;
+
+let%expect_test "8pt random - multiple runs of first pass with twiddling" =
+  let waves, result =
+    inverse_ntt_test
+      ~twiddle_4step_config:{ rows_per_iteration = 1; log_num_iterations = 1 }
+      ~first_4step_pass:true
+      ~num_runs:4
+      ~waves:false
+      ([| "0xcef967e3e1d0860e"
+        ; "0x44be7570bcd4f9df"
+        ; "0xf4848ed283e858f2"
+        ; "0xa3a3a47eeb6f76f6"
+        ; "0xa12d1d0b69c4108b"
+        ; "0xeb285d19459ef6c3"
+        ; "0x10d812558ad9c103"
+        ; "0xd19d3e319d1b6b4a"
+       |]
+      |> Array.map ~f:(fun z -> Z.of_string z |> Gf.of_z))
+  in
+  let result =
+    Array.map result ~f:(fun b ->
+      Gf.to_bits b |> Bits.to_constant |> Constant.to_hex_string ~signedness:Unsigned)
+  in
+  print_s [%message (result : string array)];
+  Option.iter waves ~f:print_waves;
+  [%expect
+    {|
+    (result (
+      be59f92b7421834d
+      2f9d5c40353e77af
+      2123b4ddfa163c43
+      e8e91fe2dbddbd58
+      4b47430271042298
+      ca17468b67bdb086
+      36049566b67040bc
+      674f8c9b46dad24c)) |}]
 ;;

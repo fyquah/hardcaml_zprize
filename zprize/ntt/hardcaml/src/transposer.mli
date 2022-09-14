@@ -22,3 +22,9 @@ module O : sig
 end
 
 val create : transposer_depth_in_cycles:int -> Scope.t -> Signal.t I.t -> Signal.t O.t
+
+val hierarchical
+  :  transposer_depth_in_cycles:int
+  -> Scope.t
+  -> Signal.t I.t
+  -> Signal.t O.t

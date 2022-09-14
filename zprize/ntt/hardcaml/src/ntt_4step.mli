@@ -22,6 +22,7 @@ module Make (Config : Config) : sig
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
+        ; first_iter : 'a
         ; flip : 'a
         ; wr_d : 'a array
         ; wr_en : 'a
@@ -70,6 +71,7 @@ module Make (Config : Config) : sig
         ; start_input : 'a
         ; start_output : 'a
         ; start_cores : 'a
+        ; first_iter : 'a
         ; flip : 'a
         }
       [@@deriving sexp_of, hardcaml]
@@ -188,7 +190,8 @@ module Make (Config : Config) : sig
       type 'a t =
         { ap_clk : 'a
         ; ap_rst_n : 'a
-        ; controller_to_compute : 'a Axi_stream.Source.t
+        ; controller_to_compute_phase_1 : 'a Axi_stream.Source.t
+        ; controller_to_compute_phase_2 : 'a Axi_stream.Source.t
         ; compute_to_controller_dest : 'a Axi_stream.Dest.t
         }
       [@@deriving sexp_of, hardcaml]
@@ -197,7 +200,8 @@ module Make (Config : Config) : sig
     module O : sig
       type 'a t =
         { compute_to_controller : 'a Axi_stream.Source.t
-        ; controller_to_compute_dest : 'a Axi_stream.Dest.t
+        ; controller_to_compute_phase_1_dest : 'a Axi_stream.Dest.t
+        ; controller_to_compute_phase_2_dest : 'a Axi_stream.Dest.t
         }
       [@@deriving sexp_of, hardcaml]
     end

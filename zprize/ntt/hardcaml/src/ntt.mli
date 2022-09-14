@@ -44,6 +44,7 @@ module Make (Config : Config) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_iter : 'a
         ; first_4step_pass : 'a
         ; twiddle_update_in : 'a [@bits Gf.num_bits]
         }
@@ -117,6 +118,7 @@ module Make (Config : Config) : sig
         { clock : 'a
         ; clear : 'a
         ; start : 'a
+        ; first_iter : 'a
         ; first_4step_pass : 'a
         ; d1 : 'a
         ; d2 : 'a
@@ -154,6 +156,7 @@ module Make (Config : Config) : sig
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
+        ; first_iter : 'a
         ; flip : 'a
         ; wr_d : 'a
         ; wr_en : 'a

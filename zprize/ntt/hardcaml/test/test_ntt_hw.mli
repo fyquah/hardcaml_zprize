@@ -5,6 +5,7 @@ val inverse_ntt_test
   :  ?twiddle_4step_config:Ntts_r_fun.Ntt.twiddle_4step_config
   -> ?row:int
   -> ?first_4step_pass:bool
+  -> ?num_runs:int
   -> waves:bool
   -> Gf.t array
   -> Hardcaml_waveterm.Waveform.t option * Gf.t array
