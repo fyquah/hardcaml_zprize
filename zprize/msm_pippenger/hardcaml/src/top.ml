@@ -299,7 +299,7 @@ module Make (Config : Config.S) = struct
               ; when_ start [ sm.set_next Init_to_identity ]
               ] )
           ; ( Init_to_identity
-            , [ bucket_address <-- bucket_address.value +:. 1
+            , [ bucket_address <-- bucket_address.value -- "bucket_address" +:. 1
               ; when_
                   (bucket_address.value ==:. (1 lsl last_window_size_bits) - 1)
                   [ ctrl_start <-- vdd; sm.set_next Working ]
@@ -328,7 +328,7 @@ module Make (Config : Config.S) = struct
                   [ bucket_address <-- bucket_address.value -:. 1
                   ; when_
                       (bucket_address.value ==:. 1)
-                      [ window_address <-- window_address.value +:. 1
+                      [ window_address <-- window_address.value -- "window_address" +:. 1
                       ; if_
                           (window_address.value ==:. num_windows - 2)
                           [ bucket_address <--. (1 lsl last_window_size_bits) - 1 ]
@@ -345,7 +345,10 @@ module Make (Config : Config.S) = struct
     let fifo_capacity = 32 in
     let fifo_q =
       let wr =
-        pipeline spec ~n:(ram_lookup_latency + ram_read_latency) (sm.is Read_result)
+        pipeline
+          spec
+          ~n:(ram_lookup_latency + ram_read_latency)
+          (sm.is Read_result &: fifo_q_has_space -- "fifo_q_has_space")
         -- "fifo_wr"
       in
       let d =

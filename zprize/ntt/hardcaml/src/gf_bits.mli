@@ -4,6 +4,10 @@ open! Hardcaml
 module Make (Bits : Comb.S) : sig
   include Gf_intf.S
 
+  module Hex : sig
+    type nonrec t = t [@@deriving sexp_of]
+  end
+
   (** {2 Misc} *)
 
   val num_bits : int

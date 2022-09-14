@@ -1,6 +1,10 @@
 open Base
 include Gf_intf.S
 
+module Hex : sig
+  type nonrec t = t [@@deriving sexp_of]
+end
+
 (** {2 Misc} *)
 
 val inverse : t -> t

@@ -104,17 +104,20 @@ let run_test num_inputs =
   let result_points = ref [] in
   let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
   let window = ref 0 in
-  while Bits.is_gnd !(o.fpga_to_host.tlast) && !cycle_cnt < timeout do
-    i.fpga_to_host_dest.tready := Bits.random ~width:1;
+  let is_last = ref false in
+  print_s [%message "Expecting" (Top.num_result_points : int)];
+  while (not !is_last) && !cycle_cnt < timeout do
+    (* i.fpga_to_host_dest.tready := Bits.random ~width:1; *)
     Int.incr cycle_cnt;
     if Bits.is_vdd !(i.fpga_to_host_dest.tready) && Bits.is_vdd !(o.fpga_to_host.tvalid)
     then (
       (output_buffer
          := Bits.(sel_top (!(o.fpga_to_host.tdata) @: !output_buffer) output_buffer_bits));
       Int.incr word;
-      if !word = num_clocks_per_input
+      if !word = num_clocks_per_output
       then (
         word := 0;
+        is_last := Bits.to_bool !(o.fpga_to_host.tlast);
         let to_z b = Bits.to_constant b |> Constant.to_z ~signedness:Unsigned in
         let result_point = Utils.Extended.Of_bits.unpack !output_buffer in
         let extended : Utils.Twisted_edwards.extended =
@@ -141,7 +144,9 @@ let run_test num_inputs =
              else !bucket - 1));
     Cyclesim.cycle sim
   done;
-  let fpga_calculated_result = Utils.calculate_result_from_fpga !result_points in
+  print_s [%message "Got" (List.length !result_points : int)];
+  let result = { waves; points = List.rev !result_points; inputs } in
+  let fpga_calculated_result = Utils.calculate_result_from_fpga result.points in
   let expected = Utils.expected inputs in
   if not (Ark_bls12_377_g1.equal_affine fpga_calculated_result expected)
   then
@@ -151,12 +156,15 @@ let run_test num_inputs =
           (expected : Ark_bls12_377_g1.affine)
           (fpga_calculated_result : Ark_bls12_377_g1.affine)]
   else print_s [%message "PASS"];
-  { waves; points = !result_points; inputs }
+  result
 ;;
 
 let%expect_test "Test over small input size" =
   let _result = run_test 8 in
-  [%expect {|
+  [%expect
+    {|
+    (Expecting (Top.num_result_points 10))
+    (Got ("List.length (!result_points)" 10))
     PASS |}]
 ;;
 
