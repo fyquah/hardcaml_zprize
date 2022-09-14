@@ -26,6 +26,14 @@ extern "C" {
         batch_size: usize,
         scalars: *const Fr,
     ) -> ();
+
+    fn zprize_msm_pippenger_mult(
+        context: *mut c_void,
+        out: *mut u64,
+        batch_size: usize,
+        scalars: *const Fr,
+    ) -> ();
+
 }
 
 #[repr(C)]
@@ -64,12 +72,22 @@ pub fn multi_scalar_mult<G: AffineCurve>(
         let result_ptr =
             &mut *(&mut ret as *mut Vec<G::Projective> as *mut Vec<u64>);
 
+        let pippenger = true;
+        if pippenger {
+        zprize_msm_pippenger_mult(
+            context.context,
+            result_ptr.as_mut_ptr(),
+            batch_size,
+            scalars as *const _ as *const Fr,
+        );
+        } else {
         zprize_msm_fpga_mult(
             context.context,
             result_ptr.as_mut_ptr(),
             batch_size,
             scalars as *const _ as *const Fr,
         );
+        }
     };
 
     ret

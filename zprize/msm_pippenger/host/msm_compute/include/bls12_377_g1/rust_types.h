@@ -13,6 +13,35 @@ struct biginteger256_t {
     std::cout << "getBit" << std::endl;
     return (data[i / 64] >> (i % 64)) & 1;
   }
+  inline uint64_t getSlice(int start, int len) {
+    if (len >= 64) {
+      throw "Invalid";
+    }
+    int end = start + len - 1;
+
+    int start_word = start / 64;
+    int start_offset = start % 64;
+    int end_word = end / 64;
+    int end_offset = end % 64;
+
+    uint64_t res = 0ULL;
+    int cur_offset = 0;
+    for (int word = start_word; word <= end_word; word++) {
+      uint64_t cur_word = data[word];
+      int cur_len = 64;
+      if (word == end_word) {
+        cur_len = end_offset + 1;
+      }
+      if (word == start_word) {
+        cur_word >>= start_offset;
+        cur_len -= start_offset;
+      }
+      cur_word &= ((1ULL << cur_len) - 1ULL);
+      res |= ((cur_word) << cur_offset);
+      cur_offset += cur_len;
+    }
+    return res;
+  }
 };
 
 struct biginteger384_t {

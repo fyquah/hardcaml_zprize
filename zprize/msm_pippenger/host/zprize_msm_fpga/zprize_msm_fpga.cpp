@@ -45,3 +45,10 @@ extern "C" void zprize_msm_fpga_mult(ZprizeMsmFpgaDriver *context, g1_projective
     context->naive_msm(out + i, scalars + (i * context->numPoints()));
   }
 }
+
+extern "C" void zprize_msm_pippenger_mult(ZprizeMsmFpgaDriver *context, g1_projective_t *out,
+                                          uint64_t batch_size, biginteger256_t *scalars) {
+  for (uint64_t i = 0; i < batch_size; i++) {
+    context->pippenger_msm(out + i, scalars + (i * context->numPoints()));
+  }
+}

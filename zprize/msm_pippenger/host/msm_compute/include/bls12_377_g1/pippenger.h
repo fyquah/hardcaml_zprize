@@ -3,11 +3,12 @@
 
 #include "bls12_377_g1.h"
 namespace bls12_377_g1 {
+const int NUM_WINDOWS = 21;
+inline int NUM_WINDOW_BITS(int window_idx) { return ((window_idx == 0) ? 13 : 12); }
+inline int NUM_BUCKETS(int window_idx) { return (1 << (NUM_WINDOW_BITS(window_idx))); }
 
 void triangleSumUpdate(bls12_377_g1::Xyzt &accum, bls12_377_g1::Xyzt &running,
                        const bls12_377_g1::Xyzt &new_point) {
-  printf("CALLED triangleSumUpdate\n");
-
   // running += new_point
   running.generalUnifiedAddInto(new_point);
 
@@ -25,6 +26,7 @@ void finalSumUpdate(bls12_377_g1::Xyzt &accum, bls12_377_g1::Xyzt &triangle_sum,
   // accum += 2^(index) * triangle_sum
   accum.generalUnifiedAddInto(triangle_sum);
 }
+
 }  // namespace bls12_377_g1
 
 #endif
