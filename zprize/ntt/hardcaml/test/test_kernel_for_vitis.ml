@@ -5,7 +5,7 @@ module N4 = Ntts_r_fun.Ntt_4step
 module Gf_z = Ntts_r_fun.Gf_z
 module Gf_bits = Ntts_r_fun.Gf_bits.Make (Bits)
 
-module Make (Config : Ntts_r_fun.Ntt.Config) = struct
+module Make (Config : Ntts_r_fun.Ntt_4step.Config) = struct
   module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Config)
   module Ntt_sw = Ntts_r_fun.Ntt_sw.Make (Gf_z)
   module Kernel = Ntt_4step.Kernel_for_vitis
@@ -130,7 +130,7 @@ module Make (Config : Ntts_r_fun.Ntt.Config) = struct
     let pass2 = transpose (run_pass (transpose pass1)) in
     cycle ~n:4 ();
     (try expected ~verbose input_coefs pass2 with
-    | e -> print_s [%message "RAISED :(" (e : exn)]);
+     | e -> print_s [%message "RAISED :(" (e : exn)]);
     waves
   ;;
 end

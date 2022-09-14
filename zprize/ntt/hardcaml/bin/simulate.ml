@@ -11,6 +11,11 @@ let command_kernel =
       and logn = anon ("LOGN" %: int)
       and first_4step_pass =
         flag "-first-4step-pass" no_arg ~doc:" Run first pass (outputs are twiddled)"
+      and logcores =
+        flag
+          "-log-cores"
+          (optional_with_default 3 int)
+          ~doc:" Log number of parallel cores"
       and waves = flag "-waves" no_arg ~doc:" Display interactive waveform"
       and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed" in
       fun () ->
@@ -21,8 +26,13 @@ let command_kernel =
             let logn = logn
 
             let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
-              Some { rows_per_iteration = 8; log_num_iterations = logn - 3 }
+              Some
+                { rows_per_iteration = 1 lsl logcores
+                ; log_num_iterations = logn - logcores
+                }
             ;;
+
+            let logcores = logcores
           end)
         in
         let input_coefs =
@@ -45,6 +55,11 @@ let command_kernel_for_vitis =
       let verbose = flag "-verbose" no_arg ~doc:" Print detailed results"
       and input_coefs = flag "-inputs" (optional string) ~doc:" Input coefficients"
       and logn = anon ("LOGN" %: int)
+      and logcores =
+        flag
+          "-log-cores"
+          (optional_with_default 3 int)
+          ~doc:" Log number of parallel cores"
       and waves = flag "-waves" no_arg ~doc:" Display interactive waveform"
       and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed" in
       fun () ->
@@ -55,8 +70,13 @@ let command_kernel_for_vitis =
             let logn = logn
 
             let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
-              Some { rows_per_iteration = 8; log_num_iterations = logn - 3 }
+              Some
+                { rows_per_iteration = 1 lsl logcores
+                ; log_num_iterations = logn - logcores
+                }
             ;;
+
+            let logcores = logcores
           end)
         in
         let input_coefs =

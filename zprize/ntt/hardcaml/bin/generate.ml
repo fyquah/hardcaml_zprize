@@ -14,6 +14,8 @@ let command_kernel =
             let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
               Some { rows_per_iteration = 8; log_num_iterations = logn - 3 }
             ;;
+
+            let logcores = 3
           end)
         in
         let module Kernel_for_vitis = Ntt_4step.Kernel_for_vitis in

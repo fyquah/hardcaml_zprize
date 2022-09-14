@@ -5,6 +5,7 @@ open Hardcaml_waveterm
 module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (struct
   let logn = 4
   let twiddle_4step_config = None
+  let logcores = 3
 end)
 
 module Kernel = Ntt_4step.Kernel
