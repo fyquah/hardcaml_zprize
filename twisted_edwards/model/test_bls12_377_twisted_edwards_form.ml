@@ -12,6 +12,27 @@ let%expect_test "Modulo square root" =
   [%expect {| 3 |}]
 ;;
 
+let%expect_test "some parameters" =
+  let open Modulo_ops in
+  let print_s = Stdio.print_s in
+  let bls12_377_twisted_edwards_params = Lazy.force Bls12_377_params.twisted_edwards in
+  let k = of_int 2 * bls12_377_twisted_edwards_params.d in
+  let k_over_2 = k / of_int 2 in
+  let one_fourth = of_int 1 / of_int 4 in
+  let sqrt_k_over_8 = modulo_square_root (k / of_int 8) in
+  print_s [%message (k : z) (k_over_2 : z) (one_fourth : z) (sqrt_k_over_8 : z)];
+  [%expect
+    {|
+    ((k
+      0x177f95e65b6bf7fc2f8f4fbe3b4cc6e2aa705a3f51e66d9fdd06ffd95626c6a3adc8cbbf1c2c1ba4dcada97b292007)
+     (k_over_2
+      0xe2dcedff103e7161354a88156e4b00fe66a526a0237cfe5f683497c9afb7635d5c9307f78e160e14f2b6d4bd949004)
+     (one_fourth
+      0x142abb491d3ccb014ac44505178f6ec539a237640b7ceab573689a3cb86f600114885f32400000063c6900000000001)
+     (sqrt_k_over_8
+      0xf088ce0ef922c48fbe3a4741370464d088f3930c94bc99a76b16cadb0fd613a2bb87e99f0e3d3e90872125684d6e00)) |}]
+;;
+
 let%expect_test "bls12-377 params in various forms" =
   Stdio.print_s [%message (p : z)];
   [%expect
@@ -37,6 +58,19 @@ let%expect_test "bls12-377 params in various forms" =
       0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000000)
      (d
       0xe2dcedff103e7161354a88156e4b00fe66a526a0237cfe5f683497c9afb7635d5c9307f78e160e14f2b6d4bd949004)
+     (twisted_scale
+      0x363b01df81a0405e86206f2cc504d147752b91b664d91d4c82fed217902ee874354485836fa3ccba3af539c173857b)) |}];
+  let montgomery_params =
+    (*C.twisted_edwards_params_to_montgomery_params bls12_377_twisted_edwards_params*)
+    C.weierstrass_params_to_montgomery_params bls12_377_params
+  in
+  Stdio.print_s ([%sexp_of: Montgomery_curve.params] montgomery_params);
+  [%expect
+    {|
+    ((c_A
+      0x32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc01)
+     (c_B
+      0x-10f272020f118a1dc07a44b1eeea84d7a504665d66cc8c0ff643cca95ccc0d0f793b8504b428d43401d618f0339eab)
      (twisted_scale
       0x363b01df81a0405e86206f2cc504d147752b91b664d91d4c82fed217902ee874354485836fa3ccba3af539c173857b)) |}]
 ;;
@@ -76,17 +110,31 @@ let generate_point =
   |> Quickcheck.Generator.return
 ;;
 
-let%expect_test "Verify that res_extended.x = 0 (ignore y) where res_extended = p + -p" =
+let mixed_add ~z ~host_precompute ~bls12_377_twisted_edwards_params fpga_point host_point =
+  let fpga_point = ark_bls12_377_g1_to_twisted_edewards_affine fpga_point in
+  let host_point = ark_bls12_377_g1_to_twisted_edewards_affine host_point in
+  if host_precompute
+  then
+    Twisted_edwards_curve.add_unified_precomputed
+      (Twisted_edwards_curve.affine_to_fpga_internal_representation ~z fpga_point)
+      (Twisted_edwards_curve.affine_to_host_extended_representation
+         bls12_377_twisted_edwards_params
+         host_point)
+    |> Twisted_edwards_curve.fpga_internal_representation_to_affine
+  else
+    Twisted_edwards_curve.add_unified
+      bls12_377_twisted_edwards_params
+      (Twisted_edwards_curve.affine_to_extended ~z fpga_point)
+      (Twisted_edwards_curve.affine_to_affine_with_t host_point)
+    |> Twisted_edwards_curve.extended_to_affine
+;;
+
+let randomized_additive_inverse_test ~host_precompute =
   let bls12_377_twisted_edwards_params = Lazy.force Bls12_377_params.twisted_edwards in
   let test ~z p1 =
     let p2 = Ark_bls12_377_g1.neg p1 in
     let obtained =
-      let a = ark_bls12_377_g1_to_twisted_edewards_affine p1 in
-      let b = ark_bls12_377_g1_to_twisted_edewards_affine p2 in
-      Twisted_edwards_curve.add_unified
-        bls12_377_twisted_edwards_params
-        (Twisted_edwards_curve.affine_to_extended ~z a)
-        (Twisted_edwards_curve.affine_to_affine_with_t b)
+      mixed_add ~z ~host_precompute ~bls12_377_twisted_edwards_params p1 p2
     in
     assert (Z.equal obtained.x Z.zero)
   in
@@ -102,17 +150,28 @@ let%expect_test "Verify that res_extended.x = 0 (ignore y) where res_extended = 
     ~f:(fun (p1, z) -> test p1 ~z)
 ;;
 
-let%expect_test "Randomized bls12-377 adding equivalence with wierstrass form addition" =
+let%expect_test "Verify that res_extended.x = 0 (ignore y) where res_extended = p + -p \
+                 (no host precompute)"
+  =
+  randomized_additive_inverse_test ~host_precompute:false
+;;
+
+let%expect_test "Verify that res_extended.x = 0 (ignore y) where res_extended = p + -p \
+                 (with host precompute)"
+  =
+  randomized_additive_inverse_test ~host_precompute:true
+;;
+
+let randomized_sum_test ~host_precompute =
   let bls12_377_twisted_edwards_params = Lazy.force Bls12_377_params.twisted_edwards in
-  let test ~z a b =
+  let test ~z fpga_point host_point =
     let obtained_in_twisted_edwards_form =
-      let a = ark_bls12_377_g1_to_twisted_edewards_affine a in
-      let b = ark_bls12_377_g1_to_twisted_edewards_affine b in
-      Twisted_edwards_curve.add_unified
-        bls12_377_twisted_edwards_params
-        (Twisted_edwards_curve.affine_to_extended ~z a)
-        (Twisted_edwards_curve.affine_to_affine_with_t b)
-      |> Twisted_edwards_curve.extended_to_affine
+      mixed_add
+        ~z
+        ~host_precompute
+        ~bls12_377_twisted_edwards_params
+        fpga_point
+        host_point
     in
     let obtained =
       match
@@ -122,14 +181,14 @@ let%expect_test "Randomized bls12-377 adding equivalence with wierstrass form ad
       | None -> Ark_bls12_377_g1.create ~x:Z.zero ~y:Z.one ~infinity:true
       | Some res -> Ark_bls12_377_g1.create ~x:res.x ~y:res.y ~infinity:false
     in
-    let expected = Ark_bls12_377_g1.add a b in
+    let expected = Ark_bls12_377_g1.add fpga_point host_point in
     if not (Ark_bls12_377_g1.equal_affine obtained expected)
     then
       raise_s
         [%message
           "Obtained and expected mismatches"
-            (a : Ark_bls12_377_g1.affine)
-            (b : Ark_bls12_377_g1.affine)
+            (fpga_point : Ark_bls12_377_g1.affine)
+            (host_point : Ark_bls12_377_g1.affine)
             (obtained_in_twisted_edwards_form : Twisted_edwards_curve.affine)
             (obtained : Ark_bls12_377_g1.affine)
             (expected : Ark_bls12_377_g1.affine)]
@@ -176,4 +235,16 @@ let%expect_test "Randomized bls12-377 adding equivalence with wierstrass form ad
     ~trials:10_000
     generate
     ~f:(fun (p1, p2, z) -> test p1 p2 ~z)
+;;
+
+let%expect_test "Randomized bls12-377 adding equivalence with wierstrass form addition \
+                 (no host precompute)"
+  =
+  randomized_sum_test ~host_precompute:false
+;;
+
+let%expect_test "Randomized bls12-377 adding equivalent with wierstrass form addition \
+                 (with host precompute)"
+  =
+  randomized_sum_test ~host_precompute:true
 ;;

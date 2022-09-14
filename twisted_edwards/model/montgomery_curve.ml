@@ -1,8 +1,11 @@
+open Bls12_377_util
+
 type params =
-  { c_A : Z.t
-  ; c_B : Z.t
-  ; twisted_scale : Z.t
+  { c_A : z
+  ; c_B : z
+  ; twisted_scale : z
   }
+[@@deriving sexp_of]
 
 type affine =
   { x : Z.t

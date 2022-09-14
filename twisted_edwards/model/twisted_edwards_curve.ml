@@ -75,11 +75,76 @@ let add_unified
   ({ x = x2; y = y2; t = t2 } : affine_with_t)
   : extended
   =
+  (* https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-3 *)
   let open Modulo_ops in
   let c_A = (y1 - x1) * (y2 - x2) in
   let c_B = (y1 + x1) * (y2 + x2) in
   let c_C = t1 * of_int 2 * d * t2 in
   let c_D = of_int 2 * z1 in
+  let c_E = c_B - c_A in
+  let c_F = c_D - c_C in
+  let c_G = c_D + c_C in
+  let c_H = c_B + c_A in
+  let x3 = c_E * c_F in
+  let y3 = c_G * c_H in
+  let t3 = c_E * c_H in
+  let z3 = c_F * c_G in
+  { x = x3; y = y3; z = z3; t = t3 }
+;;
+
+(*
+ * host precomputed optimization ------
+ *  - Represent host point (x,y,t) as (y-x,y+x,4dt)
+ *  - Represent fpga point (x,y,z,t) as (2x,2y,4z,t)
+ * Then, we get rid of all the constants from the equations (below)
+ *)
+
+(* not a real projective representation - xy != t *)
+let affine_with_t_to_host_extended_representation
+  ({ d; _ } : params)
+  ({ x; y; t } : affine_with_t)
+  : affine_with_t
+  =
+  let open Modulo_ops in
+  let x_host = (y - x) / of_int 2 in
+  let y_host = (y + x) / of_int 2 in
+  let t_host = of_int 4 * d * t in
+  { x = x_host; y = y_host; t = t_host }
+;;
+
+let affine_to_host_extended_representation params affine : affine_with_t =
+  affine_with_t_to_host_extended_representation params (affine_to_affine_with_t affine)
+;;
+
+let to_fpga_internal_representation ({ x; y; z; t } : extended) : extended =
+  let open Modulo_ops in
+  { x = of_int 2 * x; y = of_int 2 * y; z = of_int 4 * z; t }
+;;
+
+let affine_to_fpga_internal_representation ~z (p : affine) : extended =
+  to_fpga_internal_representation (affine_to_extended ~z p)
+;;
+
+let from_fpga_internal_representation ({ x; y; z; t } : extended) : extended =
+  let open Modulo_ops in
+  { x = x / of_int 2; y = y / of_int 2; z = z / of_int 4; t }
+;;
+
+let fpga_internal_representation_to_affine (p : extended) : affine =
+  extended_to_affine (from_fpga_internal_representation p)
+;;
+
+(* (2x1,2y1,4z1,t1) + ((y2-x2)/2,(y2+x2)/2,4d*t2) -> (2x3,2y3,4z3,t3) *)
+let add_unified_precomputed
+  ({ x = x1; y = y1; z = z1; t = t1 } : extended)
+  ({ x = x_host; y = y_host; t = t_host } : affine_with_t)
+  : extended
+  =
+  let open Modulo_ops in
+  let c_A = (y1 - x1) * x_host in
+  let c_B = (y1 + x1) * y_host in
+  let c_C = t1 * t_host in
+  let c_D = z1 in
   let c_E = c_B - c_A in
   let c_F = c_D - c_C in
   let c_G = c_D + c_C in

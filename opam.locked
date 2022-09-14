@@ -1,4 +1,6 @@
 name: "fantastic_carnival"
+synopsis: "Hardware cryptography"
+maintainer: ["Hardcamls"]
 opam-version: "2.0"
 depends: [
   "astring" {= "0.8.5"}
@@ -38,6 +40,7 @@ depends: [
   "hardcaml" {= "v0.15.0"}
   "hardcaml_circuits" {= "v0.15.0"}
   "hardcaml_verify" {= "v0.15.0"}
+  "hardcaml_verilator" {= "v0.15.0"}
   "hardcaml_waveterm" {= "v0.15.0"}
   "hardcaml_xilinx" {= "v0.15.0"}
   "int_repr" {= "v0.15.0"}

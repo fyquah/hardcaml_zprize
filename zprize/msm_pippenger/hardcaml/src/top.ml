@@ -5,7 +5,7 @@ open Signal
 
 include struct
   open Twisted_edwards_lib
-  module Adder_config = Mixed_add.Config
+  module Adder_config = Config
   module Mixed_add = Mixed_add
   module Num_bits = Num_bits
   module Xyzt = Xyzt
