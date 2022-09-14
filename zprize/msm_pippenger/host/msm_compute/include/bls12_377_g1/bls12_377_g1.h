@@ -103,6 +103,13 @@ class GFq {
   // does not set a value
   GFq() { init_empty(v); }
 
+  // Calling the copy constructor will make a new copy of mpz_t with
+  // identical values.
+  GFq(const GFq &other) {
+    init_empty(v);
+    mpz_set(v, other.v);
+  }
+
   ~GFq() { /*mpz_clear(v);*/
   }
 

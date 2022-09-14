@@ -45,7 +45,12 @@ set(NUMA_COMMAND numactl -i all)
 function(add_benchmark NAME)
   add_executable(bench_${NAME} bench_${NAME}.cpp)
   target_link_libraries(bench_${NAME} PRIVATE msm_compute ${benchmark_main_LIBRARIES})
-  target_compile_options(bench_${NAME} PRIVATE -Wall -Wextra -Wfatal-errors -march=native)
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    # -march=native not supported by clang on my M1 mac
+    target_compile_options(bench_${NAME} PRIVATE -Wall -Wextra -Wfatal-errors)
+  else ()
+    target_compile_options(bench_${NAME} PRIVATE -Wall -Wextra -Wfatal-errors -march=native)
+  endif()
 
   # numactl
   add_custom_target(numactl_bench_${NAME}
