@@ -1,15 +1,10 @@
 open Core
 open Hardcaml
+open Signal
 
-type fn = Snarks_r_fun.Ec_fpn_ops_config.fn =
+type fn = Elliptic_curve_lib.Ec_fpn_ops_config.fn =
   { latency : int
-  ; impl :
-      scope:Scope.t
-      -> clock:Signal.t
-      -> enable:Signal.t
-      -> Signal.t
-      -> Signal.t option
-      -> Signal.t
+  ; impl : scope:Scope.t -> clock:Signal.t -> enable:Signal.t -> t -> t option -> t
   }
 
 type t =
@@ -21,6 +16,7 @@ type t =
   ; p : Z.t
   ; a : Z.t
   ; d : Z.t
+  ; output_pipeline_stages : int
   }
 
 val reduce

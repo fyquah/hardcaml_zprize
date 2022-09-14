@@ -11,7 +11,14 @@ module External = struct
      * *)
     let%bind.List extension = [ "so"; "dylib" ] in
     let%bind.List dir =
-      [ "."; "../"; "../../"; "../../../"; "../../../.."; "../../../../.." ]
+      [ "."
+      ; "../"
+      ; "../../"
+      ; "../../../"
+      ; "../../../.."
+      ; "../../../../.."
+      ; "../../../../../../"
+      ]
     in
     [ dir ^/ "rust/ark_bls12_377_g1/target/debug/libark_bls12_377_g1." ^ extension ]
   ;;
@@ -20,7 +27,14 @@ module External = struct
     (* Unfortunately, We can't install Core_unix on M1 Macs, so we are stuck
      * with Caml.Sys, rather than Sys_unix, for the time-being.
      *)
-    let filename = List.find_exn potential_dl_filenames ~f:Caml.Sys.file_exists in
+    let filename =
+      match List.find potential_dl_filenames ~f:Caml.Sys.file_exists with
+      | Some filename -> filename
+      | None ->
+        failwith
+          "Cannot find Rust ark_bls12_377_g1 - did you build it? Run `cargo build` in \
+           rust/ark_bls12_377_g1 first."
+    in
     ignore (Dl.dlopen ~filename ~flags:[ RTLD_LAZY; RTLD_GLOBAL ] : Dl.library)
   ;;
 
@@ -126,11 +140,11 @@ let mul (a : affine) ~by =
 
 let buffer_to_z arr =
   String.init (8 * 6) ~f:(fun i ->
-      let word = i / 8 in
-      let shift = i % 8 * 8 in
-      Int64.O.((CArray.get arr word lsr shift) land 0xFFL)
-      |> Int64.to_int_trunc
-      |> Char.of_int_exn)
+    let word = i / 8 in
+    let shift = i % 8 * 8 in
+    Int64.O.((CArray.get arr word lsr shift) land 0xFFL)
+    |> Int64.to_int_trunc
+    |> Char.of_int_exn)
   |> Z.of_bits
 ;;
 
@@ -172,6 +186,26 @@ let create_coeff f =
 let coeff_a = create_coeff External.coeff_a
 let coeff_b = create_coeff External.coeff_b
 let modulus = create_coeff External.modulus
+
+let mul_wide ~part_width a ~by:b =
+  let open Hardcaml in
+  let scale = 1 lsl part_width in
+  let b =
+    Bits.split_lsb ~part_width ~exact:false b |> List.map ~f:Bits.to_int |> List.rev
+  in
+  let rec f acc b =
+    match b with
+    | [] -> Option.value_exn acc
+    | b :: tl ->
+      let a_by_b = mul a ~by:b in
+      (match acc with
+       | None -> f (Some a_by_b) tl
+       | Some acc ->
+         let acc = mul acc ~by:scale in
+         f (Some (add acc a_by_b)) tl)
+  in
+  f None b
+;;
 
 module For_testing = struct
   let sexp_of_z = sexp_of_z

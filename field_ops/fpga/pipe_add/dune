@@ -1,0 +1,6 @@
+(rule
+ (target pipe_add.v)
+ (deps ../../bin/generate/verilog.exe)
+ (mode promote)
+ (action
+  (run %{deps} pipe-add -bits 754 -num-items 3 -stages 10 -o %{target})))

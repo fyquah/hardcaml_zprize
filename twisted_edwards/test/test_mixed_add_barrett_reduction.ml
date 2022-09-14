@@ -3,7 +3,7 @@ open Test_mixed_add
 module Xyzt = Test_mixed_add.Xyzt
 module Xyt = Test_mixed_add.Xyt
 
-let random_z = Snarks_r_fun_test.Utils.random_z
+let random_z = Field_ops_test.Utils.random_z
 let p = Ark_bls12_377_g1.modulus ()
 
 let xyzt_to_xyt xyzt =

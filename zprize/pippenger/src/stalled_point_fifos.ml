@@ -13,7 +13,7 @@ module Make (Config : Config.S) = struct
       { clock : 'a
       ; clear : 'a
       ; push : 'a
-      ; scalar : 'a [@bits window_size_bits]
+      ; scalar : 'a [@bits window_size_bits] [@rtlprefix "i_"]
       ; window : 'a [@bits log_num_windows]
       ; affine_point : 'a [@bits affine_point_bits]
       ; pop : 'a
@@ -26,8 +26,10 @@ module Make (Config : Config.S) = struct
       { all_windows_have_stall : 'a
       ; some_windows_are_full : 'a
       ; all_windows_are_empty : 'a
+      ; current_window_has_stall : 'a
       ; affine_point_out : 'a [@bits affine_point_bits]
       ; scalar_out : 'a [@bits window_size_bits]
+      ; scalar_out_valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -98,7 +100,7 @@ module Make (Config : Config.S) = struct
   let create scope (i : _ I.t) =
     let stalled_windows =
       List.init num_windows ~f:(fun window_index ->
-          hierarchy_window scope i ~window_index)
+        hierarchy_window scope i ~window_index)
     in
     let current_stalled_window = O_window.Of_signal.mux i.window stalled_windows in
     let affine_point_out =
@@ -120,14 +122,16 @@ module Make (Config : Config.S) = struct
            |]
          ()).(0)
     in
-    { O.all_windows_have_stall =
-        List.map stalled_windows ~f:(fun w -> w.not_empty) |> reduce ~f:( &: )
+    let windows_with_stall = List.map stalled_windows ~f:(fun w -> w.not_empty) in
+    { O.all_windows_have_stall = reduce ~f:( &: ) windows_with_stall
     ; some_windows_are_full =
         List.map stalled_windows ~f:(fun w -> w.full) |> reduce ~f:( |: )
     ; all_windows_are_empty =
         List.map stalled_windows ~f:(fun w -> w.empty) |> reduce ~f:( &: )
+    ; current_window_has_stall = mux i.window windows_with_stall
     ; affine_point_out
     ; scalar_out = current_stalled_window.scalar
+    ; scalar_out_valid = current_stalled_window.not_empty
     }
   ;;
 

@@ -2,7 +2,8 @@ open Hardcaml
 open Hardcaml_xilinx
 
 val create
-  :  build_mode:Build_mode.t
+  :  Scope.t
+  -> build_mode:Build_mode.t
   -> size:int
   -> clock:Signal.t
   -> port_a:Signal.t Ram_port.t
@@ -21,7 +22,8 @@ type read_port =
   }
 
 val create_dual
-  :  build_mode:Build_mode.t
+  :  Scope.t
+  -> build_mode:Build_mode.t
   -> size:int
   -> clock:Signal.t
   -> clear:Signal.t

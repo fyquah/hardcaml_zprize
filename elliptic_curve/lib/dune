@@ -1,0 +1,5 @@
+(library
+ (name elliptic_curve_lib)
+ (libraries ark_bls12_377_g1 base field_ops_lib hardcaml)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

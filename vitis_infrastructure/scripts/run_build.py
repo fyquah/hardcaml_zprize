@@ -4,6 +4,7 @@ import argparse
 import collections
 import distutils.dir_util
 import enum
+import glob
 import os
 import shutil
 import subprocess
@@ -42,6 +43,8 @@ Kernel = collections.namedtuple("Kernel", ["name", "type_", "has_kernel_cfg"])
 def resolve_platform(platform):
     if platform == "varium-c1100":
         return "xilinx_u55n_gen3x4_xdma_2_202110_1"
+    elif platform == "aws":
+        return "xilinx_aws-vu9p-f1_shell-v04261818_201920_3"
 
     raise RuntimeError(f"Unknown paltform {platform}")
 
@@ -50,6 +53,8 @@ def write_makefile(args, kernels):
     fname = os.path.join(args.build_dir, "Makefile")
     kernel_names = " ".join(kernel.name for kernel in kernels)
     with open(fname, "w") as f:
+
+
         f.write(f"PLATFORM={resolve_platform(args.platform)}\n")
         f.write(f"KERNEL_NAMES={kernel_names}\n")
         f.write(f"TOP_LEVEL_NAME={args.top_level_name}\n")
@@ -69,8 +74,18 @@ def write_kernels_mk(build_dir, kernels):
             if kernel.has_kernel_cfg:
                 additional_vpp_flags += f"--config src/{kernel_name}/kernel.cfg "
 
+            kernel_src = f"$(TEMP_DIR)/{kernel_name}.xo: package_kernel.tcl src/{kernel_name}/kernel_ports.tcl gen_xo.tcl "
+
+            # Only add RTL files if they exist
+            if glob.glob(f"{kernel_name}/*.sv"):
+                kernel_src += f"src/{kernel_name}/*.sv "
+            if glob.glob(f"{kernel_name}/*.v"):
+                kernel_src += f"src/{kernel_name}/*.v "
+
+            kernel_src += "\n"
+
             if kernel.type_ == KernelType.RTL:
-                f.write(f"$(TEMP_DIR)/{kernel_name}.xo: package_kernel.tcl src/{kernel_name}/kernel_ports.tcl gen_xo.tcl src/{kernel_name}/*.sv src/{kernel_name}/*.v\n")
+                f.write(kernel_src)
                 f.write(f"\tmkdir -p $(TEMP_DIR)\n")
                 f.write(f"\t$(VIVADO) -mode batch -source gen_xo.tcl -tclargs $(TEMP_DIR)/{kernel_name}.xo $(TARGET) $(PLATFORM) $(XSA) {kernel_name}\n")
             elif kernel.type_ == KernelType.CPP:
@@ -95,6 +110,11 @@ def copy_supporting_files(args):
         src = args.cfg_file
         dst = os.path.join(args.build_dir, os.path.basename(args.cfg_file))
         shutil.copy(src, dst)
+
+    file = "pre_place.tcl"
+    if os.path.exists(file):
+        dst = os.path.join(args.build_dir, os.path.basename(file))
+        shutil.copy(file, dst) 
 
 def parse_kernel_type(kernel_type: str) -> KernelType:
     try:
@@ -156,8 +176,25 @@ def build_target(args):
         if result.returncode != 0:
             raise RuntimeError("Error when building emconfig")
 
+def pre_checks(args):
+
+    # If we are running on the AWS platform make sure the user has the platform setup correctly, we also need to export the platform variable
+    if (args.platform == "aws"):
+        if "AWS_PLATFORM" not in os.environ:
+            raise Exception("env var AWS_PLATFORM was not set! Did you correctly source vitis_setup.sh?")
+        else:
+            aws_platform = os.environ['AWS_PLATFORM']
+            delimiter = 'aws_platform'
+            aws_platform_root = aws_platform.split(delimiter)[0] + delimiter
+            print(f"Setting PLATFORM_REPO_PATHS = {aws_platform_root}")
+            os.environ["PLATFORM_REPO_PATHS"] = aws_platform_root
+
+
 def main():
     args = parser.parse_args()
+
+    pre_checks (args)
+
     os.makedirs(args.build_dir, exist_ok=True)
 
     copy_template_files(args)

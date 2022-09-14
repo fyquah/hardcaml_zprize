@@ -1,0 +1,16 @@
+(library
+ (name field_ops_test)
+ (libraries
+  ark_bls12_377_g1
+  base
+  bignum
+  core
+  ctypes
+  ctypes.foreign
+  hardcaml
+  hardcaml_verify
+  field_ops_lib
+  unix)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

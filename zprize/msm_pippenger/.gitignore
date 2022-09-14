@@ -1,0 +1,17 @@
+# Various host binary executables
+host/*.exe
+host/*.log
+
+# The build directory for xclbin
+fpga/build
+
+# Various files generated in testing
+test/*.exe
+test/*.log
+test/*.exe
+test/*.run
+test/emconfig.json
+test/*.csv
+test/xrt.ini
+test/*.protoinst
+test/*.wcfg

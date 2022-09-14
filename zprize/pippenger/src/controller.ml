@@ -84,13 +84,13 @@ module Make (Config : Config.S) = struct
 
     let names =
       List.map all ~f:(function
-          | Start -> "-"
-          | Choose_mode -> "M"
-          | Bubble_mode -> "Mb"
-          | Execute_scalar -> "Es"
-          | Wait_scalar -> "Ws"
-          | Execute_stalled -> "E-"
-          | Wait_stalled -> "W-")
+        | Start -> "-"
+        | Choose_mode -> "M"
+        | Bubble_mode -> "Mb"
+        | Execute_scalar -> "Es"
+        | Wait_scalar -> "Ws"
+        | Execute_stalled -> "E-"
+        | Wait_stalled -> "W-")
     ;;
   end
 
@@ -136,6 +136,7 @@ module Make (Config : Config.S) = struct
               , [ if_
                     flushing.value
                     [ sm.set_next Execute_stalled
+                    ; executing_stalled <-- vdd
                     ; when_ stalled.all_windows_are_empty [ sm.set_next Start ]
                     ]
                   @@ elif
@@ -169,7 +170,10 @@ module Make (Config : Config.S) = struct
             ; ( Execute_stalled
               , [ executing_stalled <-- vdd
                 ; shift_pipeline <-- vdd
-                ; bubble <-- (is_in_pipeline |: (stalled.scalar_out ==:. 0))
+                ; bubble
+                  <-- (is_in_pipeline
+                      |: (stalled.scalar_out_valid &: (stalled.scalar_out ==:. 0))
+                      |: ~:(stalled.current_window_has_stall))
                 ; pop_stalled_point <-- ~:(bubble.value)
                 ; window <-- window_next
                 ; sm.set_next Wait_stalled
@@ -189,6 +193,7 @@ module Make (Config : Config.S) = struct
          ; window = window.value
          ; scalar_in = i.scalar
          ; stalled_scalar = stalled.scalar_out
+         ; stalled_scalar_valid = stalled.scalar_out_valid
          ; process_stalled = executing_stalled
          ; bubble = is_in_pipeline
          ; shift = shift_pipeline.value

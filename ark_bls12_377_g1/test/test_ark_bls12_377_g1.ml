@@ -83,3 +83,27 @@ let%expect_test "Multiplying a point by zero" =
   print_s ([%sexp_of: Ark_bls12_377_g1.affine] (Ark_bls12_377_g1.mul ~by:0 generator));
   [%expect {| ((x 0x0) (y 0x1) (infinity true)) |}]
 ;;
+
+let%expect_test "Multiply by an arbitrary [Bits.t] - allow multiplications wider than 62 \
+                 bits"
+  =
+  let module A = Ark_bls12_377_g1 in
+  let open Hardcaml in
+  let rand () = A.(mul (subgroup_generator ()) ~by:(Random.int 100)) in
+  let mul a b = A.mul a ~by:b in
+  for _ = 1 to 100 do
+    (* This tests various configurations in which [by] fits in an int. *)
+    let part_width = 1 + Random.int 10 in
+    let num_parts = 1 + Random.int 4 in
+    let width = part_width + num_parts in
+    let a = rand () in
+    let b = Random.int (1 lsl width) in
+    let r = mul a b in
+    let w = A.mul_wide ~part_width a ~by:(Bits.of_int ~width b) in
+    if not (A.equal_affine w r)
+    then
+      raise_s
+        [%message
+          "" (b : int) (part_width : int) (num_parts : int) (r : A.affine) (w : A.affine)]
+  done
+;;

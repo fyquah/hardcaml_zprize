@@ -4,7 +4,8 @@ type params =
   { c_A : z
   ; c_B : z
   ; twisted_scale : z
-  } [@@deriving sexp_of]
+  }
+[@@deriving sexp_of]
 
 type affine =
   { x : Z.t

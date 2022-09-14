@@ -62,10 +62,11 @@ let%expect_test "bls12-377 params in various forms" =
       0x363b01df81a0405e86206f2cc504d147752b91b664d91d4c82fed217902ee874354485836fa3ccba3af539c173857b)) |}];
   let montgomery_params =
     (*C.twisted_edwards_params_to_montgomery_params bls12_377_twisted_edwards_params*)
-      C.weierstrass_params_to_montgomery_params bls12_377_params
+    C.weierstrass_params_to_montgomery_params bls12_377_params
   in
   Stdio.print_s ([%sexp_of: Montgomery_curve.params] montgomery_params);
-  [%expect{|
+  [%expect
+    {|
     ((c_A
       0x32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc01)
      (c_B

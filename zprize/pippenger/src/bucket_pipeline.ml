@@ -58,6 +58,7 @@ module Make (Config : Config.S) = struct
       ; window : 'a [@bits log_num_windows]
       ; scalar_in : 'a array [@bits window_size_bits] [@length num_windows]
       ; stalled_scalar : 'a [@bits window_size_bits]
+      ; stalled_scalar_valid : 'a
       ; process_stalled : 'a
       ; bubble : 'a
       ; shift : 'a
@@ -75,20 +76,26 @@ module Make (Config : Config.S) = struct
   let create scope (i : _ I.t) =
     let c =
       List.init num_windows ~f:(fun window_index ->
-          Core.hierarchy
-            ~window:window_index
-            scope
-            { Core.I.clock = i.clock
-            ; clear = i.clear
-            ; scalar_in =
-                mux2
-                  (i.bubble |: i.process_stalled)
-                  (zero window_size_bits)
-                  i.scalar_in.(window_index)
-            ; shift = i.window ==:. window_index &: i.shift
-            ; scalar_match =
-                mux2 i.process_stalled i.stalled_scalar i.scalar_in.(window_index)
-            })
+        Core.hierarchy
+          ~window:window_index
+          scope
+          { Core.I.clock = i.clock
+          ; clear = i.clear
+          ; scalar_in =
+              mux2
+                i.bubble
+                (zero window_size_bits)
+                (mux2
+                   (i.process_stalled &: i.stalled_scalar_valid)
+                   i.stalled_scalar
+                   i.scalar_in.(window_index))
+          ; shift = i.window ==:. window_index &: i.shift
+          ; scalar_match =
+              mux2
+                (i.process_stalled &: i.stalled_scalar_valid)
+                i.stalled_scalar
+                i.scalar_in.(window_index)
+          })
     in
     { O.is_in_pipeline = List.map c ~f:(fun c -> c.is_in_pipeline) }
   ;;

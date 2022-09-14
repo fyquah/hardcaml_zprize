@@ -62,6 +62,12 @@ val modulus : unit -> Z.t
 (** Returns the bls12-377 subgroup generator. *)
 val subgroup_generator : unit -> affine
 
+(** Multiply by an arbitrary width Hardcaml Bits vector.
+
+    For efficiency [part_width] should be as wide as possible which is 61 bits
+    in this implementation. *)
+val mul_wide : part_width:int -> affine -> by:Hardcaml.Bits.t -> affine
+
 module For_testing : sig
   val sexp_of_z : Z.t -> Sexp.t
 end

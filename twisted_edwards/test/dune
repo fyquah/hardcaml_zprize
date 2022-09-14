@@ -4,8 +4,8 @@
   ark_bls12_377_g1
   base
   hardcaml
-  snarks_r_fun
-  snarks_r_fun_test
+  field_ops_lib
+  field_ops_test
   twisted_edwards_lib
   twisted_edwards_model_lib)
  (inline_tests)

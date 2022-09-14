@@ -5,15 +5,13 @@ module N4 = Ntts_r_fun.Ntt_4step
 module Gf_z = Ntts_r_fun.Gf_z
 module Gf_bits = Ntts_r_fun.Gf_bits.Make (Bits)
 
-module Make (Size : sig
-  val logn : int
-end) =
-struct
-  module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Size)
+module Make (Config : Ntts_r_fun.Ntt.Config) = struct
+  module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Config)
+  module Ntt_sw = Ntts_r_fun.Ntt_sw.Make (Gf_z)
   module Kernel = Ntt_4step.Kernel
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
 
-  let logn = Size.logn
+  let logn = Config.logn
   let n = 1 lsl logn
   let logcores = Ntt_4step.logcores
   let num_cores = 1 lsl logcores
@@ -21,82 +19,25 @@ struct
   let num_passes = 1 lsl log_passes
   let () = assert (1 lsl (logn + logn) = n * num_cores * num_passes)
 
-  let random_input_coefs () =
-    List.init (1 lsl (logn + logn)) ~f:(fun _ -> Gf_z.random () |> Gf_z.to_z)
+  let random_input_coef_matrix () =
+    Array.init (1 lsl logn) ~f:(fun _ ->
+      Array.init (1 lsl logn) ~f:(fun _ -> Gf_z.random () |> Gf_z.to_z))
   ;;
 
-  let form_input_coefs coefs =
-    let coefs =
-      List.groupi coefs ~break:(fun i _ _ -> i mod n = 0) |> List.map ~f:Array.of_list
-    in
-    let coefs =
-      List.groupi coefs ~break:(fun i _ _ -> i mod num_cores = 0)
-      |> List.map ~f:Array.of_list
-    in
-    Array.of_list coefs
+  let twiddle m = Ntt_sw.apply_twiddles Ntt_sw.inverse_roots.(logn + logn) m
+
+  let print_matrix c =
+    Array.iteri c ~f:(fun row c ->
+      printf "%.3i| " row;
+      Array.iteri c ~f:(fun col c ->
+        if col <> 0 && col % 8 = 0 then printf "\n   | ";
+        printf "%20s " (Z.to_string (Gf_z.to_z c)));
+      printf "\n")
   ;;
 
-  let print_matrices c =
-    for pass = 0 to num_passes - 1 do
-      for i = 0 to n - 1 do
-        printf "%.2i:" i;
-        for core = 0 to num_cores - 1 do
-          let c =
-            c.(pass).(core).(i)
-            |> Gf_z.to_z
-            |> Gf_bits.of_z
-            |> Gf_bits.to_bits
-            |> Bits.to_constant
-            |> Constant.to_hex_string ~signedness:Unsigned
-          in
-          printf "%s " c
-        done;
-        printf "\n"
-      done;
-      printf "\n"
-    done
-  ;;
+  let copy_matrix c = Array.map c ~f:Array.copy
 
-  let reference ~verbose input_coefs =
-    let module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf_z) in
-    let c = Array.map input_coefs ~f:(Array.map ~f:(Array.map ~f:Gf_z.of_z)) in
-    if verbose
-    then (
-      printf "\n\nINPUTS\n\n";
-      print_matrices c);
-    Array.iter c ~f:(Array.iter ~f:(fun c -> Ntt.inverse_dit c));
-    if verbose
-    then (
-      printf "\n\nREFERENCE\n\n";
-      print_matrices c);
-    c
-  ;;
-
-  let get_results (results : Bits.t list) =
-    let a =
-      List.map (List.rev results) ~f:(fun b ->
-          List.map (Bits.split_lsb ~part_width:64 b) ~f:(fun x ->
-              Bits.to_z ~signedness:Unsigned x |> Gf_z.of_z)
-          |> Array.of_list)
-      |> List.groupi ~break:(fun i _ _ -> i % n = 0)
-      |> List.map ~f:Array.of_list
-      |> Array.of_list
-    in
-    if not (Array.length a = num_passes)
-    then
-      raise_s
-        [%message
-          "Invalid number of results?"
-            (List.length results : int)
-            (Array.length a : int)
-            (num_passes : int)];
-    Array.init num_passes ~f:(fun pass ->
-        Array.init num_cores ~f:(fun core ->
-            Array.init n ~f:(fun n -> a.(pass).(n).(core))))
-  ;;
-
-  let run ?(verbose = false) input_coefs =
-    Random.init 100;
+  let create_sim waves =
     let sim =
       Sim.create
         ~config:Cyclesim.Config.trace_all
@@ -106,14 +47,17 @@ struct
     in
     let inputs = Cyclesim.inputs sim in
     let outputs = Cyclesim.outputs sim in
-    let waves, sim = Waveform.create sim in
-    let input_coefs = form_input_coefs input_coefs in
-    let results = ref [] in
-    let cycle () =
-      if Bits.to_bool !(outputs.data_out.tvalid)
-      then results := !(outputs.data_out.tdata) :: !results;
-      Cyclesim.cycle sim
+    let waves, sim =
+      if waves
+      then (
+        let waves, sim = Waveform.create sim in
+        Some waves, sim)
+      else None, sim
     in
+    sim, waves, inputs, outputs
+  ;;
+
+  let start_sim (inputs : _ Kernel.I.t) cycle =
     inputs.clear := Bits.vdd;
     cycle ();
     inputs.clear := Bits.gnd;
@@ -121,7 +65,63 @@ struct
     inputs.start := Bits.vdd;
     cycle ();
     inputs.start := Bits.gnd;
-    cycle ();
+    cycle ()
+  ;;
+
+  let get_results results =
+    let results =
+      List.rev results
+      |> List.map ~f:(fun b -> Bits.split_lsb ~part_width:64 b |> Array.of_list)
+      |> Array.of_list
+    in
+    let n = 1 lsl logn in
+    if Array.length results <> n * n / num_cores
+    then (
+      let got = Array.length results in
+      raise_s [%message "results length is incorrect" (got : int)]);
+    Array.init n ~f:(fun row ->
+      let pass = row / num_cores in
+      let core = row % num_cores in
+      Array.init n ~f:(fun col ->
+        let idx = (pass * num_cores * (n / num_cores)) + col in
+        Gf_bits.of_bits results.(idx).(core) |> Gf_bits.to_z |> Gf_z.of_z))
+  ;;
+
+  let expected ~verbose ~first_4step_pass input_coefs hw_results =
+    let sw_results = copy_matrix input_coefs in
+    Array.iter sw_results ~f:Ntt_sw.inverse_dit;
+    if first_4step_pass then twiddle sw_results;
+    if verbose
+    then
+      List.iter
+        [ "inputs", input_coefs; "sw", sw_results; "hw", hw_results ]
+        ~f:(fun (n, m) ->
+          printf "\n%s\n\n" n;
+          print_matrix m);
+    if [%equal: Gf_z.t array array] hw_results sw_results
+    then print_s [%message "Hardware and software reference results match!"]
+    else raise_s [%message "ERROR: Hardware and software results do not match :("]
+  ;;
+
+  let run
+    ?(verbose = false)
+    ?(waves = false)
+    ~first_4step_pass
+    (input_coefs : Z.t array array)
+    =
+    let sim, waves, inputs, outputs = create_sim waves in
+    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf_z.of_z) in
+    let results = ref [] in
+    let cycle ?(n = 1) () =
+      assert (n > 0);
+      if Bits.to_bool !(outputs.data_out.tvalid)
+      then results := !(outputs.data_out.tdata) :: !results;
+      for _ = 1 to n do
+        Cyclesim.cycle sim
+      done
+    in
+    start_sim inputs cycle;
+    inputs.first_4step_pass := Bits.of_bool first_4step_pass;
     for pass = 0 to num_passes - 1 do
       (* wait for tready *)
       while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
@@ -130,8 +130,9 @@ struct
       for i = 0 to n - 1 do
         inputs.data_in.tvalid := Bits.vdd;
         inputs.data_in.tdata
-          := List.init num_cores ~f:(fun core -> input_coefs.(pass).(core).(i))
-             |> List.map ~f:(fun z -> Gf_bits.of_z z |> Gf_bits.to_bits)
+          := List.init num_cores ~f:(fun core ->
+               input_coefs.((pass * num_cores) + core).(i))
+             |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
              |> Bits.concat_lsb;
         cycle ()
       done;
@@ -140,121 +141,47 @@ struct
       while Bits.to_bool !(outputs.data_in_dest.tready) do
         cycle ()
       done;
-      for _ = 0 to 3 do
-        cycle ()
-      done
+      (* A few cycles of flushing after each pass *)
+      cycle ~n:4 ()
     done;
+    (* wait for the core to complete. *)
     while not (Bits.to_bool !(outputs.done_)) do
       cycle ()
     done;
+    cycle ~n:4 ();
     (try
-       let results = get_results !results in
-       if verbose then print_matrices results;
-       let reference = reference ~verbose input_coefs in
-       if [%equal: Gf_z.t array array array] results reference
-       then printf "IT WORKED!!!\n"
-       else printf "ERROR!!!\n"
+       let hw_results = get_results !results in
+       expected ~verbose ~first_4step_pass input_coefs hw_results
      with
-    | e -> print_s [%message "RAISED :(" (e : exn)]);
+     | e -> print_s [%message "RAISED :(" (e : exn)]);
     waves
   ;;
 end
 
-module Size = struct
+module Config = struct
   let logn = 5
+  let log_rows_per_iteration = 3
+
+  let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
+    Some
+      { rows_per_iteration = 1 lsl log_rows_per_iteration
+      ; log_num_iterations = (logn * 2) - log_rows_per_iteration
+      }
+  ;;
 end
 
-module Test = Make (Size)
+module Test = Make (Config)
 
 let%expect_test "" =
-  let waves = Test.run (Test.random_input_coefs ()) in
-  Waveform.print
-    ~start_cycle:60
-    ~display_width:94
-    ~display_height:80
-    ~wave_width:(-1)
-    waves;
-  [%expect
-    {|
-    IT WORKED!!!
-    ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────────┐
-    │clock             ││╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥│
-    │                  ││╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨│
-    │clear             ││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │                  ││─┬┬┬┬┬┬┬┬┬┬─────────────────────────────────────────────────────────────│
-    │data_in_tdata     ││ ││││││││││3F4C04BFF33677E27BA55E49FC4D870E298BE7546898180217652D57DF43.│
-    │                  ││─┴┴┴┴┴┴┴┴┴┴─────────────────────────────────────────────────────────────│
-    │data_in_tvalid    ││───────────┐                                                            │
-    │                  ││           └────────────────────────────────────────────────────────────│
-    │data_out_dest_trea││────────────────────────────────────────────────────────────────────────│
-    │                  ││                                                                        │
-    │start             ││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │data_in_dest_tread││───────────┐                                                            │
-    │                  ││           └────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │data_out_tdata    ││ 0000000000000000000000000000000000000000000000000000000000000000000000.│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │data_out_tkeep    ││ FFFFFFFFFFFFFFFF                                                       │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │data_out_tlast    ││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │data_out_tstrb    ││ FFFFFFFFFFFFFFFF                                                       │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │data_out_tvalid   ││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │done_             ││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$ITERATI││ 1                                                                      │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$START_C││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$START_I││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$START_O││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$STATE  ││ 2                                                                      │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$i$clear││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$i$clock││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$i$cores││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$i$input││           ┌────────────────────────────────────────────────────────────│
-    │                  ││───────────┘                                                            │
-    │controller$i$outpu││────────────────────────────────────────────────────────────────────────│
-    │                  ││                                                                        │
-    │controller$i$start││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$o$done_││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$o$flip ││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$o$start││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$o$start││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │controller$o$start││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │gnd               ││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │parallel_cores$i$c││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │parallel_cores$i$c││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │parallel_cores$i$f││                                                                        │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │parallel_cores$i$r││ 00                                                                     │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    │parallel_cores$i$r││ 00                                                                     │
-    │                  ││────────────────────────────────────────────────────────────────────────│
-    └──────────────────┘└────────────────────────────────────────────────────────────────────────┘ |}]
+  let waves = Test.run ~first_4step_pass:false (Test.random_input_coef_matrix ()) in
+  Option.iter
+    waves
+    ~f:
+      (Waveform.print
+         ~start_cycle:60
+         ~display_width:94
+         ~display_height:80
+         ~wave_width:(-1));
+  [%expect {|
+    "Hardware and software reference results match!" |}]
 ;;

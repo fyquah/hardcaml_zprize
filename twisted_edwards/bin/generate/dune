@@ -1,0 +1,5 @@
+(executables
+ (names verilog)
+ (libraries base core_unix.command_unix hardcaml twisted_edwards_lib)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))

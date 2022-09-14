@@ -14,8 +14,11 @@ end
 val test_with_stalls : Bits.t Msm_input.t array
 val test_no_stalls : Bits.t Msm_input.t array
 val test_1_stall : Bits.t Msm_input.t array
+val test_fully_stall_window0 : Bits.t Msm_input.t array
 
 val test
-  :  ?auto_label_hierarchical_ports:bool
+  :  ?waves:bool
+  -> ?verbose:bool
+  -> ?auto_label_hierarchical_ports:bool
   -> Bits.t Msm_input.t array
-  -> Hardcaml_waveterm.Waveform.t
+  -> Hardcaml_waveterm.Waveform.t option

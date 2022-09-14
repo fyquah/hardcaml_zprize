@@ -1,5 +1,5 @@
 (executables
- (names hardware model)
+ (names simulate model)
  (libraries
    core
    core_unix
