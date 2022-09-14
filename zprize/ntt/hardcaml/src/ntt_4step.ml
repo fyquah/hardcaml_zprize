@@ -2,8 +2,14 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Ntt.Config) = struct
-  open Config
+module type Config = sig
+  include Ntt.Config
+
+  val logcores : int
+end
+
+module Make (Config : Config) = struct
+  include Config
 
   let () =
     if Config.logn < 4
@@ -13,14 +19,15 @@ module Make (Config : Ntt.Config) = struct
           "Minimum logn for 4step algorithm is 4 (256 point total)" (Config.logn : int)]
   ;;
 
-  (* Specifying this as a log is probably not as flexible as we want (if we can
-   fit 29 cores, this would limit us to 16). But it greatly simplifies things to
-   start with. *)
-  let logcores = 3
   let cores = 1 lsl logcores
 
   module Gf = Gf_bits.Make (Hardcaml.Signal)
   module Ntt = Ntt.Make (Config)
+
+  module Axi_stream = Hardcaml_axi.Stream.Make (struct
+    let addr_bits = 32
+    let data_bits = Gf.num_bits * cores
+  end)
 
   module Parallel_cores = struct
     module I = struct
@@ -50,22 +57,22 @@ module Make (Config : Ntt.Config) = struct
     let create ~build_mode scope (i : _ I.t) =
       let cores =
         Array.init cores ~f:(fun index ->
-            Ntt.With_rams.hierarchy
-              ~row:index
-              ~build_mode
-              ~instance:("ntt" ^ Int.to_string index)
-              scope
-              { Ntt.With_rams.I.clock = i.clock
-              ; clear = i.clear
-              ; start = i.start
-              ; first_4step_pass = i.first_4step_pass
-              ; flip = i.flip
-              ; wr_d = i.wr_d.(index)
-              ; wr_en = i.wr_en.:(index)
-              ; wr_addr = i.wr_addr
-              ; rd_en = i.rd_en.:(index)
-              ; rd_addr = i.rd_addr
-              })
+          Ntt.With_rams.hierarchy
+            ~row:index
+            ~build_mode
+            ~instance:("ntt" ^ Int.to_string index)
+            scope
+            { Ntt.With_rams.I.clock = i.clock
+            ; clear = i.clear
+            ; start = i.start
+            ; first_4step_pass = i.first_4step_pass
+            ; flip = i.flip
+            ; wr_d = i.wr_d.(index)
+            ; wr_en = i.wr_en.:(index)
+            ; wr_addr = i.wr_addr
+            ; rd_en = i.rd_en.:(index)
+            ; rd_addr = i.rd_addr
+            })
       in
       { O.done_ = cores.(0).done_; rd_q = Array.map cores ~f:(fun core -> core.rd_q) }
     ;;
@@ -260,24 +267,22 @@ module Make (Config : Ntt.Config) = struct
   end
 
   module Kernel = struct
-    module Axi512 = Hardcaml_axi.Axi512
-
     module I = struct
       type 'a t =
         { clock : 'a
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
-        ; data_in : 'a Axi512.Stream.Source.t
-        ; data_out_dest : 'a Axi512.Stream.Dest.t
+        ; data_in : 'a Axi_stream.Source.t
+        ; data_out_dest : 'a Axi_stream.Dest.t
         }
       [@@deriving sexp_of, hardcaml ~rtlmangle:true]
     end
 
     module O = struct
       type 'a t =
-        { data_out : 'a Axi512.Stream.Source.t
-        ; data_in_dest : 'a Axi512.Stream.Dest.t
+        { data_out : 'a Axi_stream.Source.t
+        ; data_in_dest : 'a Axi_stream.Dest.t
         ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml ~rtlmangle:true]
@@ -381,6 +386,8 @@ module Make (Config : Ntt.Config) = struct
       ;;
     end
 
+    let num_cores = cores
+
     let create ~build_mode scope (i : _ I.t) =
       let start_input = wire 1 in
       let start_output = wire 1 in
@@ -409,8 +416,8 @@ module Make (Config : Ntt.Config) = struct
           { tvalid = store_sm.tvalid
           ; tdata = cores.rd_q |> Array.to_list |> concat_lsb
           ; tlast = gnd
-          ; tkeep = ones (512 / 8)
-          ; tstrb = ones (512 / 8)
+          ; tkeep = ones (num_cores * Gf.num_bits / 8)
+          ; tstrb = ones (num_cores * Gf.num_bits / 8)
           }
       ; data_in_dest = { tready = load_sm.tready }
       ; done_ = cores.done_
@@ -424,36 +431,34 @@ module Make (Config : Ntt.Config) = struct
   end
 
   module Kernel_for_vitis = struct
-    module Axi512 = Hardcaml_axi.Axi512
-
     module I = struct
       type 'a t =
         { ap_clk : 'a
         ; ap_rst_n : 'a
-        ; controller_to_compute : 'a Axi512.Stream.Source.t [@rtlmangle true]
-        ; compute_to_controller_dest : 'a Axi512.Stream.Dest.t
-              [@rtlprefix "compute_to_controller_"]
+        ; controller_to_compute : 'a Axi_stream.Source.t [@rtlmangle true]
+        ; compute_to_controller_dest : 'a Axi_stream.Dest.t
+             [@rtlprefix "compute_to_controller_"]
         }
       [@@deriving sexp_of, hardcaml]
     end
 
     module O = struct
       type 'a t =
-        { compute_to_controller : 'a Axi512.Stream.Source.t [@rtlmangle true]
-        ; controller_to_compute_dest : 'a Axi512.Stream.Dest.t
-              [@rtlprefix "controller_to_compute_"]
+        { compute_to_controller : 'a Axi_stream.Source.t [@rtlmangle true]
+        ; controller_to_compute_dest : 'a Axi_stream.Dest.t
+             [@rtlprefix "controller_to_compute_"]
         }
       [@@deriving sexp_of, hardcaml]
     end
 
     let create
-        ~build_mode
-        scope
-        { I.ap_clk = clock
-        ; ap_rst_n = clear_n
-        ; controller_to_compute
-        ; compute_to_controller_dest
-        }
+      ~build_mode
+      scope
+      { I.ap_clk = clock
+      ; ap_rst_n = clear_n
+      ; controller_to_compute
+      ; compute_to_controller_dest
+      }
       =
       let clear = ~:clear_n in
       let spec = Reg_spec.create ~clock ~clear () in

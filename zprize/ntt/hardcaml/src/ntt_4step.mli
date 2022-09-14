@@ -3,10 +3,17 @@
 open! Base
 open Hardcaml
 
-module Make (Config : Ntt.Config) : sig
+module type Config = sig
+  include Ntt.Config
+
+  val logcores : int
+end
+
+module Make (Config : Config) : sig
   val logcores : int
 
   module Gf : module type of Gf_bits.Make (Hardcaml.Signal)
+  module Axi_stream : Hardcaml_axi.Stream.S
 
   module Parallel_cores : sig
     module I : sig
@@ -112,24 +119,22 @@ module Make (Config : Ntt.Config) : sig
   end
 
   module Kernel : sig
-    module Axi512 = Hardcaml_axi.Axi512
-
     module I : sig
       type 'a t =
         { clock : 'a
         ; clear : 'a
         ; start : 'a
         ; first_4step_pass : 'a
-        ; data_in : 'a Axi512.Stream.Source.t
-        ; data_out_dest : 'a Axi512.Stream.Dest.t
+        ; data_in : 'a Axi_stream.Source.t
+        ; data_out_dest : 'a Axi_stream.Dest.t
         }
       [@@deriving sexp_of, hardcaml]
     end
 
     module O : sig
       type 'a t =
-        { data_out : 'a Axi512.Stream.Source.t
-        ; data_in_dest : 'a Axi512.Stream.Dest.t
+        { data_out : 'a Axi_stream.Source.t
+        ; data_in_dest : 'a Axi_stream.Dest.t
         ; done_ : 'a
         }
       [@@deriving sexp_of, hardcaml]
@@ -179,22 +184,20 @@ module Make (Config : Ntt.Config) : sig
   end
 
   module Kernel_for_vitis : sig
-    module Axi512 = Hardcaml_axi.Axi512
-
     module I : sig
       type 'a t =
         { ap_clk : 'a
         ; ap_rst_n : 'a
-        ; controller_to_compute : 'a Axi512.Stream.Source.t
-        ; compute_to_controller_dest : 'a Axi512.Stream.Dest.t
+        ; controller_to_compute : 'a Axi_stream.Source.t
+        ; compute_to_controller_dest : 'a Axi_stream.Dest.t
         }
       [@@deriving sexp_of, hardcaml]
     end
 
     module O : sig
       type 'a t =
-        { compute_to_controller : 'a Axi512.Stream.Source.t
-        ; controller_to_compute_dest : 'a Axi512.Stream.Dest.t
+        { compute_to_controller : 'a Axi_stream.Source.t
+        ; controller_to_compute_dest : 'a Axi_stream.Dest.t
         }
       [@@deriving sexp_of, hardcaml]
     end
