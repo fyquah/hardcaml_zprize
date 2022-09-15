@@ -7,6 +7,8 @@ type twiddle_4step_config =
   }
 [@@deriving sexp_of]
 
+let for_ lo hi f = List.range lo (hi + 1) |> List.map ~f |> Always.proc
+
 module type Config = sig
   val logn : int
   val twiddle_4step_config : twiddle_4step_config option
@@ -17,7 +19,7 @@ module Gf = Gf_bits.Make (Hardcaml.Signal)
 module Make (Config : Config) = struct
   let logn = Config.logn
   let n = 1 lsl logn
-  let multiply_latency = 3
+  let multiply_latency = 4
   let ram_output_pipelining = 1
   let ram_latency = 1
   let datapath_latency = ram_latency + ram_output_pipelining + multiply_latency
@@ -148,7 +150,6 @@ module Make (Config : Config) = struct
     ;;
 
     let twiddle_scale = twiddle_scale_z |> List.map ~f:gf_z_to_bits
-    let for_ lo hi f = List.range lo (hi + 1) |> List.map ~f |> Always.proc
 
     let create ?(row = 0) scope (inputs : _ I.t) =
       let open Signal in
@@ -331,10 +332,13 @@ module Make (Config : Config) = struct
                      ~n:(Twiddle_factor_stream.pipe_length + ram_output_pipelining)
                      twiddle_update.value)
                   [ (* depending on the pipe dpeth, this might not work.*)
-                    twiddle_omegas.(3) <-- inputs.twiddle_update_in
-                  ; twiddle_omegas.(2) <-- twiddle_omegas.(3).value
-                  ; twiddle_omegas.(1) <-- twiddle_omegas.(2).value
-                  ; twiddle_omegas.(0) <-- twiddle_omegas.(1).value
+                    for_
+                      0
+                      (Array.length twiddle_omegas - 1)
+                      (fun i ->
+                        if i = Array.length twiddle_omegas - 1
+                        then twiddle_omegas.(i) <-- inputs.twiddle_update_in
+                        else twiddle_omegas.(i) <-- twiddle_omegas.(i + 1).value)
                   ]
               ]
           ]);
