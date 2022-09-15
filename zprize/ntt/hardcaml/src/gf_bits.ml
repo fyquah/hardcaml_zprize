@@ -60,7 +60,7 @@ module Make (Bits : Comb.S) = struct
   ;;
 
   let mul ?(pipe = Fn.id) left right =
-    let res = left *: right |> pipe |> pipe in
+    let res = left *: right |> pipe |> pipe |> pipe in
     let t0 = Uop.(res.:[63, 0] -: res.:[127, 96]) in
     let t0 = underflow t0 |> pipe in
     let t1 =

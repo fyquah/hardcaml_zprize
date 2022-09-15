@@ -19,7 +19,7 @@ module Gf = Gf_bits.Make (Hardcaml.Signal)
 module Make (Config : Config) = struct
   let logn = Config.logn
   let n = 1 lsl logn
-  let multiply_latency = 4
+  let multiply_latency = 6
   let ram_output_pipelining = 1
   let ram_latency = 1
   let datapath_latency = ram_latency + ram_output_pipelining + multiply_latency
@@ -35,7 +35,7 @@ module Make (Config : Config) = struct
     let pipe x =
       Gf.to_bits x |> Signal.pipeline (Reg_spec.create ~clock ()) ~n:1 |> Gf.of_bits
     in
-    Gf.mul ~pipe (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+    Gf.mul ~pipe (pipe (Gf.of_bits a)) (pipe (Gf.of_bits b)) |> Gf.to_bits
   ;;
 
   module Twiddle_factor_stream = struct
