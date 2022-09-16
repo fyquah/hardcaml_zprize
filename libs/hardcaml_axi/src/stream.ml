@@ -36,6 +36,9 @@ module Make (X : Config.S) = struct
     type 'a t = { tready : 'a } [@@deriving sexp_of, hardcaml]
   end
 
+  (* This is a port of the skid buffer as per
+   * https://github.com/alexforencich/verilog-axis/blob/master/rtl/axis_register.v#L91
+   *)
   module Register = struct
     module I = struct
       type 'a t =
