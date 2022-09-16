@@ -3,12 +3,17 @@
     After processing has finished, will return a stream of [num_buckets *
     num_windows] back to the host, with buckets in high -> low order.
 
-    Currently only supports a single controller, but later will be modified to
-    support a multi-SLR parallel solution.
-
     [start] is pulsed high for one clock cycle to initialize the bucket RAMs.
     When input points are ready to be streamed in, [scalar_and_input_point] will
     raise high.
+
+    After clear, this module immediately sets all bucket RAMs to the Identity
+    point, and then signals a start to the controller.
+
+    This module will then wait for input points until [last_scalar] is high, and
+    when the result is ready will be outputted on [result_point]. After the last
+    result point has been read the we will start to re-initialize buck RAMs to
+    Identity, and wait for new input points to be streamed in.
 *)
 
 open Hardcaml
@@ -22,7 +27,6 @@ module Make (Config : Config.S) : sig
     type 'a t =
       { clock : 'a
       ; clear : 'a
-      ; start : 'a
       ; scalar : 'a
       ; scalar_valid : 'a
       ; last_scalar : 'a
@@ -49,7 +53,8 @@ module Make (Config : Config.S) : sig
   end
 
   val hierarchical
-    :  build_mode:Build_mode.t
+    :  ?instance:string
+    -> build_mode:Build_mode.t
     -> Scope.t
     -> Signal.t Interface.Create_fn(I)(O).t
 end

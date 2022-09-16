@@ -51,9 +51,10 @@ module Make (Config : Config.S) = struct
     let num_windows = num_windows
     let affine_point_bits = input_point_bits
 
+    (* TODO: This pipeline depth is way larger than it should need to be, try find out why... *)
     let pipeline_depth =
       Int.round_up
-        (adder_latency + ram_lookup_latency + ram_read_latency + ram_write_latency)
+        (adder_latency + ram_lookup_latency + ram_read_latency + ram_write_latency + 100)
         ~to_multiple_of:2
       / 2
     ;;
@@ -65,7 +66,6 @@ module Make (Config : Config.S) = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
-      ; start : 'a
       ; scalar : 'a [@bits scalar_bits]
       ; scalar_valid : 'a
       ; last_scalar : 'a
@@ -85,7 +85,6 @@ module Make (Config : Config.S) = struct
     [@@deriving sexp_of, hardcaml ~rtlmangle:true]
   end
 
-  (* Add a hierarchical wrapper to the adder for multi-SLR. *)
   module Adder = struct
     include Mixed_add
 
@@ -97,10 +96,11 @@ module Make (Config : Config.S) = struct
 
   module State = struct
     type t =
-      | Idle
       | Init_to_identity
+      | Idle
       | Working
       | Read_result
+      | Wait_for_done_reading
     [@@deriving sexp_of, compare, enumerate]
   end
 
@@ -109,15 +109,7 @@ module Make (Config : Config.S) = struct
   let create
     ~build_mode
     scope
-    { I.clock
-    ; clear
-    ; start
-    ; scalar
-    ; scalar_valid
-    ; last_scalar
-    ; input_point
-    ; result_point_ready
-    }
+    { I.clock; clear; scalar; scalar_valid; last_scalar; input_point; result_point_ready }
     =
     let ( -- ) = Scope.naming scope in
     let open Always in
@@ -133,6 +125,7 @@ module Make (Config : Config.S) = struct
             last_window_size_bits)
     in
     let spec = Reg_spec.create ~clear ~clock () in
+    let sm = State_machine.create (module State) spec in
     let ctrl_start = Variable.reg spec ~width:1 in
     let ctrl =
       Controller.hierarchy
@@ -141,15 +134,13 @@ module Make (Config : Config.S) = struct
         ; clear
         ; start = ctrl_start.value
         ; scalar
-        ; scalar_valid
+        ; scalar_valid = scalar_valid &: sm.is Working
         ; last_scalar
         ; affine_point = Mixed_add.Xyt.Of_signal.pack input_point
         }
     in
     let ctrl_affine_point_as_xyt = Adder.Xyt.Of_signal.unpack ctrl.adder_affine_point in
-    (* TODO If timing is bad we could potentially pipeline some of these per-RAM *)
     let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
-    let sm = State_machine.create (module State) spec in
     ignore (sm.current -- "STATE" : Signal.t);
     let adder_p3 = wire result_point_bits in
     let window_address = Variable.reg spec ~width:(num_bits_to_represent num_windows) in
@@ -286,23 +277,26 @@ module Make (Config : Config.S) = struct
              (ram_lookup_latency + ram_read_latency + adder_latency + ram_write_latency))
     in
     let last_scalar_l = Variable.reg spec ~width:1 in
+    let last_result_point = wire 1 in
     let done_l = Variable.reg spec ~width:1 in
     let finished = Variable.wire ~default:gnd in
     ignore (finished.value -- "finished" : Signal.t);
     compile
       [ sm.switch
-          [ ( Idle
+          [ ( Init_to_identity
             , [ done_l <-- gnd
               ; finished <-- gnd
               ; last_scalar_l <-- gnd
-              ; bucket_address <--. 0
-              ; when_ start [ sm.set_next Init_to_identity ]
-              ] )
-          ; ( Init_to_identity
-            , [ bucket_address <-- bucket_address.value -- "bucket_address" +:. 1
+              ; bucket_address <-- bucket_address.value -- "bucket_address" +:. 1
               ; when_
                   (bucket_address.value ==:. (1 lsl last_window_size_bits) - 1)
-                  [ ctrl_start <-- vdd; sm.set_next Working ]
+                  [ sm.set_next Idle ]
+              ] )
+          ; ( Idle
+            , [ bucket_address <--. 0
+              ; window_address <--. 0
+              ; ctrl_start <-- vdd
+              ; sm.set_next Working
               ] )
           ; ( Working
             , [ ctrl_start <-- gnd
@@ -335,13 +329,19 @@ module Make (Config : Config.S) = struct
                           [ bucket_address <--. (1 lsl window_size_bits) - 1 ]
                       ; when_
                           (window_address.value ==:. num_windows - 1)
-                          [ finished <-- vdd; sm.set_next Idle ]
+                          [ bucket_address <--. 0
+                          ; finished <-- vdd
+                          ; sm.set_next Wait_for_done_reading
+                          ]
                       ]
                   ]
               ] )
+          ; ( Wait_for_done_reading
+            , [ when_ last_result_point [ sm.set_next Init_to_identity ] ] )
           ]
       ];
-    (* Put the output points through a FIFO *)
+    (* Put the output points through a FIFO so that downstream can backpressure
+       and we hold off on reading points from RAM. *)
     let fifo_capacity = 32 in
     let fifo_q =
       let wr =
@@ -374,16 +374,18 @@ module Make (Config : Config.S) = struct
         ~rd
         ()
     in
-    fifo_q_has_space <== (fifo_q.used <:. fifo_capacity - 2);
+    fifo_q_has_space
+    <== (fifo_q.used <:. fifo_capacity - ram_lookup_latency - ram_read_latency - 2);
+    last_result_point <== (msb fifo_q.q &: ~:(fifo_q.empty));
     { O.result_point = Mixed_add.Xyzt.Of_signal.unpack (lsbs fifo_q.q)
     ; result_point_valid = ~:(fifo_q.empty)
-    ; last_result_point = msb fifo_q.q &: ~:(fifo_q.empty)
+    ; last_result_point
     ; scalar_and_input_point_ready = ctrl.scalar_read
     }
   ;;
 
-  let hierarchical ~build_mode scope =
+  let hierarchical ?instance ~build_mode scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ~name:"top" ~scope (create ~build_mode)
+    H.hierarchical ?instance ~name:"top" ~scope (create ~build_mode)
   ;;
 end

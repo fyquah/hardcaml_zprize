@@ -47,9 +47,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     i.clear := Bits.vdd;
     Cyclesim.cycle sim;
     i.clear := Bits.gnd;
-    i.start := Bits.vdd;
     Cyclesim.cycle sim;
-    i.start := Bits.gnd;
     reset_cycle_cnt ();
     let inputs = Utils.random_inputs num_inputs in
     Array.iteri inputs ~f:(fun idx input ->
@@ -179,18 +177,4 @@ let%expect_test "Test over small input size and small number of scalars" =
       ((point ()) (bucket 6) (window 1)) ((point ()) (bucket 5) (window 1))
       ((point ()) (bucket 4) (window 1)) ((point ()) (bucket 3) (window 1))
       ((point ()) (bucket 2) (window 1)) ((point ()) (bucket 1) (window 1)))) |}]
-;;
-
-let waveform () =
-  let module Config = struct
-    let field_bits = 377
-    let scalar_bits = 5
-    let controller_log_stall_fifo_depth = 2
-    let window_size_bits = 2
-    let ram_read_latency = 1
-  end
-  in
-  let module Test = Make (Config) in
-  let result = Test.run_test 1 in
-  result.waves
 ;;

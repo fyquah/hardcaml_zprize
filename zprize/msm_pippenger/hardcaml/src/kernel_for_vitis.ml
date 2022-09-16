@@ -10,16 +10,16 @@ module Make (Config : Config.S) = struct
     type 'a t =
       { ap_clk : 'a
       ; ap_rst_n : 'a
-      ; host_to_fpga : 'a Axi512.Stream.Source.t [@rtlprefix "host_to_fpga$"]
-      ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "fpga_to_host$"]
+      ; host_to_fpga : 'a Axi512.Stream.Source.t [@rtlprefix "host_to_fpga_"]
+      ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "fpga_to_host_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
     type 'a t =
-      { fpga_to_host : 'a Axi512.Stream.Source.t [@rtlprefix "fpga_to_host$"]
-      ; host_to_fpga_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "host_to_fpga$"]
+      { fpga_to_host : 'a Axi512.Stream.Source.t [@rtlprefix "fpga_to_host_"]
+      ; host_to_fpga_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "host_to_fpga_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -54,7 +54,6 @@ module Make (Config : Config.S) = struct
     let input_l = Variable.reg spec ~width:input_l_bits in
     let output_l = Variable.reg spec ~width:output_l_width in
     let sm = State_machine.create (module State) spec in
-    let start = Variable.reg spec ~width:1 in
     let scalar_valid = Variable.reg spec ~width:1 in
     let last_scalar = Variable.reg spec ~width:1 in
     let result_point_ready = Variable.wire ~default:gnd in
@@ -77,7 +76,6 @@ module Make (Config : Config.S) = struct
         ; input_point =
             Top.Mixed_add.Xyt.Of_signal.unpack
               input_point_and_scalar.:+[0, Some Top.input_point_bits]
-        ; start = start.value
         ; scalar_valid = scalar_valid.value
         ; last_scalar = last_scalar.value
         ; result_point_ready = result_point_ready.value
@@ -122,21 +120,6 @@ module Make (Config : Config.S) = struct
     let last_l = Variable.reg spec ~width:1 in
     let maybe_shift_output =
       [ when_
-          (result_point_ready.value &: top.result_point_valid)
-          [ last_l <-- top.last_result_point ]
-      ; when_
-          ~:(output_buffer_valid.value)
-          [ result_point_ready <-- vdd
-          ; output_l
-            <-- uresize
-                  (Top.Mixed_add.Xyzt.Of_signal.pack top.result_point)
-                  output_l_width
-          ; valid_output_bits <--. Top.result_point_bits
-          ; when_
-              (top.result_point_valid &: result_point_ready.value)
-              [ output_buffer_valid <-- vdd; fpga_to_host.tvalid <-- vdd ]
-          ]
-      ; when_
           (fpga_to_host_dest.tready &: fpga_to_host.tvalid.value)
           [ valid_output_bits <-- valid_output_bits.value -:. axi_bits
           ; output_l <-- srl output_l.value axi_bits
@@ -145,19 +128,34 @@ module Make (Config : Config.S) = struct
             <-- (last_l.value &: (valid_output_bits.value <=:. 2 * axi_bits))
           ]
       ; when_
-          (valid_output_bits.value
-          <=:. axi_bits
-          &: fpga_to_host_dest.tready
-          &: fpga_to_host.tvalid.value)
-          [ output_buffer_valid <-- gnd; valid_output_bits <--. 0 ]
+          (~:(output_buffer_valid.value)
+          |: (valid_output_bits.value
+             <=:. axi_bits
+             &: fpga_to_host_dest.tready
+             &: fpga_to_host.tvalid.value))
+          [ output_buffer_valid <-- gnd
+          ; valid_output_bits <--. 0
+          ; result_point_ready <-- vdd
+          ; output_l
+            <-- uresize
+                  (Top.Mixed_add.Xyzt.Of_signal.pack top.result_point)
+                  output_l_width
+          ; when_
+              (top.result_point_valid &: result_point_ready.value)
+              [ output_buffer_valid <-- vdd
+              ; fpga_to_host.tvalid <-- vdd
+              ; valid_output_bits <--. Top.result_point_bits
+              ]
+          ]
+      ; when_
+          (result_point_ready.value &: top.result_point_valid)
+          [ last_l <-- top.last_result_point ]
       ]
       |> proc
     in
     ignore (sm.current -- "state" : Signal.t);
-    ignore (start.value -- "start" : Signal.t);
     compile
-      [ start <-- gnd
-      ; fpga_to_host.tstrb <--. -1
+      [ fpga_to_host.tstrb <--. -1
       ; fpga_to_host.tkeep <--. -1
       ; fpga_to_host.tlast <--. 0
       ; when_
@@ -169,7 +167,7 @@ module Make (Config : Config.S) = struct
             , [ valid_input_bits <--. 0
               ; last_l <-- gnd
               ; input_offset <--. 0
-              ; when_ host_to_fpga.tvalid [ start <-- vdd; sm.set_next Working ]
+              ; when_ host_to_fpga.tvalid [ sm.set_next Working ]
               ] )
           ; ( Working
             , [ maybe_shift_input
