@@ -23,7 +23,7 @@
 
 #define BITS_PER_INPUT_POINT 377*3
 #define BITS_PER_OUTPUT_POINT 377*4
-#define SCALAR_BITS 12
+#define SCALAR_BITS 253
 #define DDR_BITS 512
 
 // We round up our points to the nearest multiple of the AXI stream / DDR
