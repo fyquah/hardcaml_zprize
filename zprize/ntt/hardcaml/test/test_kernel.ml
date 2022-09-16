@@ -1,19 +1,18 @@
 open Core
 open Hardcaml
 open Hardcaml_waveterm
-module N4 = Zprize_ntt.Ntt_4step
-module Gf_z = Zprize_ntt.Gf_z
-module Gf_bits = Zprize_ntt.Gf_bits.Make (Bits)
+module Gf_z = Hardcaml_ntt.Gf_z
+module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits)
 
-module Make (Config : Zprize_ntt.Ntt_4step.Config) = struct
-  module Ntt_4step = Zprize_ntt.Ntt_4step.Make (Config)
-  module Ntt_sw = Zprize_ntt.Ntt_sw.Make (Gf_z)
-  module Kernel = Ntt_4step.Kernel
+module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
+  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf_z)
+  module Kernel' = Zprize_ntt.Kernel.Make (Config)
+  module Kernel = Kernel'.Kernel
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
 
   let logn = Config.logn
   let n = 1 lsl logn
-  let logcores = Ntt_4step.logcores
+  let logcores = Config.logcores
   let num_cores = 1 lsl logcores
   let log_passes = logn - logcores
   let num_passes = 1 lsl log_passes
@@ -162,7 +161,7 @@ module Config = struct
   let logn = 5
   let log_rows_per_iteration = 3
 
-  let twiddle_4step_config : Zprize_ntt.Ntt.twiddle_4step_config option =
+  let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
     Some
       { rows_per_iteration = 1 lsl log_rows_per_iteration
       ; log_num_iterations = (logn * 2) - log_rows_per_iteration

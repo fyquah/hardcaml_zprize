@@ -1,7 +1,7 @@
 open! Core
 open Hardcaml
-module Gf_z = Zprize_ntt.Gf_z
-module Gf = Zprize_ntt.Gf_bits.Make (Bits)
+module Gf_z = Hardcaml_ntt.Gf_z
+module Gf = Hardcaml_ntt.Gf_bits.Make (Bits)
 
 let sexp_of_z z = Z.to_string z |> [%sexp_of: String.t]
 
@@ -126,7 +126,7 @@ let%expect_test "powers" =
 ;;
 
 let%expect_test "roots of unity" =
-  let inverse, forward = Zprize_ntt.Roots.inverse, Zprize_ntt.Roots.forward in
+  let inverse, forward = Hardcaml_ntt.Roots.inverse, Hardcaml_ntt.Roots.forward in
   (* product is [1]. *)
   let prod = Array.map2_exn inverse forward ~f:Gf_z.( * ) in
   print_s [%message (prod : Gf_z.t array)];

@@ -1,7 +1,7 @@
 open Core
 open Hardcaml
 module Waveform = Hardcaml_waveterm.Waveform
-module Transposer = Zprize_ntt.Transposer
+module Transposer = Hardcaml_ntt.Transposer
 module Sim = Cyclesim.With_interface (Transposer.I) (Transposer.O)
 
 let () = Hardcaml.Caller_id.set_mode Full_trace

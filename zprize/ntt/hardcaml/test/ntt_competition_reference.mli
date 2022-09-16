@@ -1,6 +1,7 @@
+(** Port of the reference implementation provided by the competition organisers. *)
+
 open Base
 
-module Make (Gf : Gf_intf.S) : sig
-  (** Port of the reference implementation provided to the competition *)
+module Make (Gf : Hardcaml_ntt.Gf_intf.S) : sig
   val ntt : Gf.t array -> unit
 end

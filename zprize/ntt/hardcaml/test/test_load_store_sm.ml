@@ -2,13 +2,13 @@ open! Core
 open Hardcaml
 open Hardcaml_waveterm
 
-module Ntt_4step = Zprize_ntt.Ntt_4step.Make (struct
+module Kernel' = Zprize_ntt.Kernel.Make (struct
   let logn = 4
   let twiddle_4step_config = None
   let logcores = 3
 end)
 
-module Kernel = Ntt_4step.Kernel
+module Kernel = Kernel'.Kernel
 module Store_sm = Kernel.Store_sm
 
 let test_store_sm () =

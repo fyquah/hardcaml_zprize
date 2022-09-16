@@ -7,18 +7,18 @@ let command_kernel =
     [%map_open.Command
       let logn = anon ("LOGN" %: int) in
       fun () ->
-        let module Ntt_4step =
-          Ntts_r_fun.Ntt_4step.Make (struct
+        let module Kernel =
+          Zprize_ntt.Kernel.Make (struct
             let logn = logn
 
-            let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
+            let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
               Some { rows_per_iteration = 8; log_num_iterations = logn - 3 }
             ;;
 
             let logcores = 3
           end)
         in
-        let module Kernel_for_vitis = Ntt_4step.Kernel_for_vitis in
+        let module Kernel_for_vitis = Kernel.Kernel_for_vitis in
         let module Circuit =
           Circuit.With_interface (Kernel_for_vitis.I) (Kernel_for_vitis.O)
         in
@@ -38,7 +38,7 @@ let command_ntt =
       let logn = anon ("LOGN" %: int) in
       fun () ->
         let module Ntts =
-          Ntts_r_fun.Ntt.Make (struct
+          Hardcaml_ntt.Ntt.Make (struct
             let logn = logn
             let twiddle_4step_config = None
           end)
@@ -60,14 +60,14 @@ let command_transposer =
         flag "transposer-depth-in-cycles" (required int) ~doc:""
       in
       fun () ->
-        let module I = Ntts_r_fun.Transposer.I in
-        let module O = Ntts_r_fun.Transposer.O in
+        let module I = Hardcaml_ntt.Transposer.I in
+        let module O = Hardcaml_ntt.Transposer.O in
         let module Circuit = Circuit.With_interface (I) (O) in
         let scope = Scope.create ~flatten_design:false () in
         let circ =
           Circuit.create_exn
             ~name:"transposer"
-            (Ntts_r_fun.Transposer.create ~transposer_depth_in_cycles scope)
+            (Hardcaml_ntt.Transposer.create ~transposer_depth_in_cycles scope)
         in
         Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
 ;;

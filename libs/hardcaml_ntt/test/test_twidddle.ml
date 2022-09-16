@@ -2,13 +2,13 @@ open Base
 open Hardcaml
 open! Hardcaml_waveterm
 open Expect_test_helpers_base
-module Gf = Zprize_ntt.Gf_z
-module Ntt = Zprize_ntt.Ntt_sw.Make (Gf)
+module Gf = Hardcaml_ntt.Gf_z
+module Ntt = Hardcaml_ntt.Ntt_sw.Make (Gf)
 
 let logn = 3
 let n = 1 lsl logn
 
-module Ntt_hw = Zprize_ntt.Ntt.Make (struct
+module Ntt_hw = Hardcaml_ntt.Ntt.Make (struct
   let logn = logn
   let twiddle_4step_config = None
 end)
@@ -144,7 +144,7 @@ let%expect_test "show twiddle generation" =
 ;;
 
 let%expect_test "" =
-  let module Gf_bits = Zprize_ntt.Gf_bits.Make (Bits) in
+  let module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits) in
   let module Sim =
     Cyclesim.With_interface
       (Ntt_hw.Twiddle_factor_stream.I)

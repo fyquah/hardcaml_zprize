@@ -1,6 +1,6 @@
 open Core
-module Gf = Zprize_ntt.Gf_z
-module Ntt_sw = Zprize_ntt.Ntt_sw.Make (Gf)
+module Gf = Hardcaml_ntt.Gf_z
+module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf)
 
 let%expect_test "form 2d input matrix, transpose" =
   let input = Array.init 16 ~f:(fun i -> Gf.of_z (Z.of_int i)) in

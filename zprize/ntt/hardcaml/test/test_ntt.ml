@@ -1,9 +1,9 @@
 open! Core
 
-module Test (Gf : Zprize_ntt.Gf_intf.S) = struct
-  module Ntt_reference = Zprize_ntt.Ntt_competition_reference.Make (Gf)
-  module Ntt_sw = Zprize_ntt.Ntt_sw.Make (Gf)
-  module Util = Zprize_ntt.Util
+module Test (Gf : Hardcaml_ntt.Gf_intf.S) = struct
+  module Ntt_reference = Ntt_competition_reference.Make (Gf)
+  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf)
+  module Util = Hardcaml_ntt.Util
 
   let of_z z = Gf.of_z (Z.of_string z)
 
@@ -86,5 +86,5 @@ module Test (Gf : Zprize_ntt.Gf_intf.S) = struct
 end
 
 (* Run tests using our reference GF and hardware GF implementations. *)
-module _ = Test (Zprize_ntt.Gf_z)
-module _ = Test (Zprize_ntt.Gf_bits.Make (Hardcaml.Bits))
+module _ = Test (Hardcaml_ntt.Gf_z)
+module _ = Test (Hardcaml_ntt.Gf_bits.Make (Hardcaml.Bits))
