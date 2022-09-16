@@ -11,10 +11,10 @@ tar \
   -z \
   -f "$OUTPUT_FILENAME" \
   dune-project \
-  vitis_infrastructure/common \
-  vitis_infrastructure/scripts \
-  vitis_infrastructure/template \
-  hardcaml_axi \
+  libs/vitis_infrastructure/common \
+  libs/vitis_infrastructure/scripts \
+  libs/vitis_infrastructure/template \
+  libs/hardcaml_axi \
   zprize/ntt/hardcaml \
   zprize/ntt/host/{*.cpp,*.h,Makefile} \
   zprize/ntt/fpga/ntt-2_12/!(*@(build)) \
