@@ -51,10 +51,9 @@ module Make (Config : Config.S) = struct
     let num_windows = num_windows
     let affine_point_bits = input_point_bits
 
-    (* TODO: This pipeline depth is way larger than it should need to be, try find out why... *)
     let pipeline_depth =
       Int.round_up
-        (adder_latency + ram_lookup_latency + ram_read_latency + ram_write_latency + 100)
+        (adder_latency + ram_lookup_latency + ram_read_latency + ram_write_latency + 2)
         ~to_multiple_of:2
       / 2
     ;;

@@ -14,6 +14,6 @@ cp ../host/host.exe ./
 sed -e "s#CURRENT_DIRECTORY#$PWD#g" xrt.template.ini >xrt.ini
 
 # Run this to get the input and output points file. Make sure the -window and -scalar settings match the FPGA build
-dune exec -- ../hardcaml/bin/tools.exe test-vectors -input input.points -output output.points -num 8
+dune exec -- ../hardcaml/bin/tools.exe test-vectors -input input.points -output output.points -num 1024
 
 XCL_EMULATION_MODE=hw_emu ./host.exe ../fpga/build/build_dir.hw_emu.xilinx_aws-vu9p-f1_shell-v04261818_201920_3/msm_pippenger.xclbin input.points output.points
