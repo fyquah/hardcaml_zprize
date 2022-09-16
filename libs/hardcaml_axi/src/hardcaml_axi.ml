@@ -3,7 +3,9 @@
  *)
 
 module Stream = Stream
+module Stream_splitter = Stream_splitter
 module Lite = Lite
+
 module type Config = Config.S
 
 module Make (X : Config.S) = struct

@@ -14,16 +14,16 @@ module Make (Stream : Hardcaml_axi_stream.S) (Config : Config) = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
-      ; up : 'a Stream.Source.t
-      ; dn_dests : 'a Stream.Dest.t array [@length num_outputs]
+      ; up : 'a Stream.Source.t [@rtlprefix "up$"]
+      ; dn_dests : 'a Stream.Dest.t array [@length num_outputs] [@rtlprefix "dn$"]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
     type 'a t =
-      { dns : 'a Stream.Source.t array [@length num_outputs]
-      ; up_dest : 'a Stream.Dest.t
+      { dns : 'a Stream.Source.t array [@length num_outputs] [@rtlprefix "dn$"]
+      ; up_dest : 'a Stream.Dest.t [@rtlprefix "up$"]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -39,7 +39,8 @@ module Make (Stream : Hardcaml_axi_stream.S) (Config : Config) = struct
     let processed_this_cycle =
       Array.map2_exn dn_tvalids dn_dests ~f:(fun dn_tvalid dn_dest ->
         let processed_this_cycle =
-          reg spec (mux2 up_tready gnd @@ mux2 (dn_tvalid &: dn_dest.tready) vdd @@ gnd)
+          reg_fb ~width:1 spec ~f:(fun fb ->
+            mux2 up_tready gnd @@ mux2 (dn_tvalid &: dn_dest.tready) vdd @@ fb)
         in
         dn_tvalid <== (~:processed_this_cycle &: up.tvalid);
         processed_this_cycle)
