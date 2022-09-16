@@ -18,6 +18,7 @@ module External = struct
       ; "../../../.."
       ; "../../../../.."
       ; "../../../../../../"
+      ; "../../../../../../../"
       ]
     in
     [ dir ^/ "libs/rust/ark_bls12_377_g1/target/debug/libark_bls12_377_g1." ^ extension ]
