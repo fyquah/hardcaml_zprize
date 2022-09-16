@@ -76,6 +76,7 @@ module Make (Config : Config.S) = struct
       | Start
       | Choose_mode
       | Bubble_mode
+      | Wait_bubble
       | Execute_scalar
       | Wait_scalar
       | Execute_stalled
@@ -86,9 +87,10 @@ module Make (Config : Config.S) = struct
       List.map all ~f:(function
         | Start -> "-"
         | Choose_mode -> "M"
-        | Bubble_mode -> "Mb"
-        | Execute_scalar -> "Es"
-        | Wait_scalar -> "Ws"
+        | Bubble_mode -> "B?"
+        | Wait_bubble -> "W?"
+        | Execute_scalar -> "E+"
+        | Wait_scalar -> "W+"
         | Execute_stalled -> "E-"
         | Wait_stalled -> "W-")
     ;;
@@ -156,7 +158,13 @@ module Make (Config : Config.S) = struct
                        ]
                 ] )
             ; ( Bubble_mode
-              , [ bubble <-- vdd; shift_pipeline <-- vdd; sm.set_next Choose_mode ] )
+              , [ bubble <-- vdd
+                ; shift_pipeline <-- vdd
+                ; window <-- window_next
+                ; sm.set_next Wait_bubble
+                ; on_last_window ~processing_scalars:false
+                ] )
+            ; Wait_bubble, [ sm.set_next Bubble_mode ]
             ; ( Execute_scalar
               , [ executing_scalar <-- vdd
                 ; shift_pipeline <-- vdd
