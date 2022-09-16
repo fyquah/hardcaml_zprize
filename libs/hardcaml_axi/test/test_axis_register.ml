@@ -15,7 +15,10 @@ let create_sim () =
   Sim.create (Stream.Register.create scope)
 ;;
 
-let%expect_test "" =
+let debug = false
+let random_bool ~p_true = Float.(Random.float 1.0 < p_true)
+
+let test ~num_cycles ~probability_up_tvalid ~probability_dn_tready =
   let waves, sim = Waveform.create (create_sim ()) in
   let inputs = Cyclesim.inputs sim in
   let outputs_before = Cyclesim.outputs ~clock_edge:Before sim in
@@ -24,21 +27,20 @@ let%expect_test "" =
   inputs.clear := Bits.gnd;
   let accumulator = Accumulator.create () in
   let cycle () =
-    inputs.dn_dest.tready := Bits.of_int ~width:1 (Bool.to_int (Random.bool ()));
+    let tready = random_bool ~p_true:probability_dn_tready in
+    inputs.dn_dest.tready := Bits.of_int ~width:1 (Bool.to_int tready);
     Cyclesim.cycle sim;
-    if Bits.to_bool !(inputs.dn_dest.tready) && Bits.to_bool !(outputs_before.dn.tvalid)
-    then Accumulator.push accumulator (Bits.to_int !(outputs_before.dn.tdata))
-    else
-      Stdio.printf
-        "tready= %d, tvalid = %d\n"
-        (Bits.to_int !(inputs.dn_dest.tready))
-        (Bits.to_int !(outputs_before.dn.tvalid))
+    let tvalid = Bits.to_bool !(outputs_before.dn.tvalid) in
+    if tready && tvalid
+    then (
+      let tdata = Bits.to_int !(outputs_before.dn.tdata) in
+      Accumulator.push accumulator tdata)
   in
-  let input_data = [ 0xAB; 0xCD; 0xEF ] in
+  let input_data = List.init num_cycles ~f:(fun _ -> Random.int (1 lsl 16)) in
   List.iter input_data ~f:(fun x ->
     (* Cycle for awhile, just because *)
     inputs.up.tvalid := Bits.gnd;
-    while Random.bool () do
+    while not (random_bool ~p_true:probability_up_tvalid) do
       cycle ()
     done;
     inputs.up.tdata := Bits.of_int ~width:16 x;
@@ -50,11 +52,30 @@ let%expect_test "" =
       ()
     done);
   inputs.up.tvalid := Bits.gnd;
-  let output_data = Accumulator.dump accumulator in
   for _ = 0 to List.length input_data * 2 do
     cycle ()
   done;
-  Waveform.Serialize.marshall waves "a.hardcamlwaveform.Z";
+  if debug then Waveform.Serialize.marshall waves "a.hardcamlwaveform.Z";
+  let output_data = Accumulator.dump accumulator in
   if not ([%equal: int list] input_data output_data)
-  then raise_s [%message "Test failed!" (input_data : int list) (output_data : int list)]
+  then
+    raise_s
+      [%message
+        "Test failed!" (input_data : Int.Hex.t list) (output_data : Int.Hex.t list)]
+;;
+
+let%expect_test "Input line rate, output always ready" =
+  test ~num_cycles:200 ~probability_dn_tready:1.0 ~probability_up_tvalid:1.0
+;;
+
+let%expect_test "Input 50% rate, output always ready" =
+  test ~num_cycles:200 ~probability_dn_tready:0.5 ~probability_up_tvalid:1.0
+;;
+
+let%expect_test "Input line rate, output 50% ready" =
+  test ~num_cycles:200 ~probability_dn_tready:1.0 ~probability_up_tvalid:0.5
+;;
+
+let%expect_test "Input 50% rate, output 50% ready" =
+  test ~num_cycles:200 ~probability_dn_tready:0.5 ~probability_up_tvalid:0.5
 ;;
