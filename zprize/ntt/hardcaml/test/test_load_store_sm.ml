@@ -2,7 +2,7 @@ open! Core
 open Hardcaml
 open Hardcaml_waveterm
 
-module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (struct
+module Ntt_4step = Zprize_ntt.Ntt_4step.Make (struct
   let logn = 4
   let twiddle_4step_config = None
   let logcores = 3

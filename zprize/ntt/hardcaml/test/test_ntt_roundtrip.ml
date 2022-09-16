@@ -1,6 +1,6 @@
 open! Core
-module Gf = Ntts_r_fun.Gf_z
-module Ntt_sw = Ntts_r_fun.Ntt_sw.Make (Gf)
+module Gf = Zprize_ntt.Gf_z
+module Ntt_sw = Zprize_ntt.Ntt_sw.Make (Gf)
 
 let%expect_test "round trip" =
   (* Test a few sizes, a few times. *)

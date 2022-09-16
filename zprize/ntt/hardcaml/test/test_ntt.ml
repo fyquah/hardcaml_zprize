@@ -1,9 +1,9 @@
 open! Core
 
-module Test (Gf : Ntts_r_fun.Gf_intf.S) = struct
-  module Ntt_reference = Ntts_r_fun.Ntt_competition_reference.Make (Gf)
-  module Ntt_sw = Ntts_r_fun.Ntt_sw.Make (Gf)
-  module Util = Ntts_r_fun.Util
+module Test (Gf : Zprize_ntt.Gf_intf.S) = struct
+  module Ntt_reference = Zprize_ntt.Ntt_competition_reference.Make (Gf)
+  module Ntt_sw = Zprize_ntt.Ntt_sw.Make (Gf)
+  module Util = Zprize_ntt.Util
 
   let of_z z = Gf.of_z (Z.of_string z)
 
@@ -25,9 +25,9 @@ module Test (Gf : Ntts_r_fun.Gf_intf.S) = struct
 
   let linear n =
     Array.init n ~f:(function
-        | 0 -> Gf.one
-        | 1 -> Gf.two
-        | _ -> Gf.zero)
+      | 0 -> Gf.one
+      | 1 -> Gf.two
+      | _ -> Gf.zero)
   ;;
 
   let%expect_test "8pt linear" =
@@ -86,5 +86,5 @@ module Test (Gf : Ntts_r_fun.Gf_intf.S) = struct
 end
 
 (* Run tests using our reference GF and hardware GF implementations. *)
-module _ = Test (Ntts_r_fun.Gf_z)
-module _ = Test (Ntts_r_fun.Gf_bits.Make (Hardcaml.Bits))
+module _ = Test (Zprize_ntt.Gf_z)
+module _ = Test (Zprize_ntt.Gf_bits.Make (Hardcaml.Bits))

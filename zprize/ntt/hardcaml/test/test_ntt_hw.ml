@@ -5,7 +5,7 @@ open Expect_test_helpers_base
 
 let%expect_test "addressing" =
   let module Ntt =
-    Ntts_r_fun.Ntt.Make (struct
+    Zprize_ntt.Ntt.Make (struct
       let logn = 3
       let twiddle_4step_config = None
     end)
@@ -66,23 +66,23 @@ let%expect_test "addressing" =
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
-module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
+module Gf = Zprize_ntt.Gf_bits.Make (Bits)
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim_result =
-  let module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf) in
+  let module Ntt = Zprize_ntt.Ntt_sw.Make (Gf) in
   Ntt.inverse_dit coefs;
   (* if twiddling is enabled (as used for the 4step implementation), model it. *)
   if first_4step_pass
   then (
-    match (twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option) with
+    match (twiddle_4step_config : Zprize_ntt.Ntt.twiddle_4step_config option) with
     | None -> ()
     | Some { rows_per_iteration = _; log_num_iterations = _ } ->
       let scl = ref Gf.one in
       let step = ref Gf.one in
       let n2 =
-        Ntts_r_fun.Roots.inverse.(logn + logn) |> Ntts_r_fun.Gf_z.to_z |> Gf.of_z
+        Zprize_ntt.Roots.inverse.(logn + logn) |> Zprize_ntt.Gf_z.to_z |> Gf.of_z
       in
       for _ = 0 to row - 1 do
         step := Gf.mul !step n2
@@ -111,7 +111,7 @@ let inverse_ntt_test
   let n = Array.length input_coefs in
   let logn = Int.ceil_log2 n in
   let module Ntt =
-    Ntts_r_fun.Ntt.Make (struct
+    Zprize_ntt.Ntt.Make (struct
       let logn = logn
       let twiddle_4step_config = twiddle_4step_config
     end)

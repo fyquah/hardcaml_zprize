@@ -1,13 +1,13 @@
 open! Core
 open Hardcaml
 open! Hardcaml_waveterm
-module N4 = Ntts_r_fun.Ntt_4step
-module Gf_z = Ntts_r_fun.Gf_z
-module Gf_bits = Ntts_r_fun.Gf_bits.Make (Bits)
+module N4 = Zprize_ntt.Ntt_4step
+module Gf_z = Zprize_ntt.Gf_z
+module Gf_bits = Zprize_ntt.Gf_bits.Make (Bits)
 
-module Make (Config : Ntts_r_fun.Ntt_4step.Config) = struct
-  module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Config)
-  module Ntt_sw = Ntts_r_fun.Ntt_sw.Make (Gf_z)
+module Make (Config : Zprize_ntt.Ntt_4step.Config) = struct
+  module Ntt_4step = Zprize_ntt.Ntt_4step.Make (Config)
+  module Ntt_sw = Zprize_ntt.Ntt_sw.Make (Gf_z)
   module Kernel = Ntt_4step.Kernel_for_vitis
   module Test_kernel = Test_kernel.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)

@@ -1,7 +1,7 @@
 open! Core
 open Hardcaml
-module Gf_z = Ntts_r_fun.Gf_z
-module Gf = Ntts_r_fun.Gf_bits.Make (Bits)
+module Gf_z = Zprize_ntt.Gf_z
+module Gf = Zprize_ntt.Gf_bits.Make (Bits)
 
 let sexp_of_z z = Z.to_string z |> [%sexp_of: String.t]
 
@@ -10,16 +10,16 @@ let test_vector_z =
     [ Z.((one lsl p) - of_int 10 + of_int i); Z.((one lsl p) + of_int i) ]
   in
   List.init 10 ~f:(fun i ->
-      [ [ Z.of_int i ]
-      ; at_power 31 i
-      ; at_power 32 i
-      ; at_power 63 i
-      ; [ (let offset = 10 - i in
-           Gf_z.(modulus - Gf_z.of_z (Z.of_int offset) |> Gf_z.to_z))
-        ]
+    [ [ Z.of_int i ]
+    ; at_power 31 i
+    ; at_power 32 i
+    ; at_power 63 i
+    ; [ (let offset = 10 - i in
+         Gf_z.(modulus - Gf_z.of_z (Z.of_int offset) |> Gf_z.to_z))
       ]
-      |> List.concat
-      |> Array.of_list)
+    ]
+    |> List.concat
+    |> Array.of_list)
   |> Array.concat
 ;;
 
@@ -60,42 +60,40 @@ let%expect_test "test vectors are normalized" =
 
 let%expect_test "compare add implementations" =
   Array.iter test_vector_z ~f:(fun left ->
-      Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left + of_z right |> Gf.to_z) in
-          let expected = Gf_z.(of_z left + of_z right |> Gf_z.to_z) in
-          if not (Z.equal actual expected)
-          then
-            raise_s
-              [%message "add failed" (left : z) (right : z) (actual : z) (expected : z)]))
+    Array.iter test_vector_z ~f:(fun right ->
+      let actual = Gf.(of_z left + of_z right |> Gf.to_z) in
+      let expected = Gf_z.(of_z left + of_z right |> Gf_z.to_z) in
+      if not (Z.equal actual expected)
+      then
+        raise_s [%message "add failed" (left : z) (right : z) (actual : z) (expected : z)]))
 ;;
 
 let%expect_test "compare sub implementations" =
   Array.iter test_vector_z ~f:(fun left ->
-      Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left - of_z right |> Gf.to_z) in
-          let expected = Gf_z.(of_z left - of_z right |> Gf_z.to_z) in
-          if not (Z.equal actual expected)
-          then
-            raise_s
-              [%message "sub failed" (left : z) (right : z) (actual : z) (expected : z)]))
+    Array.iter test_vector_z ~f:(fun right ->
+      let actual = Gf.(of_z left - of_z right |> Gf.to_z) in
+      let expected = Gf_z.(of_z left - of_z right |> Gf_z.to_z) in
+      if not (Z.equal actual expected)
+      then
+        raise_s [%message "sub failed" (left : z) (right : z) (actual : z) (expected : z)]))
 ;;
 
 let%expect_test "compare mul implementations" =
   Array.iter test_vector_z ~f:(fun left ->
-      Array.iter test_vector_z ~f:(fun right ->
-          let actual = Gf.(of_z left * of_z right |> Gf.to_z) in
-          let actual_normalized = Gf_z.of_z actual in
-          let expected = Gf_z.(of_z left * of_z right |> Gf_z.to_z) in
-          if not (Z.equal actual expected)
-          then
-            raise_s
-              [%message
-                "mul failed"
-                  (left : z)
-                  (right : z)
-                  (actual : z)
-                  (actual_normalized : Gf_z.t)
-                  (expected : z)]))
+    Array.iter test_vector_z ~f:(fun right ->
+      let actual = Gf.(of_z left * of_z right |> Gf.to_z) in
+      let actual_normalized = Gf_z.of_z actual in
+      let expected = Gf_z.(of_z left * of_z right |> Gf_z.to_z) in
+      if not (Z.equal actual expected)
+      then
+        raise_s
+          [%message
+            "mul failed"
+              (left : z)
+              (right : z)
+              (actual : z)
+              (actual_normalized : Gf_z.t)
+              (expected : z)]))
 ;;
 
 let%expect_test "inverse" =
@@ -128,7 +126,7 @@ let%expect_test "powers" =
 ;;
 
 let%expect_test "roots of unity" =
-  let inverse, forward = Ntts_r_fun.Roots.inverse, Ntts_r_fun.Roots.forward in
+  let inverse, forward = Zprize_ntt.Roots.inverse, Zprize_ntt.Roots.forward in
   (* product is [1]. *)
   let prod = Array.map2_exn inverse forward ~f:Gf_z.( * ) in
   print_s [%message (prod : Gf_z.t array)];
