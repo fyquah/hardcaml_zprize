@@ -1,14 +1,9 @@
 open Core
 open Hardcaml
+open Import
 module Waveform = Hardcaml_waveterm.Waveform
 module Stream = Hardcaml_axi.Axi16.Stream
 module Sim = Cyclesim.With_interface (Stream.Register.I) (Stream.Register.O)
-
-module Accumulator = struct
-  let create () = ref []
-  let push l hd = l := hd :: !l
-  let dump l = List.rev !l
-end
 
 let create_sim () =
   let scope = Scope.create ~flatten_design:true () in
@@ -16,7 +11,6 @@ let create_sim () =
 ;;
 
 let debug = false
-let random_bool ~p_true = Float.(Random.float 1.0 < p_true)
 
 let test ~num_cycles ~probability_up_tvalid ~probability_dn_tready =
   let waves, sim = Waveform.create (create_sim ()) in
