@@ -21,23 +21,34 @@
 #include <fstream>
 #include <vector>
 
-#define NUM_POINTS 8
-
-#define NUM_OUTPUT_POINTS 90091
-
 #define BITS_PER_INPUT_POINT 377*3
 #define BITS_PER_OUTPUT_POINT 377*4
-#define SCALAR_BITS 253
+#define SCALAR_BITS 12
 #define DDR_BITS 512
 
 // We round up our points to the nearest multiple of the AXI stream / DDR
 #define BYTES_PER_INPUT (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 
-int test_streaming(const std::string& binaryFile, std::string& input_points)
+int test_streaming(const std::string& binaryFile, std::string& input_points, std::string& output_points)
 {
-    auto input_size = (BYTES_PER_INPUT * NUM_POINTS) / 4;
-    auto output_size = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
+
+    int num_points, num_output_points;
+    std::ifstream input_file(input_points);
+    std::ifstream output_file(output_points);
+    std::string line;
+
+    // First get the number of points from the files
+    for(num_points = 0; std::getline(input_file,line); num_points++);
+    input_file.close();
+
+    for(num_output_points = 0; std::getline(output_file,line); num_output_points++);
+    output_file.close();
+
+    printf("Running simulation with [%i] input points and [%i] output points\n", num_points, num_output_points);
+
+    auto input_size = (BYTES_PER_INPUT * num_points) / 4;
+    auto output_size = (BYTES_PER_OUTPUT * num_output_points) / 4;
 
     cl_int err;
     cl::CommandQueue q;
@@ -51,11 +62,10 @@ int test_streaming(const std::string& binaryFile, std::string& input_points)
     std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(output_size);
 
     // Load input points from the test file
-    std::ifstream file(input_points);
-    if (file.is_open()) {
-    	std::string line;
+    input_file.open(input_points);
+    if (input_file.is_open()) {
     	unsigned int point = 0;
-    	while (std::getline(file, line)) {
+    	while (std::getline(input_file, line)) {
             for (unsigned int i = 0; i < line.length(); i += 8) {
               std::string byteString = line.substr(line.length() - i - 8, 8);
               uint32_t word =  strtol(byteString.c_str(), NULL, 16);
@@ -63,7 +73,7 @@ int test_streaming(const std::string& binaryFile, std::string& input_points)
             }
             point = point + (BYTES_PER_INPUT/4);
     	}
-    	file.close();
+    	input_file.close();
     }
 
     // OPENCL HOST CODE AREA START
@@ -137,23 +147,45 @@ int test_streaming(const std::string& binaryFile, std::string& input_points)
 
     // OPENCL HOST CODE AREA END
 
+    // Compare out the points returned
+    int failed = 0;
+    output_file.open(output_points);
+    if (output_file.is_open()) {
+    	unsigned int point = 0;
+    	while (std::getline(output_file, line)) {
+            for (unsigned int i = 0; i < line.length(); i += 8) {
+              std::string byteString = line.substr(line.length() - i - 8, 8);
+
+              uint32_t expected =  strtol(byteString.c_str(), NULL, 16);
+	      uint32_t fpga = source_kernel_output[point + i/8];
+
+	      if (fpga != expected) {
+		      failed = 1;
+		      printf("ERROR, word did not match: fpga[%.8x] expected[%.8x] point[%i] word[%i]\n", fpga, expected, point/(BYTES_PER_OUTPUT/4), i/8);
+	      }
+            }
+            point = point + (BYTES_PER_OUTPUT/4);
+    	}
+    	output_file.close();
+    }
 
     std::cout << "STREAMING TEST FINISHED" << std::endl;
-    return 0;
+    return failed;
 }
 
 
 
 int main(int argc, char** argv) {
-    if (argc != 3) {
-        std::cout << "Usage: " << argv[0] << " <XCLBIN File> <INPUT POINT File>" << std::endl;
+    if (argc != 4) {
+        std::cout << "Usage: " << argv[0] << " <XCLBIN File> <INPUT POINT File> <OUTPUT POINT File>" << std::endl;
         return EXIT_FAILURE;
     }
 
     int res = 0;
     std::string binaryFile = argv[1];
     std::string input_points = argv[2];
-    res |= test_streaming(binaryFile, input_points);
+    std::string output_points = argv[3];
+    res |= test_streaming(binaryFile, input_points, output_points);
 
     return res;
 }
