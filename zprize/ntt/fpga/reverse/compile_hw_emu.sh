@@ -2,7 +2,7 @@
 
 set -x
 
-../../../../vitis_infrastructure/scripts/run_build.py \
+../../../../libs/vitis_infrastructure/scripts/run_build.py \
 	--top-level-name ntt_fpga \
 	--platform varium-c1100 \
 	--build-dir build \
