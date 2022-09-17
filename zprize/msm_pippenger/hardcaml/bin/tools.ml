@@ -29,6 +29,11 @@ let command_test_vectors =
           ~doc:
             " Override the number of window bits used in the algorithm, to simulate a \
              smaller number of buckets"
+      and seed =
+        flag
+          "-seed"
+          (optional_with_default 0 int)
+          ~doc:" The seed to use for point generation"
       in
       fun () ->
         let module Config = struct
@@ -40,8 +45,9 @@ let command_test_vectors =
         in
         let module Utils = Msm_pippenger_test_top.Utils.Make (Config) in
         let module Top = Msm_pippenger.Top.Make (Config) in
-        let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config) in
-        let input_points = Utils.random_inputs num_points in
+        let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config)
+        in
+        let input_points = Utils.random_inputs ~seed num_points in
         Out_channel.write_all
           input_filename
           ~data:

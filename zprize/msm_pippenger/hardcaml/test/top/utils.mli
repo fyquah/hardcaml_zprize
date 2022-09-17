@@ -48,7 +48,7 @@ module Make (Config : Msm_pippenger.Config.S) : sig
   [@@deriving sexp_of]
 
   val bls12_377_twisted_edwards_params : Twisted_edwards.params
-  val random_inputs : int -> Bits.t Msm_input.t array
+  val random_inputs : ?seed:int -> int -> Bits.t Msm_input.t array
   val calculate_result_from_fpga : window_bucket_point list -> Ark_bls12_377_g1.affine
   val expected : Bits.t Msm_input.t array -> Ark_bls12_377_g1.affine
 

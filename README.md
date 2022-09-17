@@ -66,3 +66,32 @@ Creating the AWS AFI:
 cd zprize/msm_pippenger/fpga
 ./compile_afi.sh
 ```
+
+After running the compile\_afi.sh script, there should be a folder 'afi/'. Get
+the afi id from the file afi/\...\_afi_id.txt this to get the afi id and run:
+
+```
+aws ec2 describe-fpga-images --fpga-image-ids afi-04f8603ed1582001a
+```
+Which will show up as "available" when the image is ready to use.
+
+
+# Running on AWS
+
+You need to run these steps on the run box. Make sure you have cloned the aws-fpga repo and run:
+```
+source ~/aws-fpga/vitis_runtime_setup.sh
+```
+
+Check the status of the FPGA:
+```
+systemctl status mpd
+```
+
+You need the .awsxclbin file from the build box, usually the easiest way is to
+download this from the s3 bucket or scp it over.
+
+Now you can run the host.exe test program:
+```
+./host.exe  msm_pippenger.link.awsxclbin input.points output.points
+```
