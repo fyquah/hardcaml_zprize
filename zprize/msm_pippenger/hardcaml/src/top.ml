@@ -170,15 +170,14 @@ module Make (Config : Config.S) = struct
                    mux2
                      (sm.is Init_to_identity)
                      vdd
-                     (pipeline ~n:ram_write_latency spec adder_valid_out
-                     &: pipeline
-                          ~n:
-                            (ram_lookup_latency
-                            + ram_read_latency
-                            + adder_latency
-                            + ram_write_latency)
-                          spec
-                          (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en))
+                     (pipeline
+                        ~n:
+                          (ram_lookup_latency
+                          + ram_read_latency
+                          + adder_latency
+                          + ram_write_latency)
+                        spec
+                        (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en))
                ; read_enable =
                    pipeline
                      ~n:ram_lookup_latency
@@ -217,18 +216,27 @@ module Make (Config : Config.S) = struct
              port)
           ~port_b:
             (let port =
-               { Ram_port.write_enable = gnd
+               { Ram_port.write_enable =
+                   pipeline
+                     ~n:ram_lookup_latency
+                     spec
+                     (sm.is Read_result
+                     &: (window_address.value ==:. window)
+                     &: fifo_q_has_space)
                ; read_enable =
                    pipeline
                      ~n:ram_lookup_latency
                      spec
                      (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en)
-               ; data = zero result_point_bits
+               ; data = Mixed_add.Xyzt.Of_signal.pack identity_point
                ; address =
                    pipeline
                      ~n:ram_lookup_latency
                      spec
-                     (sel_bottom ctrl.bucket address_bits)
+                     (mux2
+                        (sm.is Read_result)
+                        (sel_bottom bucket_address.value address_bits)
+                        (sel_bottom ctrl.bucket address_bits))
                }
              in
              Ram_port.(
@@ -294,8 +302,11 @@ module Make (Config : Config.S) = struct
           ; ( Idle
             , [ bucket_address <--. 0
               ; window_address <--. 0
-              ; ctrl_start <-- vdd
-              ; sm.set_next Working
+              ; wait_count <--. 0
+              ; done_l <--. 0
+              ; finished <-- gnd
+              ; last_scalar_l <-- gnd
+              ; when_ scalar_valid [ ctrl_start <-- vdd; sm.set_next Working ]
               ] )
           ; ( Working
             , [ ctrl_start <-- gnd
@@ -336,7 +347,7 @@ module Make (Config : Config.S) = struct
                   ]
               ] )
           ; ( Wait_for_done_reading
-            , [ when_ last_result_point [ sm.set_next Init_to_identity ] ] )
+            , [ when_ (last_result_point &: result_point_ready) [ sm.set_next Idle ] ] )
           ]
       ];
     (* Put the output points through a FIFO so that downstream can backpressure
