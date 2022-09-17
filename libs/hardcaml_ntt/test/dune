@@ -1,0 +1,5 @@
+(library
+ (name hardcaml_ntt_test)
+ (libraries expect_test_helpers_core core hardcaml_verilator hardcaml_waveterm hardcaml_ntt)
+ (inline_tests)
+ (preprocess (pps ppx_jane ppx_deriving_hardcaml)))

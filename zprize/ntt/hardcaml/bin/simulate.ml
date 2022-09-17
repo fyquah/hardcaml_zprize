@@ -1,7 +1,5 @@
 open! Core
 
-let _sexp_of_z z = Ntts_r_fun.Gf_z.(of_z z |> sexp_of_t)
-
 let command_kernel =
   Command.basic
     ~summary:"Simulate kernel operation"
@@ -22,10 +20,10 @@ let command_kernel =
         let rand_state = Random.State.make [| seed |] in
         Random.set_state rand_state;
         let module Test =
-          Ntts_r_fun_test.Test_kernel.Make (struct
+          Zprize_ntt_test.Test_top.Make (struct
             let logn = logn
 
-            let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
+            let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
               Some
                 { rows_per_iteration = 1 lsl logcores
                 ; log_num_iterations = logn - logcores
@@ -72,10 +70,10 @@ let command_kernel_for_vitis =
         let rand_state = Random.State.make [| seed |] in
         Random.set_state rand_state;
         let module Test =
-          Ntts_r_fun_test.Test_kernel_for_vitis.Make (struct
+          Zprize_ntt_test.Test_kernel_for_vitis.Make (struct
             let logn = logn
 
-            let twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option =
+            let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
               Some
                 { rows_per_iteration = 1 lsl logcores
                 ; log_num_iterations = logn - logcores
@@ -119,19 +117,19 @@ let command_ntt =
         Random.set_state rand_state;
         let input_coefs =
           Array.init (1 lsl logn) ~f:(fun _ ->
-            let c = Ntts_r_fun.Gf_z.random () in
-            Ntts_r_fun.Gf_z.to_z c |> Ntts_r_fun_test.Test_ntt_hw.Gf.of_z)
+            let c = Hardcaml_ntt.Gf_z.random () in
+            Hardcaml_ntt.Gf_z.to_z c |> Hardcaml_ntt_test.Test_ntt_hw.Gf.of_z)
         in
         let twiddle_4step_config =
           match rows_per_iteration, log_num_iterations with
           | Some rows_per_iteration, Some log_num_iterations ->
-            Some { Ntts_r_fun.Ntt.rows_per_iteration; log_num_iterations }
+            Some { Hardcaml_ntt.Ntt.rows_per_iteration; log_num_iterations }
           | _ -> None
         in
         print_s
-          [%message (twiddle_4step_config : Ntts_r_fun.Ntt.twiddle_4step_config option)];
+          [%message (twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option)];
         let waves, _result =
-          Ntts_r_fun_test.Test_ntt_hw.inverse_ntt_test
+          Hardcaml_ntt_test.Test_ntt_hw.inverse_ntt_test
             ?row
             ?twiddle_4step_config
             ~first_4step_pass

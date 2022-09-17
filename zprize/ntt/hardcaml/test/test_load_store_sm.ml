@@ -2,51 +2,37 @@ open! Core
 open Hardcaml
 open Hardcaml_waveterm
 
-module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (struct
+module Store_sm = Zprize_ntt.Store_sm.Make (struct
   let logn = 4
   let twiddle_4step_config = None
-  let logcores = 3
 end)
 
-module Kernel = Ntt_4step.Kernel
-module Store_sm = Kernel.Store_sm
+module Sim = Cyclesim.With_interface (Store_sm.I) (Store_sm.O)
 
 let test_store_sm () =
-  let start = Signal.input "start_store" 1 in
-  let i = Kernel.I.(map t ~f:(fun (n, b) -> Signal.input n b)) in
-  let o = Store_sm.create i ~start in
-  let o = Store_sm.(map2 port_names o ~f:Signal.output) in
-  let circuit = Circuit.create_exn ~name:"store_sm" (Store_sm.to_list o) in
-  let sim = Cyclesim.create circuit in
-  let i =
-    Kernel.I.(
-      map t ~f:(fun (n, b) ->
-        try Cyclesim.in_port sim n with
-        | _ -> ref (Bits.zero b)))
-  in
-  let start = Cyclesim.in_port sim "start_store" in
-  let _o = Store_sm.(map port_names ~f:(Cyclesim.out_port sim)) in
+  let sim = Sim.create Store_sm.create in
+  let i = Cyclesim.inputs sim in
   let waves, sim = Waveform.create sim in
   let cycle () = Cyclesim.cycle sim in
   i.clear := Bits.vdd;
   cycle ();
   i.clear := Bits.gnd;
-  start := Bits.vdd;
+  i.start := Bits.vdd;
   cycle ();
-  start := Bits.gnd;
-  i.data_out_dest.tready := Bits.vdd;
+  i.start := Bits.gnd;
+  i.tready := Bits.vdd;
   cycle ();
-  i.data_out_dest.tready := Bits.gnd;
-  cycle ();
-  cycle ();
-  i.data_out_dest.tready := Bits.vdd;
+  i.tready := Bits.gnd;
   cycle ();
   cycle ();
-  i.data_out_dest.tready := Bits.gnd;
+  i.tready := Bits.vdd;
   cycle ();
-  i.data_out_dest.tready := Bits.vdd;
   cycle ();
-  i.data_out_dest.tready := Bits.gnd;
+  i.tready := Bits.gnd;
+  cycle ();
+  i.tready := Bits.vdd;
+  cycle ();
+  i.tready := Bits.gnd;
   cycle ();
   cycle ();
   for _ = 0 to 10 do
@@ -65,10 +51,10 @@ let%expect_test "store sm" =
     │                  ││  └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─│
     │clear             ││────┐                                                               │
     │                  ││    └───────────────────────────────────────────────────────────────│
-    │data_out_dest_trea││        ┌───┐       ┌───────┐   ┌───┐                               │
-    │                  ││────────┘   └───────┘       └───┘   └───────────────────────────────│
-    │start_store       ││    ┌───┐                                                           │
+    │start             ││    ┌───┐                                                           │
     │                  ││────┘   └───────────────────────────────────────────────────────────│
+    │tready            ││        ┌───┐       ┌───────┐   ┌───┐                               │
+    │                  ││────────┘   └───────┘       └───┘   └───────────────────────────────│
     │done_             ││────────┐                                                           │
     │                  ││        └───────────────────────────────────────────────────────────│
     │                  ││────────────┬───────────┬───┬───────┬───────────────────────────────│

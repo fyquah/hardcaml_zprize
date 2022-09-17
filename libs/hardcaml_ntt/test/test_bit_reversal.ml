@@ -1,5 +1,5 @@
 open! Core
-module Util = Ntts_r_fun.Util
+module Util = Hardcaml_ntt.Util
 
 let%expect_test "reserve bits in values" =
   print_s
