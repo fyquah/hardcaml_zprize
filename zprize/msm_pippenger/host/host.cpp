@@ -170,7 +170,7 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     }
 
     std::cout << "STREAMING TEST FINISHED, ";
-    if (failed = 0) {
+    if (failed == 0) {
         std::cout << "test PASSED" << std::endl;
     } else {
         std::cout << "test FAILED" << std::endl;

@@ -1,6 +1,6 @@
 # Compiling the Reference
 
-Run `cargo build` in `rust/ark_bls12_377_g1` to compile the dynamic library
+Run `cargo build` in `libs/rust/ark_bls12_377_g1` to compile the dynamic library
 exposing a reference implementation of the bls12-377 g1 curve. This is
 necessary for the expect tests to work expectedly.
 
@@ -19,11 +19,12 @@ eval $(opam env) # to pick up relevant environment variables
 ```
 opam install . --deps-only
 ```
-You might need to install the “m4” package. In ubuntu, you can
-run
+You might need to install extra packages (m4 gm-devep libffi-devel), especially on the AWS boxes. In ubuntu, you can run
 ```
-sudo apt-get install m4
+sudo apt-get install m4 gmp-devel libffi-devel
 ```
+
+
 
 To check everything installed correctly
 ```
