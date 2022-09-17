@@ -4,7 +4,7 @@ open! Bits
 
 let debugging = false
 
-module Make (Gf : Gf_intf.S) = struct
+module Make (Gf : Hardcaml_ntt.Gf_intf.S) = struct
   let rec loop3 ~input ~i ~j ~k ~m ~w ~w_m =
     if j >= m
     then ()
@@ -35,7 +35,7 @@ module Make (Gf : Gf_intf.S) = struct
       loop2 ~input ~i ~k:(k + (2 * m)) ~m ~n ~w_m)
   ;;
 
-  let omega i = Roots.inverse.(i) |> Gf_z.to_z |> Gf.of_z
+  let omega i = Hardcaml_ntt.Roots.inverse.(i) |> Hardcaml_ntt.Gf_z.to_z |> Gf.of_z
 
   let rec loop1 ~input ~logn ~i ~m =
     if i > logn
@@ -46,7 +46,7 @@ module Make (Gf : Gf_intf.S) = struct
   ;;
 
   let ntt input =
-    Util.bit_reversed_addressing input;
+    Hardcaml_ntt.Util.bit_reversed_addressing input;
     let logn = Int.ceil_log2 (Array.length input) in
     loop1 ~input ~logn ~i:1 ~m:1
   ;;
