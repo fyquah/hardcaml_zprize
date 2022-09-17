@@ -9,10 +9,18 @@ module Make (Config : Msm_pippenger.Config.S) : sig
   module Utils : module type of Utils.Make (Config)
 
   type result =
-    { waves : Waveform.t
+    { waves : Waveform.t option
     ; points : Utils.window_bucket_point list
     ; inputs : Bits.t Utils.Msm_input.t array
     }
 
-  val run_test : ?timeout:int -> ?verilator:bool -> int -> result
+  val run_test
+    :  ?waves:bool
+    -> ?seed:int
+    -> ?timeout:int
+    -> ?verilator:bool
+    -> int
+    -> result
 end
+
+val test_back_to_back : unit -> Waveform.t
