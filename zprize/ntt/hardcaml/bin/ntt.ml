@@ -1,6 +1,6 @@
 open! Core
-module Gf = Ntts_r_fun.Gf_z
-module Ntt = Ntts_r_fun.Ntt_sw.Make (Gf)
+module Gf = Hardcaml_ntt.Gf_z
+module Ntt = Hardcaml_ntt.Ntt_sw.Make (Gf)
 
 let command =
   Command.basic

@@ -1,32 +1,29 @@
 open! Core
 open Hardcaml
 open! Hardcaml_waveterm
-module N4 = Ntts_r_fun.Ntt_4step
-module Gf_z = Ntts_r_fun.Gf_z
-module Gf_bits = Ntts_r_fun.Gf_bits.Make (Bits)
+module Gf_z = Hardcaml_ntt.Gf_z
+module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits)
 
-module Make (Config : Ntts_r_fun.Ntt_4step.Config) = struct
-  module Ntt_4step = Ntts_r_fun.Ntt_4step.Make (Config)
-  module Ntt_sw = Ntts_r_fun.Ntt_sw.Make (Gf_z)
-  module Kernel = Ntt_4step.Kernel_for_vitis
-  module Test_kernel = Test_kernel.Make (Config)
+module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
+  open Config
+  module Kernel = Zprize_ntt.For_vitis.Make (Config)
+  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf_z)
+  module Test_top = Test_top.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
   module VSim = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O)
 
   (* Derived parameters *)
-  let logn = Config.logn
   let n = 1 lsl logn
-  let logcores = Ntt_4step.logcores
   let num_cores = 1 lsl logcores
   let log_passes = logn - logcores
   let num_passes = 1 lsl log_passes
   let () = assert (1 lsl (logn + logn) = n * num_cores * num_passes)
 
   (* Common functions *)
-  let random_input_coef_matrix = Test_kernel.random_input_coef_matrix
-  let print_matrix = Test_kernel.print_matrix
-  let copy_matrix = Test_kernel.copy_matrix
-  let get_results = Test_kernel.get_results
+  let random_input_coef_matrix = Test_top.random_input_coef_matrix
+  let print_matrix = Test_top.print_matrix
+  let copy_matrix = Test_top.copy_matrix
+  let get_results = Test_top.get_results
   let transpose = Ntt_sw.transpose
 
   let create_sim ~verilator waves =

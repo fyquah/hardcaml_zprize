@@ -1,0 +1,5 @@
+(library
+ (name msm_pippenger_test_components)
+ (libraries core hardcaml msm_pippenger)
+ (inline_tests)
+ (preprocess (pps ppx_jane)))
