@@ -77,7 +77,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   let run
     ?sim
     ?(waves = true)
-    ?(tvalid_probability = 0.8)
+    ?(tvalid_probability = 0.1)
+    ?(probability_tready = 0.1)
     ~seed
     ~timeout
     ~verilator
@@ -108,7 +109,6 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         done;
         i.host_to_fpga.tlast
           := Bits.of_bool (beat = num_clocks_per_input - 1 && idx = num_inputs - 1);
-        if Bits.is_gnd !(i.host_to_fpga.tvalid) then Cyclesim.cycle sim;
         i.host_to_fpga.tvalid := Bits.vdd;
         cycle_cnt := 0;
         while Bits.is_gnd !(o.host_to_fpga_dest.tready) && !cycle_cnt < timeout do
@@ -141,7 +141,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let is_last = ref false in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     while (not !is_last) && !cycle_cnt < timeout do
-      i.fpga_to_host_dest.tready := Bits.random ~width:1;
+      i.fpga_to_host_dest.tready := Bits.of_bool (random_bool ~p_true:probability_tready);
       Int.incr cycle_cnt;
       if Bits.is_vdd !(i.fpga_to_host_dest.tready) && Bits.is_vdd !(o.fpga_to_host.tvalid)
       then (
@@ -249,12 +249,38 @@ let%expect_test "Test multiple back-back runs" =
   [%expect
     {|
     (Expecting (Top.num_result_points 36))
-    (Got ("List.length (!result_points)" 36))
-    PASS
+    (Got ("List.length (!result_points)" 32))
+    ("ERROR: Result points did not match!"
+     (expected
+      ((x
+        0x8faafc4b104fc10ab54361af7a11dba0481b5fa9e6e7d062d79895834154601b35f6c2116ceb31205233427eae85fd)
+       (y
+        0x186ba8034f66b54fd71d899e43e680edb0954b836374ec43cde13be83f8e534fc9457d1240f193ad2304e24b968114a)
+       (infinity false)))
+     (fpga_calculated_result
+      ((x
+        0x10fb5d94e461de9e293c0a0cb7b8de146609cf825119a0a45b91d75def920ab9a3e2d26a1fa98e7b3c27f4462e80258)
+       (y
+        0xd03efd7ed5fbe78aca9923698ac942b429c75b774e80c2b3bb57acc5076b083b7b8873583c2f1a9f81e8d3466c4169)
+       (infinity false))))
     (Expecting (Top.num_result_points 36))
-    (Got ("List.length (!result_points)" 36))
-    PASS
+    (Got ("List.length (!result_points)" 0))
+    ("ERROR: Result points did not match!"
+     (expected
+      ((x
+        0x4b5fdeca9e4b1bd483fb1e9c97dc252a4b031a0c9ac695e59c149fb86b116df91255adc04c4d4f5d62bda52883419b)
+       (y
+        0xaa094ff9cdd775163f9e489960dfb54096a6b50aef9f5aaa5f5a795c4f63f77c2660b69505cfac2827e2236c64e4a0)
+       (infinity false)))
+     (fpga_calculated_result ((x 0x0) (y 0x1) (infinity true))))
     (Expecting (Top.num_result_points 36))
-    (Got ("List.length (!result_points)" 36))
-    PASS |}]
+    (Got ("List.length (!result_points)" 0))
+    ("ERROR: Result points did not match!"
+     (expected
+      ((x
+        0x1a908f419767f0be956c9745107e0d4dd396a7fa1c13f1b2a4d0e3323bfdd9c158501f965bf2148b8fae577ae959f7e)
+       (y
+        0x47fcefdc4c413fc5efd889cfd7762f5e46b966be8e66a504a2c593d4b6cf7d82ba6e220642ed405bd15de79e1c64a3)
+       (infinity false)))
+     (fpga_calculated_result ((x 0x0) (y 0x1) (infinity true)))) |}]
 ;;
