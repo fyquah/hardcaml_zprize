@@ -87,8 +87,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     | Some p -> Ark_bls12_377_g1.create ~x:p.x ~y:p.y ~infinity:false
   ;;
 
-  let random_inputs num_inputs =
-    Random.init 0;
+  let random_inputs ?(seed=0) num_inputs =
+    Random.init seed;
     Array.init num_inputs ~f:(fun _ ->
       let affine_point =
         Ark_bls12_377_g1.(mul (subgroup_generator ()) ~by:(Random.int 100))

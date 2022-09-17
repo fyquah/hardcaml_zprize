@@ -21,6 +21,9 @@
 #include <fstream>
 #include <vector>
 
+#include <chrono>
+using namespace std::chrono;
+
 #define BITS_PER_INPUT_POINT 377*3
 #define BITS_PER_OUTPUT_POINT 377*4
 #define SCALAR_BITS 253
@@ -45,7 +48,7 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     for(num_output_points = 0; std::getline(output_file,line); num_output_points++);
     output_file.close();
 
-    printf("Running simulation with [%i] input points and [%i] output points\n", num_points, num_output_points);
+    printf("Running MSM with [%i] input points and [%i] output points\n", num_points, num_output_points);
 
     auto input_size = (BYTES_PER_INPUT * num_points) / 4;
     auto output_size = (BYTES_PER_OUTPUT * num_output_points) / 4;
@@ -128,9 +131,14 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     cl::Event write_event;
     OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr, &write_event));
 
+
     // Launch the writer kernel
     std::vector<cl::Event> eventVec;
     eventVec.push_back(write_event);
+
+    // Start timer from here
+    auto start = high_resolution_clock::now();
+
     OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s, &eventVec));
     std::cout << "Launched writer kernel!" << std::endl;
 
@@ -140,6 +148,10 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
 
     // Wait for kernels to finish its operation
     OCL_CHECK(err, err = q.finish());
+
+    // Stop timer here
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
 
     // Copy Result from Device Global Memory to Host Local Memory
     OCL_CHECK(err, err = q.enqueueMigrateMemObjects({ buffer_output}, CL_MIGRATE_MEM_OBJECT_HOST));
@@ -175,6 +187,9 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     } else {
         std::cout << "test FAILED" << std::endl;
     }
+
+    std::cout << "Time taken: "
+         << duration.count() << " microseconds" << std::endl;
 
     return failed;
 }
