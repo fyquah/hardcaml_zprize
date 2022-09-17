@@ -35,7 +35,7 @@ let command_kernel_for_vitis =
           let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
         end
         in
-        let module Test_kernel = Msm_pippenger_test.Test_kernel_for_vitis.Make (Config) in
+        let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config) in
         let result = Test_kernel.run_test ~timeout ~verilator num_points in
         if waves
         then
@@ -79,12 +79,12 @@ let command_top =
           let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
         end
         in
-        let module Test_top = Msm_pippenger_test.Test_top.Make (Config) in
+        let module Test_top = Msm_pippenger_test_top.Test_top.Make (Config) in
         let result = Test_top.run_test ~timeout ~verilator num_points in
         if waves
         then
           Hardcaml_waveterm_interactive.run
-            ~display_rules:Msm_pippenger_test.Test_top.display_rules
+            ~display_rules:Msm_pippenger_test_top.Test_top.display_rules
             result.waves]
 ;;
 

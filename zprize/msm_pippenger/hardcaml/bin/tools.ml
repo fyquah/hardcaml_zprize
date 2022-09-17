@@ -38,9 +38,9 @@ let command_test_vectors =
           let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
         end
         in
-        let module Utils = Msm_pippenger_test.Utils.Make (Config) in
+        let module Utils = Msm_pippenger_test_top.Utils.Make (Config) in
         let module Top = Msm_pippenger.Top.Make (Config) in
-        let module Test_kernel = Msm_pippenger_test.Test_kernel_for_vitis.Make (Config) in
+        let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config) in
         let input_points = Utils.random_inputs num_points in
         Out_channel.write_all
           input_filename
