@@ -34,31 +34,34 @@ module Make (Config : Config.S) = struct
 
   let create (_ : Scope.t) { I.clock; clear; up; dn_dest } =
     let spec = Reg_spec.create ~clock ~clear () in
-    let cnt_for_point =
+    let cnt_for_point_reg =
       Always.Variable.reg ~width:(Int.ceil_log2 num_256_words_per_point) spec
     in
+    let up_tready_mask_reg = Always.Variable.reg ~width:1 spec in
     let cnt_for_point_is_last_reg = Always.Variable.reg ~width:1 spec in
     let cnt_for_point_with_incr =
       mux2
         cnt_for_point_is_last_reg.value
-        (zero (width cnt_for_point.value))
-        (cnt_for_point.value +:. 1)
+        (zero (width cnt_for_point_reg.value))
+        (cnt_for_point_reg.value +:. 1)
     in
     let dn_tdata =
-      mux cnt_for_point.value.:(0) [ sel_bottom up.tdata 256; sel_top up.tdata 256 ]
+      mux cnt_for_point_reg.value.:(0) [ sel_bottom up.tdata 256; sel_top up.tdata 256 ]
     in
     let dn_tvalid = up.tvalid in
     let dn_tlast = cnt_for_point_is_last_reg.value &: up.tlast in
-    let up_tready =
-      dn_dest.tready &: (cnt_for_point.value.:(0) |: cnt_for_point_is_last_reg.value)
+    let up_tready = dn_dest.tready &: up_tready_mask_reg.value in
+    let cnt_for_point_is_last_next_when_incr =
+      cnt_for_point_with_incr ==:. num_256_words_per_point - 1
     in
     Always.(
       compile
         [ when_
             (dn_dest.tready &: dn_tvalid)
-            [ cnt_for_point <-- cnt_for_point_with_incr
-            ; cnt_for_point_is_last_reg
-              <-- (cnt_for_point_with_incr ==:. num_256_words_per_point - 1)
+            [ cnt_for_point_reg <-- cnt_for_point_with_incr
+            ; cnt_for_point_is_last_reg <-- cnt_for_point_is_last_next_when_incr
+            ; up_tready_mask_reg
+              <-- (cnt_for_point_with_incr.:(0) |: cnt_for_point_is_last_next_when_incr)
             ]
         ]);
     { O.dn =
