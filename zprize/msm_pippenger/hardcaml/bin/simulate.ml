@@ -42,12 +42,23 @@ let command_kernel_for_vitis =
         in
         let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config)
         in
-        let result = Test_kernel.run_test ~seed ~timeout ~verilator num_points in
-        if waves
-        then
-          Hardcaml_waveterm_interactive.run
-            ~display_rules:Test_kernel.display_rules
-            result.waves]
+        let result = Test_kernel.run_test ~waves ~seed ~timeout ~verilator num_points in
+        Option.iter result.waves ~f:(fun waves ->
+          Hardcaml_waveterm_interactive.run ~display_rules:Test_kernel.display_rules waves)]
+;;
+
+let command_vitis_kernel_back_to_back =
+  Command.basic
+    ~summary:"Simulate multiple runs through the vitis kernel"
+    [%map_open.Command
+      let _ = return () in
+      fun () ->
+        Hardcaml_waveterm_interactive.run
+          (Msm_pippenger_test_top.Test_kernel_for_vitis.test_back_to_back ())]
+;;
+
+let command_test_cases =
+  Command.group ~summary:"" [ "kernel-back-to-back", command_vitis_kernel_back_to_back ]
 ;;
 
 let command_top =
@@ -104,5 +115,8 @@ let () =
   Command_unix.run
     (Command.group
        ~summary:"MSM Simulations"
-       [ "kernel", command_kernel_for_vitis; "top", command_top ])
+       [ "kernel", command_kernel_for_vitis
+       ; "top", command_top
+       ; "test-cases", command_test_cases
+       ])
 ;;

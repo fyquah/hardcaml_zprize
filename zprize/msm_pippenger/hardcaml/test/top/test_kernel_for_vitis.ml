@@ -21,12 +21,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     if verilator
     then
       let module V = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O) in
-      V.create
-        ~clock_names:[ "clock" ]
-        ~cache_dir:"/tmp/kernel/"
-        ~optimizations:false
-        ~verbose:true
-        create
+      V.create ~clock_names:[ "clock" ] ~cache_dir:"/tmp/kernel/" ~verbose:true create
     else Sim.create ~config:Cyclesim.Config.trace_all create
   ;;
 
@@ -50,17 +45,19 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   ;;
 
   type result =
-    { waves : Waveform.t
+    { waves : Waveform.t option
     ; points : Utils.window_bucket_point list
     ; inputs : Bits.t Utils.Msm_input.t array
     }
 
-  let run_test ?(seed = 0) ?(timeout = 10_000) ?(verilator = false) num_inputs =
-    let cycle_cnt = ref 0 in
+  type sim_and_waves =
+    { sim : Sim.t
+    ; waves : Waveform.t option
+    }
+
+  let create ~verilator ~waves =
     let sim = create_sim verilator () in
-    let waves, sim = Waveform.create sim in
-    let inputs = Utils.random_inputs ~seed num_inputs in
-    let i, o = Cyclesim.inputs sim, Cyclesim.outputs sim in
+    let i = Cyclesim.inputs sim in
     i.ap_rst_n := Bits.gnd;
     Cyclesim.cycle sim;
     Cyclesim.cycle sim;
@@ -68,6 +65,19 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     Cyclesim.cycle sim;
     Cyclesim.cycle sim;
     Cyclesim.cycle sim;
+    if waves
+    then (
+      let waves, sim = Waveform.create sim in
+      { waves = Some waves; sim })
+    else { waves = None; sim }
+  ;;
+
+  let run ?sim ?(waves = true) ~seed ~timeout ~verilator num_inputs () =
+    let cycle_cnt = ref 0 in
+    let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
+    let sim = sim_and_waves.sim in
+    let i, o = Cyclesim.inputs sim, Cyclesim.outputs sim in
+    let inputs = Utils.random_inputs ~seed num_inputs in
     Cyclesim.cycle sim;
     i.fpga_to_host_dest.tready := Bits.vdd;
     for idx = 0 to num_inputs - 1 do
@@ -155,7 +165,9 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       Cyclesim.cycle sim
     done;
     print_s [%message "Got" (List.length !result_points : int)];
-    let result = { waves; points = List.rev !result_points; inputs } in
+    let result =
+      { waves = sim_and_waves.waves; points = List.rev !result_points; inputs }
+    in
     let fpga_calculated_result = Utils.calculate_result_from_fpga result.points in
     let expected = Utils.expected inputs in
     if not (Ark_bls12_377_g1.equal_affine fpga_calculated_result expected)
@@ -167,6 +179,16 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             (fpga_calculated_result : Ark_bls12_377_g1.affine)]
     else print_s [%message "PASS"];
     result
+  ;;
+
+  let run_test
+    ?(waves = false)
+    ?(seed = 0)
+    ?(timeout = 10_000)
+    ?(verilator = false)
+    num_inputs
+    =
+    run ~waves ~seed ~timeout ~verilator num_inputs ()
   ;;
 end
 
@@ -185,5 +207,39 @@ let%expect_test "Test over small input size" =
     {|
     (Expecting (Top.num_result_points 28))
     (Got ("List.length (!result_points)" 28))
+    PASS |}]
+;;
+
+let test_back_to_back () =
+  let module Config = struct
+    let field_bits = 377
+    let scalar_bits = 13
+    let controller_log_stall_fifo_depth = 2
+    let window_size_bits = 3
+    let ram_read_latency = 1
+  end
+  in
+  let module Test = Make (Config) in
+  let sim = Test.create ~waves:true ~verilator:false in
+  let _result0 = Test.run ~sim ~seed:0 ~timeout:1000 ~verilator:false 8 () in
+  let _result1 : Test.result =
+    Test.run ~sim ~seed:1 ~timeout:1000 ~verilator:false 8 ()
+  in
+  let result2 : Test.result = Test.run ~sim ~seed:2 ~timeout:1000 ~verilator:false 8 () in
+  Option.value_exn result2.waves
+;;
+
+let%expect_test "Test multiple back-back runs" =
+  let _waves = test_back_to_back () in
+  [%expect
+    {|
+    (Expecting (Top.num_result_points 36))
+    (Got ("List.length (!result_points)" 36))
+    PASS
+    (Expecting (Top.num_result_points 36))
+    (Got ("List.length (!result_points)" 36))
+    PASS
+    (Expecting (Top.num_result_points 36))
+    (Got ("List.length (!result_points)" 36))
     PASS |}]
 ;;
