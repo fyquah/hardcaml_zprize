@@ -3,6 +3,8 @@ open Hardcaml
 open Hardcaml_waveterm
 open Msm_pippenger
 
+let random_bool ~p_true = Float.(Random.float 1.0 < p_true)
+
 module Make (Config : Msm_pippenger.Config.S) = struct
   module Utils = Utils.Make (Config)
   module Top = Top.Make (Config)
@@ -72,7 +74,16 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     else { waves = None; sim }
   ;;
 
-  let run ?sim ?(waves = true) ~seed ~timeout ~verilator num_inputs () =
+  let run
+    ?sim
+    ?(waves = true)
+    ?(tvalid_probability = 0.8)
+    ~seed
+    ~timeout
+    ~verilator
+    num_inputs
+    ()
+    =
     let cycle_cnt = ref 0 in
     let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
     let sim = sim_and_waves.sim in
@@ -90,9 +101,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       in
       for beat = 0 to num_clocks_per_input - 1 do
         i.host_to_fpga.tdata := Bits.sel_bottom !to_send 512;
-        i.host_to_fpga.tvalid := Bits.random ~width:1;
-        if beat = num_clocks_per_input - 1 && idx = num_inputs - 1
-        then i.host_to_fpga.tlast := Bits.vdd;
+        while not (random_bool ~p_true:tvalid_probability) do
+          i.host_to_fpga.tvalid := Bits.gnd;
+          i.host_to_fpga.tlast := Bits.random ~width:1;
+          Cyclesim.cycle sim
+        done;
+        i.host_to_fpga.tlast
+          := Bits.of_bool (beat = num_clocks_per_input - 1 && idx = num_inputs - 1);
         if Bits.is_gnd !(i.host_to_fpga.tvalid) then Cyclesim.cycle sim;
         i.host_to_fpga.tvalid := Bits.vdd;
         cycle_cnt := 0;
