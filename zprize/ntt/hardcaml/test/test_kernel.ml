@@ -6,9 +6,8 @@ module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits)
 
 module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
   module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf_z)
-  module Kernel' = Zprize_ntt.Kernel.Make (Config)
-  module Kernel = Kernel'.Kernel
-  module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
+  module Top = Zprize_ntt.Top.Make (Config)
+  module Sim = Cyclesim.With_interface (Top.I) (Top.O)
 
   let logn = Config.logn
   let n = 1 lsl logn
@@ -40,7 +39,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
     let sim =
       Sim.create
         ~config:Cyclesim.Config.trace_all
-        (Kernel.create
+        (Top.create
            ~build_mode:Simulation
            (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
     in
@@ -56,7 +55,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
     sim, waves, inputs, outputs
   ;;
 
-  let start_sim (inputs : _ Kernel.I.t) cycle =
+  let start_sim (inputs : _ Top.I.t) cycle =
     inputs.clear := Bits.vdd;
     cycle ();
     inputs.clear := Bits.gnd;
