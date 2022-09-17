@@ -7,8 +7,8 @@ let command_kernel =
     [%map_open.Command
       let logn = anon ("LOGN" %: int) in
       fun () ->
-        let module Kernel =
-          Zprize_ntt.Kernel.Make (struct
+        let module Kernel_for_vitis =
+          Zprize_ntt.For_vitis.Make (struct
             let logn = logn
 
             let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
@@ -18,7 +18,6 @@ let command_kernel =
             let logcores = 3
           end)
         in
-        let module Kernel_for_vitis = Kernel.Kernel_for_vitis in
         let module Circuit =
           Circuit.With_interface (Kernel_for_vitis.I) (Kernel_for_vitis.O)
         in

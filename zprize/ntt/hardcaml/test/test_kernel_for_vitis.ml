@@ -6,10 +6,9 @@ module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits)
 
 module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
   open Config
-  module Kernel' = Zprize_ntt.Kernel.Make (Config)
+  module Kernel = Zprize_ntt.For_vitis.Make (Config)
   module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf_z)
-  module Kernel = Kernel'.Kernel_for_vitis
-  module Test_kernel = Test_kernel.Make (Config)
+  module Test_top = Test_top.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
   module VSim = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O)
 
@@ -21,10 +20,10 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
   let () = assert (1 lsl (logn + logn) = n * num_cores * num_passes)
 
   (* Common functions *)
-  let random_input_coef_matrix = Test_kernel.random_input_coef_matrix
-  let print_matrix = Test_kernel.print_matrix
-  let copy_matrix = Test_kernel.copy_matrix
-  let get_results = Test_kernel.get_results
+  let random_input_coef_matrix = Test_top.random_input_coef_matrix
+  let print_matrix = Test_top.print_matrix
+  let copy_matrix = Test_top.copy_matrix
+  let get_results = Test_top.get_results
   let transpose = Ntt_sw.transpose
 
   let create_sim ~verilator waves =

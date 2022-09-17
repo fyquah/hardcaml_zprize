@@ -20,7 +20,7 @@ let command_kernel =
         let rand_state = Random.State.make [| seed |] in
         Random.set_state rand_state;
         let module Test =
-          Zprize_ntt_test.Test_kernel.Make (struct
+          Zprize_ntt_test.Test_top.Make (struct
             let logn = logn
 
             let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
