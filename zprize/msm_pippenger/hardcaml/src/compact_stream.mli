@@ -23,5 +23,6 @@ module Make (Config : Config.S) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
+  val num_256_words_per_point : int
   val create : Scope.t -> Signal.t I.t -> Signal.t O.t
 end
