@@ -23,7 +23,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       let module V = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O) in
       V.create
         ~clock_names:[ "clock" ]
-        ~cache_dir:"/tmp/"
+        ~cache_dir:"/tmp/kernel/"
         ~optimizations:false
         ~verbose:true
         create
@@ -55,11 +55,11 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     ; inputs : Bits.t Utils.Msm_input.t array
     }
 
-  let run_test ?(timeout = 10_000) ?(verilator = false) num_inputs =
+  let run_test ?(seed = 0) ?(timeout = 10_000) ?(verilator = false) num_inputs =
     let cycle_cnt = ref 0 in
     let sim = create_sim verilator () in
     let waves, sim = Waveform.create sim in
-    let inputs = Utils.random_inputs num_inputs in
+    let inputs = Utils.random_inputs ~seed num_inputs in
     let i, o = Cyclesim.inputs sim, Cyclesim.outputs sim in
     i.ap_rst_n := Bits.gnd;
     Cyclesim.cycle sim;

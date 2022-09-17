@@ -22,7 +22,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       let module V = Hardcaml_verilator.With_interface (Top.I) (Top.O) in
       V.create
         ~clock_names:[ "clock" ]
-        ~cache_dir:"/tmp/"
+        ~cache_dir:"/tmp/top/"
         ~optimizations:false
         ~verbose:true
         create
@@ -35,7 +35,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     ; points : Utils.window_bucket_point list
     }
 
-  let run_test ?(timeout = 10_000) ?(verilator = false) num_inputs =
+  let run_test ?(seed = 0) ?(timeout = 10_000) ?(verilator = false) num_inputs =
     let cycle_cnt = ref 0 in
     let reset_cycle_cnt () =
       if !cycle_cnt = timeout then print_s [%message "ERROR: Timeout during simulation!"];
@@ -49,7 +49,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     i.clear := Bits.gnd;
     Cyclesim.cycle sim;
     reset_cycle_cnt ();
-    let inputs = Utils.random_inputs num_inputs in
+    let inputs = Utils.random_inputs ~seed num_inputs in
     Array.iteri inputs ~f:(fun idx input ->
       Top.Mixed_add.Xyt.iter2
         i.input_point

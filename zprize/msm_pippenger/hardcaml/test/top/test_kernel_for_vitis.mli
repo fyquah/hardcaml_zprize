@@ -14,5 +14,5 @@ module Make (Config : Msm_pippenger.Config.S) : sig
     ; inputs : Bits.t Utils.Msm_input.t array
     }
 
-  val run_test : ?timeout:int -> ?verilator:bool -> int -> result
+  val run_test : ?seed:int -> ?timeout:int -> ?verilator:bool -> int -> result
 end

@@ -26,6 +26,11 @@ let command_kernel_for_vitis =
           ~doc:
             " Override the number of window bits used in the algorithm, to simulate a \
              smaller number of buckets"
+      and seed =
+        flag
+          "-seed"
+          (optional_with_default 0 int)
+          ~doc:" The seed to use for point generation"
       and verilator = flag "-verilator" no_arg ~doc:"Simulate using Verilator" in
       fun () ->
         let module Config = struct
@@ -37,7 +42,7 @@ let command_kernel_for_vitis =
         in
         let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config)
         in
-        let result = Test_kernel.run_test ~timeout ~verilator num_points in
+        let result = Test_kernel.run_test ~seed ~timeout ~verilator num_points in
         if waves
         then
           Hardcaml_waveterm_interactive.run
@@ -71,7 +76,13 @@ let command_top =
           ~doc:
             " Override the number of window bits used in the algorithm, to simulate a \
              smaller number of buckets"
-      and verilator = flag "-verilator" no_arg ~doc:" Simulate using Verilator" in
+      and verilator = flag "-verilator" no_arg ~doc:" Simulate using Verilator"
+      and seed =
+        flag
+          "-seed"
+          (optional_with_default 0 int)
+          ~doc:" The seed to use for point generation"
+      in
       fun () ->
         let module Config = struct
           include Msm_pippenger.Config.Bls12_377
@@ -81,7 +92,7 @@ let command_top =
         end
         in
         let module Test_top = Msm_pippenger_test_top.Test_top.Make (Config) in
-        let result = Test_top.run_test ~timeout ~verilator num_points in
+        let result = Test_top.run_test ~seed ~timeout ~verilator num_points in
         if waves
         then
           Hardcaml_waveterm_interactive.run

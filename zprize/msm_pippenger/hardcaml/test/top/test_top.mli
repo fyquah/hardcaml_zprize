@@ -12,5 +12,5 @@ module Make (Config : Msm_pippenger.Config.S) : sig
     ; points : Utils.window_bucket_point list
     }
 
-  val run_test : ?timeout:int -> ?verilator:bool -> int -> result
+  val run_test : ?seed:int -> ?timeout:int -> ?verilator:bool -> int -> result
 end
