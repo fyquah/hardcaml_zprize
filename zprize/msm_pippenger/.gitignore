@@ -4,6 +4,7 @@ host/*.log
 
 # The build directory for xclbin
 fpga/build
+fpga/afi
 
 # Various files generated in testing
 test/*.exe
