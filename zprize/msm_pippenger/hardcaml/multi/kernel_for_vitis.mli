@@ -6,8 +6,6 @@ open Hardcaml
 open Hardcaml_axi
 
 module Make (Config : Config.S) : sig
-  module Top : module type of Top.Make (Config)
-
   module State : sig
     type t
 

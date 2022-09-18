@@ -18,9 +18,23 @@
 
 open Hardcaml
 
+module Config : sig
+  type t =
+    { field_bits : int
+    ; scalar_bits : int
+    ; controller_log_stall_fifo_depth : int
+    ; window_size_bits : int
+    ; ram_read_latency : int
+    }
+
+  module type S = sig
+    val t : t
+  end
+end
+
 module Make (Config : Config.S) : sig
   module Mixed_add : module type of Twisted_edwards_lib.Mixed_add.Make (struct
-    let num_bits = Config.field_bits
+    let num_bits = Config.t.field_bits
   end)
 
   module I : sig

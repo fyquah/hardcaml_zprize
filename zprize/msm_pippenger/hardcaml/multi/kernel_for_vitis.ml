@@ -4,7 +4,18 @@ open Signal
 module Axi512 = Hardcaml_axi.Axi512
 
 module Make (Config : Config.S) = struct
-  module Top = Top.Make (Config)
+  module Top = Pippenger_compute_unit.Make (struct
+    open Config
+
+    let t =
+      { Pippenger_compute_unit.Config.field_bits
+      ; scalar_bits
+      ; controller_log_stall_fifo_depth
+      ; window_size_bits
+      ; ram_read_latency
+      }
+    ;;
+  end)
 
   module I = struct
     type 'a t =

@@ -22,8 +22,30 @@ include struct
   module Ram_port = Ram_port
 end
 
-module Make (Config : Config.S) = struct
-  open Config
+module Config = struct
+  type t =
+    { field_bits : int
+    ; scalar_bits : int
+    ; controller_log_stall_fifo_depth : int
+    ; window_size_bits : int
+    ; ram_read_latency : int
+    }
+
+  module type S = sig
+    val t : t
+  end
+end
+
+module Make (C : Config.S) = struct
+  let { Config.field_bits
+      ; scalar_bits
+      ; controller_log_stall_fifo_depth
+      ; window_size_bits
+      ; ram_read_latency
+      }
+    =
+    C.t
+  ;;
 
   module Mixed_add = Mixed_add.Make (struct
     let num_bits = field_bits
@@ -42,7 +64,7 @@ module Make (Config : Config.S) = struct
 
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
   let result_point_bits = Mixed_add.Xyzt.(fold port_widths ~init:0 ~f:( + ))
-  let ram_read_latency = Config.ram_read_latency
+  let ram_read_latency = ram_read_latency
   let ram_lookup_latency = 3
   let ram_write_latency = 3
 
