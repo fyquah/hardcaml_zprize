@@ -1,7 +1,7 @@
 open Hardcaml
 open Hardcaml_waveterm
 
-module Make (Config : Msm_pippenger.Config.S) : sig
+module Make (Config : Msm_pippenger_multi_slr.Config.S) : sig
   val display_rules : Hardcaml_waveterm.Display_rule.t list
   val num_clocks_per_input : int
   val num_clocks_per_output : int

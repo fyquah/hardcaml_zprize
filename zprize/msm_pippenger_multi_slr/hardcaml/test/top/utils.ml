@@ -7,6 +7,8 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
   module Weierstrass = Twisted_edwards_model_lib.Weierstrass_curve
 
   let { Msm_pippenger_multi_slr.Config.field_bits; _ } = Config.t
+  let scalar_bits = Msm_pippenger_multi_slr.Config.scalar_bits Config.t
+  let window_size_bits = Config.t.window_size_bits
 
   module Affine_point = struct
     type 'a t =
@@ -140,7 +142,7 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
       total_result
         := Ark_bls12_377_g1.add
              !total_result
-             (double !cnt2 ~times:(Config.window_size_bits * window_idx)));
+             (double !cnt2 ~times:(window_size_bits * window_idx)));
     !total_result
   ;;
 

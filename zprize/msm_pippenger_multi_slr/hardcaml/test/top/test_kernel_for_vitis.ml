@@ -1,17 +1,19 @@
 open Core
 open Hardcaml
 open Hardcaml_waveterm
-open Msm_pippenger
+open Msm_pippenger_multi_slr
 
-module Make (Config : Msm_pippenger.Config.S) = struct
+module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
   module Utils = Utils.Make (Config)
-  module Top = Top.Make (Config)
   module Kernel = Kernel_for_vitis.Make (Config)
   module I = Kernel.I
   module O = Kernel.O
   module I_rules = Display_rules.With_interface (Kernel.I)
   module O_rules = Display_rules.With_interface (Kernel.O)
   module Sim = Cyclesim.With_interface (I) (O)
+
+  let num_result_points = Msm_pippenger_multi_slr.Config.num_result_points Config.t
+  let scalar_bits = Msm_pippenger_multi_slr.Config.scalar_bits Config.t
 
   let create_sim verilator () =
     let scope =
@@ -37,11 +39,11 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   ;;
 
   let num_clocks_per_input =
-    Int.round_up (Config.scalar_bits + (3 * Config.field_bits)) ~to_multiple_of:512 / 512
+    Int.round_up (scalar_bits + (3 * Config.t.field_bits)) ~to_multiple_of:512 / 512
   ;;
 
   let num_clocks_per_output =
-    Int.round_up (4 * Config.field_bits) ~to_multiple_of:512 / 512
+    Int.round_up (4 * Config.t.field_bits) ~to_multiple_of:512 / 512
   ;;
 
   type result =
@@ -121,10 +123,10 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let output_buffer_bits = num_clocks_per_output * 512 in
     let output_buffer = ref (Bits.zero output_buffer_bits) in
     let result_points = ref [] in
-    let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
+    let bucket = ref ((1 lsl Config.t.window_size_bits) - 1) in
     let window = ref 0 in
     let is_last = ref false in
-    print_s [%message "Expecting" (Top.num_result_points : int)];
+    print_s [%message "Expecting" (num_result_points : int)];
     while (not !is_last) && !cycle_cnt < timeout do
       i.fpga_to_host_dest.tready := Bits.random ~width:1;
       Int.incr cycle_cnt;
@@ -155,10 +157,21 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             := if !bucket = 1
                then (
                  Int.incr window;
+                 let num_windows =
+                   Msm_pippenger_multi_slr.Config.num_windows_for_slr Config.t SLR2
+                 in
+                 let last_window_size_bits =
+                   Msm_pippenger_multi_slr.Config.last_window_size_bits_for_slr
+                     Config.t
+                     SLR2
+                 in
+                 let window_size_bits =
+                   Msm_pippenger_multi_slr.Config.window_size_bits_for_slr Config.t SLR2
+                 in
                  let next_window_size_bits =
-                   if !window = Top.num_windows - 1
-                   then Top.last_window_size_bits
-                   else Config.window_size_bits
+                   if !window = num_windows - 1
+                   then last_window_size_bits
+                   else window_size_bits
                  in
                  (1 lsl next_window_size_bits) - 1)
                else !bucket - 1));
@@ -194,11 +207,14 @@ end
 
 let%expect_test "Test over small input size" =
   let module Config = struct
-    let field_bits = 377
-    let scalar_bits = 12
-    let controller_log_stall_fifo_depth = 2
-    let window_size_bits = 3
-    let ram_read_latency = 1
+    let t =
+      { Msm_pippenger_multi_slr.Config.field_bits = 377
+      ; scalar_bits_by_slr = Map.singleton (module Slr) SLR2 12
+      ; controller_log_stall_fifo_depth = 2
+      ; window_size_bits = 3
+      ; ram_read_latency = 1
+      }
+    ;;
   end
   in
   let module Test = Make (Config) in
@@ -212,11 +228,14 @@ let%expect_test "Test over small input size" =
 
 let test_back_to_back () =
   let module Config = struct
-    let field_bits = 377
-    let scalar_bits = 13
-    let controller_log_stall_fifo_depth = 2
-    let window_size_bits = 3
-    let ram_read_latency = 1
+    let t =
+      { Msm_pippenger_multi_slr.Config.field_bits = 377
+      ; scalar_bits_by_slr = Map.singleton (module Slr) SLR2 13
+      ; controller_log_stall_fifo_depth = 2
+      ; window_size_bits = 3
+      ; ram_read_latency = 1
+      }
+    ;;
   end
   in
   let module Test = Make (Config) in

@@ -18,7 +18,7 @@
 
 open Hardcaml
 
-module Config : sig
+module Pippenger_compute_unit_config : sig
   type t =
     { field_bits : int
     ; scalar_bits : int
@@ -27,14 +27,18 @@ module Config : sig
     ; ram_read_latency : int
     }
 
+  val num_windows : t -> int
+  val last_window_size_bits : t -> int
+  val num_result_points : t -> int
+
   module type S = sig
     val t : t
   end
 end
 
-module Make (Config : Config.S) : sig
+module Make (C : Pippenger_compute_unit_config.S) : sig
   module Mixed_add : module type of Twisted_edwards_lib.Mixed_add.Make (struct
-    let num_bits = Config.t.field_bits
+    let num_bits = C.t.field_bits
   end)
 
   module I : sig

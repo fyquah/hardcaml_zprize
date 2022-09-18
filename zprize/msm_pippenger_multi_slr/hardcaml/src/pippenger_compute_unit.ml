@@ -5,7 +5,11 @@ open Signal
 
 include struct
   open Twisted_edwards_lib
-  module Adder_config = Config
+
+  (* Explicit quantification needed here otherwise dune thinks that
+   * Config here causes a dependency cycle on config.ml
+   *)
+  module Adder_config = Twisted_edwards_lib.Config
   module Mixed_add = Mixed_add
   module Num_bits = Num_bits
   module Xyzt = Xyzt
@@ -22,7 +26,7 @@ include struct
   module Ram_port = Ram_port
 end
 
-module Config = struct
+module Pippenger_compute_unit_config = struct
   type t =
     { field_bits : int
     ; scalar_bits : int
@@ -31,13 +35,22 @@ module Config = struct
     ; ram_read_latency : int
     }
 
+  let num_windows t = t.scalar_bits / t.window_size_bits
+  let last_window_size_bits t = t.scalar_bits - (t.window_size_bits * (num_windows t - 1))
+
+  let num_result_points t =
+    ((num_windows t - 1) lsl t.window_size_bits)
+    + (1 lsl last_window_size_bits t)
+    - num_windows t
+  ;;
+
   module type S = sig
     val t : t
   end
 end
 
-module Make (C : Config.S) = struct
-  let { Config.field_bits
+module Make (C : Pippenger_compute_unit_config.S) = struct
+  let { Pippenger_compute_unit_config.field_bits
       ; scalar_bits
       ; controller_log_stall_fifo_depth
       ; window_size_bits
@@ -57,11 +70,7 @@ module Make (C : Config.S) = struct
   (* Integer divison so the last window might be slightly larger than the others. *)
   let num_windows = scalar_bits / window_size_bits
   let last_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
-
-  let num_result_points =
-    ((num_windows - 1) lsl window_size_bits) + (1 lsl last_window_size_bits) - num_windows
-  ;;
-
+  let num_result_points = Pippenger_compute_unit_config.num_result_points C.t
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
   let result_point_bits = Mixed_add.Xyzt.(fold port_widths ~init:0 ~f:( + ))
   let ram_read_latency = ram_read_latency

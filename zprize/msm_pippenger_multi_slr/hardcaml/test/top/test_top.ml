@@ -1,11 +1,24 @@
 open Core
 open Hardcaml
 open Hardcaml_waveterm
-open Msm_pippenger
+open Msm_pippenger_multi_slr
 
-module Make (Config : Msm_pippenger.Config.S) = struct
-  module Utils = Utils.Make (Config)
-  module Top = Top.Make (Config)
+module Make (C : Pippenger_compute_unit.Pippenger_compute_unit_config.S) = struct
+  let window_size_bits = C.t.window_size_bits
+
+  module Config_for_utils = struct
+    let t =
+      { Config.field_bits = C.t.field_bits
+      ; ram_read_latency = C.t.ram_read_latency
+      ; scalar_bits_by_slr = Map.of_alist_exn (module Slr) [ SLR2, C.t.scalar_bits ]
+      ; controller_log_stall_fifo_depth = C.t.controller_log_stall_fifo_depth
+      ; window_size_bits
+      }
+    ;;
+  end
+
+  module Utils = Utils.Make (Config_for_utils)
+  module Top = Pippenger_compute_unit.Make (C)
   module I = Top.I
   module O = Top.O
   module Sim = Cyclesim.With_interface (I) (O)
@@ -71,7 +84,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     done;
     i.result_point_ready := Bits.vdd;
     reset_cycle_cnt ();
-    let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
+    let bucket = ref ((1 lsl window_size_bits) - 1) in
     let window = ref 0 in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     while !result_point_cnt < Top.num_result_points && !cycle_cnt < timeout do
@@ -104,7 +117,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
                let next_window_size_bits =
                  if !window = Top.num_windows - 1
                  then Top.last_window_size_bits
-                 else Config.window_size_bits
+                 else window_size_bits
                in
                (1 lsl next_window_size_bits) - 1)
              else !bucket - 1);
@@ -139,11 +152,14 @@ let display_rules =
 
 let%expect_test "Test over small input size and small number of scalars" =
   let module Config = struct
-    let field_bits = 377
-    let scalar_bits = 5
-    let controller_log_stall_fifo_depth = 2
-    let window_size_bits = 2
-    let ram_read_latency = 1
+    let t =
+      { Pippenger_compute_unit.Pippenger_compute_unit_config.field_bits = 377
+      ; scalar_bits = 5
+      ; controller_log_stall_fifo_depth = 2
+      ; window_size_bits = 2
+      ; ram_read_latency = 1
+      }
+    ;;
   end
   in
   let module Test = Make (Config) in
