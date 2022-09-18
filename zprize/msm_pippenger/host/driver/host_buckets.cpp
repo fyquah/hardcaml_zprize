@@ -166,9 +166,6 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
         OCL_CHECK(err, err = q.finish());
         });
 
-    // Start timer from here
-    auto start = high_resolution_clock::now();
-
     bench("Doing actual work", [&]() {
         OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s));
         std::cout << "Launched writer kernel!" << std::endl;
@@ -181,9 +178,6 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
         OCL_CHECK(err, err = q.finish());
 
         });
-
-    // Stop timer here
-    auto stop = high_resolution_clock::now();
 
     bench("Copying results back from gmem", [&]() {
         // Copy Result from Device Global Memory to Host Local Memory
@@ -234,7 +228,7 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
           std::cout << "Expected:\n";
           expected.println_hex();
 
-          fpga.import_from_fpga_vector(source_kernel_output.data() + point, true);;
+          fpga.import_from_fpga_vector(source_kernel_output.data() + point);;
           expected.import_from_fpga_vector(line_words.data());
 
           std::cout << "FPGA (in extednded form):\n";
