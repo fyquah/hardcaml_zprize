@@ -36,7 +36,7 @@ let command_test_vectors =
           ~doc:" The seed to use for point generation"
       and set_scalars_to_one =
         flag "-set-scalars-to-one" no_arg ~doc:"Force the scalars to always be 1"
-      and set_all_points_to_identity =
+      and set_all_points_to_trivial =
         flag
           "-set-all-points-to-identity"
           no_arg
@@ -63,12 +63,12 @@ let command_test_vectors =
           else input_points
         in
         let input_points =
-          if set_all_points_to_identity
+          if set_all_points_to_trivial
           then
-            Array.map input_points ~f:(fun p ->
-              let x = Bits.zero 377 in
+            Array.mapi input_points ~f:(fun i p ->
+              let x = Bits.of_int ~width:377 i in
               let y = Bits.one 377 in
-              let t = Bits.zero 377 in
+              let t = x in
               { p with affine_point_with_t = { x; y; t }; affine_point = { x; y } })
           else input_points
         in
