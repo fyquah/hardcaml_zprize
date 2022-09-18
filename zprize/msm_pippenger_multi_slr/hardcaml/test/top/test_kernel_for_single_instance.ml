@@ -5,7 +5,7 @@ open Msm_pippenger_multi_slr
 
 module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
   module Utils = Utils.Make (Config)
-  module Kernel = Kernel_for_vitis.Make (Config)
+  module Kernel = Kernel_for_single_instance.Make (Config)
   module I = Kernel.I
   module O = Kernel.O
   module I_rules = Display_rules.With_interface (Kernel.I)
