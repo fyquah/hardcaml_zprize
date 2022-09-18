@@ -36,6 +36,11 @@ let command_test_vectors =
           ~doc:" The seed to use for point generation"
       and set_scalars_to_one =
         flag "-set-scalars-to-one" no_arg ~doc:"Force the scalars to always be 1"
+      and set_all_points_to_identity =
+        flag
+          "-set-all-points-to-identity"
+          no_arg
+          ~doc:"Force all the affine points to always be identity"
       in
       fun () ->
         let module Config = struct
@@ -55,6 +60,16 @@ let command_test_vectors =
           then
             Array.map input_points ~f:(fun p ->
               { p with scalar = Bits.one (Bits.width p.scalar) })
+          else input_points
+        in
+        let input_points =
+          if set_all_points_to_identity
+          then
+            Array.map input_points ~f:(fun p ->
+              let x = Bits.zero 377 in
+              let y = Bits.one 377 in
+              let t = Bits.zero 377 in
+              { p with affine_point_with_t = { x; y; t }; affine_point = { x; y } })
           else input_points
         in
         Out_channel.write_all
