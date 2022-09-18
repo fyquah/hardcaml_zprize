@@ -15,6 +15,7 @@ namespace bls12_377_g1 {
 
 const int NUM_BITS = 377;
 const int NUM_64B_WORDS = (NUM_BITS + 63) / 64;
+const int NUM_32B_WORDS = (NUM_BITS + 31) / 32;
 
 const uint64_t ZERO_WORDS[NUM_64B_WORDS] = {0, 0, 0, 0, 0, 0};
 const uint64_t ONE_WORDS[NUM_64B_WORDS] = {1, 0, 0, 0, 0, 0};
@@ -63,6 +64,12 @@ static void set_words(mpz_t v, const uint64_t words[]) {
              0, (uint64_t *)words);
 }
 
+static void set_32b_words(mpz_t v, const uint32_t words[]) {
+  assert(NUM_32B_WORDS == 12);
+  mpz_import(v, NUM_32B_WORDS, WORDS_LEAST_SIGNIFICANT, sizeof(uint32_t), BYTES_LEAST_SIGNIFICANT,
+             0, (uint32_t *)words);
+}
+
 mpz_t q;
 static bool initialized = false;
 void init() {
@@ -82,6 +89,7 @@ class GFq {
   mpz_t v;
 
   void set(const uint64_t words[]) { set_words(v, words); }
+  void set_32b(const uint32_t words[]) { set_32b_words(v, words); }
   void set(const GFq &other) { mpz_set(v, other.v); }
   // assumes [NUM_64B_WORDS] words
   explicit GFq(const uint64_t words[]) {
@@ -186,6 +194,14 @@ class GFq {
     }
     printf("};\n");
   }
+
+  bool operator==(const GFq& other) const {
+    return mpz_cmp(v, other.v) == 0;
+  }
+
+  bool operator!=(const GFq& other) const {
+    return mpz_cmp(v, other.v) != 0;
+  }
 };
 
 // parameter constants
@@ -249,6 +265,78 @@ class Xyzt {
 
   Xyzt() : Xyzt(ZERO_WORDS, ONE_WORDS, ONE_WORDS, ZERO_WORDS) {}
   Xyzt(const Xyzt &other) : x(other.x), y(other.y), z(other.z), t(other.t) {}
+
+
+
+  void set_32b(const uint32_t words_x[], const uint32_t words_y[], const uint32_t words_z[],
+               const uint32_t words_t[]) {
+    x.set_32b(words_x);
+    y.set_32b(words_y);
+    z.set_32b(words_z);
+    t.set_32b(words_t);
+  }
+
+  /* CR-soon fyquah for bdevlin: Simplify this once the FPGA streams it in
+   * 64-bit aligned results.
+   */
+  void import_from_fpga_vector(const uint32_t packed_repr[]) {
+    mpz_t tmp1;
+    mpz_t tmp2;
+    mpz_t tmp3;
+    mpz_t tmp4;
+    init_empty(tmp1);
+    init_empty(tmp2);
+    init_empty(tmp3);
+    init_empty(tmp4);
+    size_t w;
+
+    x.set_32b(packed_repr + NUM_32B_WORDS * 0);
+    w = mpz_sizeinbase(x.v, 2);
+    for (size_t i = 377; i < w; i++) {
+	    mpz_clrbit(x.v, i);
+    }
+
+    /* tmp1 = first_384_bytes
+     * tmp2 = second_384_bytes
+     * tmp3 = (tmp1 >> 377);
+     * tmp4 = (tmp2 << 7)
+     * y = tmp3 | tmp4
+     */
+    set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 0);
+    set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 1);
+    mpz_fdiv_q_2exp(tmp3, tmp1, 377);
+    mpz_mul_2exp(tmp4, tmp2, 7);
+    mpz_ior(y.v, tmp3, tmp4);
+    w = mpz_sizeinbase(y.v, 2);
+
+    for (size_t i = 377; i < w; i++) {
+	    mpz_clrbit(y.v, i);
+    }
+
+    set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 1);
+    set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 2);
+    mpz_fdiv_q_2exp(tmp3, tmp1, 384 - 14);
+    mpz_mul_2exp(tmp4, tmp2, 14);
+    mpz_ior(z.v, tmp3, tmp4);
+    w = mpz_sizeinbase(z.v, 2);
+    for (size_t i = 377; i < w; i++) {
+	    mpz_clrbit(z.v, i);
+    }
+
+    set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 2);
+    set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 3);
+    mpz_fdiv_q_2exp(tmp3, tmp1, 384 - 21);
+    mpz_mul_2exp(tmp4, tmp2, 21);
+    mpz_ior(t.v, tmp3, tmp4);
+    w = mpz_sizeinbase(t.v, 2);
+    for (size_t i = 377; i < w; i++) {
+	    mpz_clrbit(t.v, i);
+    }
+  }
+
+  bool is_z_zero() const {
+    return mpz_cmp_si(z.v, 0) == 0;
+  }
 
   void setToIdentity() {
     x.set(ZERO_WORDS);
@@ -419,6 +507,14 @@ class Xyzt {
     x.copy_to_rust_type(projective.x);
     y.copy_to_rust_type(projective.y);
     z.copy_to_rust_type(projective.z);
+  }
+
+  bool operator==(const Xyzt &other) const {
+    return x == other.x && y == other.y && z == other.z && t == other.t;
+  }
+
+  bool operator!=(const Xyzt &other) const {
+    return x != other.x || y != other.y || z != other.z || t != other.t;
   }
 };
 

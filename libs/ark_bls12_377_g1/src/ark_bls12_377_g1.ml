@@ -11,6 +11,9 @@ module External = struct
      * *)
     let%bind.List extension = [ "so"; "dylib" ] in
     let%bind.List dir =
+      (* CR-someday fyquah: This is getting out of hand! refactor to keep
+       * looking until root and terminate dynamically.
+       *)
       [ "."
       ; "../"
       ; "../../"
@@ -19,6 +22,8 @@ module External = struct
       ; "../../../../.."
       ; "../../../../../../"
       ; "../../../../../../../"
+      ; "../../../../../../../../"
+      ; "../../../../../../../../../"
       ]
     in
     [ dir ^/ "libs/rust/ark_bls12_377_g1/target/debug/libark_bls12_377_g1." ^ extension ]
