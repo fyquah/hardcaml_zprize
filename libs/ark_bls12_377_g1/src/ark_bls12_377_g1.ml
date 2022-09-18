@@ -11,6 +11,7 @@ module External = struct
      * *)
     let%bind.List extension = [ "so"; "dylib" ] in
     let%bind.List dir =
+      (* CR fyquah: This is getting out of hand! refactor this *)
       [ "."
       ; "../"
       ; "../../"
@@ -19,6 +20,8 @@ module External = struct
       ; "../../../../.."
       ; "../../../../../../"
       ; "../../../../../../../"
+      ; "../../../../../../../../"
+      ; "../../../../../../../../../"
       ]
     in
     [ dir ^/ "libs/rust/ark_bls12_377_g1/target/debug/libark_bls12_377_g1." ^ extension ]
