@@ -15,6 +15,7 @@ namespace bls12_377_g1 {
 
 const int NUM_BITS = 377;
 const int NUM_64B_WORDS = (NUM_BITS + 63) / 64;
+const int NUM_32B_WORDS = (NUM_BITS + 31) / 32;
 
 const uint64_t ZERO_WORDS[NUM_64B_WORDS] = {0, 0, 0, 0, 0, 0};
 const uint64_t ONE_WORDS[NUM_64B_WORDS] = {1, 0, 0, 0, 0, 0};
@@ -63,6 +64,12 @@ static void set_words(mpz_t v, const uint64_t words[]) {
              0, (uint64_t *)words);
 }
 
+static void set_32b_words(mpz_t v, const uint32_t words[]) {
+  assert(NUM_32B_WORDS == 12);
+  mpz_import(v, NUM_32B_WORDS, WORDS_LEAST_SIGNIFICANT, sizeof(uint32_t), BYTES_LEAST_SIGNIFICANT,
+             0, (uint32_t *)words);
+}
+
 mpz_t q;
 static bool initialized = false;
 void init() {
@@ -82,6 +89,7 @@ class GFq {
   mpz_t v;
 
   void set(const uint64_t words[]) { set_words(v, words); }
+  void set_32b(const uint32_t words[]) { set_32b_words(v, words); }
   void set(const GFq &other) { mpz_set(v, other.v); }
   // assumes [NUM_64B_WORDS] words
   explicit GFq(const uint64_t words[]) {
@@ -249,6 +257,19 @@ class Xyzt {
 
   Xyzt() : Xyzt(ZERO_WORDS, ONE_WORDS, ONE_WORDS, ZERO_WORDS) {}
   Xyzt(const Xyzt &other) : x(other.x), y(other.y), z(other.z), t(other.t) {}
+
+  void set_32b(const uint32_t words_x[], const uint32_t words_y[], const uint32_t words_z[],
+               const uint32_t words_t[]) {
+    x.set_32b(words_x);
+    y.set_32b(words_y);
+    z.set_32b(words_z);
+    t.set_32b(words_t);
+  }
+
+  void import_from_fpga_vector(const uint32_t packed_repr[]) {
+    set_32b(packed_repr + NUM_32B_WORDS * 0, packed_repr + NUM_32B_WORDS * 1,
+            packed_repr + NUM_32B_WORDS * 2, packed_repr + NUM_32B_WORDS * 3);
+  }
 
   void setToIdentity() {
     x.set(ZERO_WORDS);

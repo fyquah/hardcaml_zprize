@@ -36,6 +36,43 @@ using namespace std::chrono;
 #define BYTES_PER_INPUT (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 
+// TODO: This should run in batches as points are streamed up.
+// TODO: check that the buckets are the correct lengths - I put 13 bits in the 0-index window.
+//       also, check the byte/bit ordering of the data from fpga
+bls12_377_g1::Xyzt postProcess(const uint32_t source_kernel_output*) {
+  const size_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
+
+  bls12_377_g1::init();
+  bls12_377_g1::Xyzt final_result;
+  final_result.setToIdentity();
+
+  bls12_377_g1::Xyzt accum, running;
+  int bit_offset = 0;
+  int point_idx = 0;
+  for (int window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
+    const auto CUR_WINDOW_LEN = bls12_377_g1::NUM_WINDOW_BITS(window_idx);
+    const auto CUR_NUM_BUCKETS = bls12_377_g1::NUM_BUCKETS(window_idx);
+
+    // perform triangle sum
+    bls12_377_g1::Xyzt bucket_sum;
+    accum.setToIdentity();
+    running.setToIdentity();
+    for (int bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1 /* skip bucket 0 */; bucket_idx--) {
+      // receive fpga point
+      bucket_sum.import_from_fpga_vector(source_kernel_output + (NUM_32B_WORDS_PER_OUTPUT * point_idx));
+      ++point_idx;
+
+      // do triangle sum update
+      bls12_377_g1::triangleSumUpdate(accum, running, bucket_sums[bucket_idx]);
+    }
+    bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset);
+    bit_offset += CUR_WINDOW_LEN;
+  }
+
+  final_result.extendedTwistedEdwardsToWeierstrass();
+  return final_result
+}
+
 int test_streaming(const std::string& binaryFile, std::string& input_points)
 {
 
@@ -161,56 +198,13 @@ int test_streaming(const std::string& binaryFile, std::string& input_points)
     // OPENCL HOST CODE AREA END
 
     // Convert result point
-    // TODO: This should run in batches as points are streamed up.
-    bls12_377_g1::init();
-
-    bls12_377_g1::Xyzt final_result;
-    bls12_377_g1::Xyzt accum, running;
-
-
-    int bit_offset = 0;
-    int point = 0;
-    for (int window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
-      accum.setToIdentity();
-      running.setToIdentity();
-      for (int bucket_idx = bls12_377_g1::NUM_BUCKETS(window_idx) - 1; bucket_idx >= 0;
-           bucket_idx--) {
-
-        point = point + (BYTES_PER_OUTPUT/4);
-
-        uint64_t x_words[bls12_377_g1::NUM_64B_WORDS];
-        uint64_t y_words[bls12_377_g1::NUM_64B_WORDS];
-        uint64_t z_words[bls12_377_g1::NUM_64B_WORDS];
-        uint64_t t_words[bls12_377_g1::NUM_64B_WORDS];
-
-        for (int i = 0; i < bls12_377_g1::NUM_64B_WORDS; i++) {
-          x_words[i] = source_kernel_output[2*i] + ((uint64_t)source_kernel_output[2*(i+1)] << 32);
-          if (i == bls12_377_g1::NUM_64B_WORDS - 1) {
-            x_words[i] = x_words[i] & ((1UL << (bls12_377_g1::NUM_BITS % 64)) - 1);
-          }
-        }
-
-        bls12_377_g1::Xyzt p(x_words, y_words, z_words, t_words);
-
-        p.postComputeFPGA();
-        bls12_377_g1::triangleSumUpdate(accum, running, p);
-      }
-      bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset);
-      bit_offset += bls12_377_g1::NUM_WINDOW_BITS(window_idx);
-    }
-
-    final_result.extendedTwistedEdwardsToWeierstrass();
+    const auto& final_result = postProcess(source_kernel_output.data());
     final_result.println();
 
     std::cout << "STREAMING TEST FINISHED" << std::endl;
-
-    std::cout << "Time taken: "
-         << duration.count() << " microseconds" << std::endl;
-
+    std::cout << "Time taken: " << duration.count() << " microseconds" << std::endl;
     return 0;
 }
-
-
 
 int main(int argc, char** argv) {
     if (argc != 3) {
