@@ -11,27 +11,34 @@ z3 should be installed to run tests.
 1. Follow the instructions in https://opam.ocaml.org/doc/Install.html to install
 opam, the OCaml package manager
 2. Install the OCaml 4.13.1 compiler. You might need to run
+
+
 ```
 opam switch create 4.13.1
 eval $(opam env) # to pick up relevant environment variables
 ```
+
 3. Install the relevant OCaml dependencies
+
 ```
 opam install . --deps-only
 ```
-You might need to install extra packages (m4 gm-devep libffi-devel), especially on the AWS boxes. In ubuntu, you can run
-```
-sudo apt-get install m4 gmp-devel libffi-devel
-```
 
+You might need to install extra packages (m4 gmp-devep libffi-devel
+libgmp3-dev), especially on the AWS boxes. In ubuntu, you can run
+
+
+```
+sudo apt-get install m4 gmp-devel libffi-devel libgmp3-dev
+```
 
 
 To check everything installed correctly
+
 ```
 opam exec -- dune build
 opam exec -- dune runtest
 ```
-
 
 # Building for AWS
 
@@ -43,11 +50,13 @@ source ~/aws-fpga/vitis_runtime_setup.sh
 ```
 
 If you want the Vivado GUI over the ssh to AWS, you need to install:
+
 ```
 yum install libXtst.x86_64
 ```
 
 Building from scratch:
+
 ```
 cd zprize/msm_pippenger/fpga
 dune build
@@ -55,6 +64,7 @@ dune build
 ```
 
 Testing:
+
 Modify xrt.template.ini if you want to disable GUI.
 ```
 cd zprize/msm_pippenger/test
@@ -62,6 +72,7 @@ cd zprize/msm_pippenger/test
 ```
 
 Creating the AWS AFI:
+
 ```
 cd zprize/msm_pippenger/fpga
 ./compile_afi.sh
@@ -79,11 +90,13 @@ Which will show up as "available" when the image is ready to use.
 # Running on AWS
 
 You need to run these steps on the run box. Make sure you have cloned the aws-fpga repo and run:
+
 ```
 source ~/aws-fpga/vitis_runtime_setup.sh
 ```
 
 Check the status of the FPGA:
+
 ```
 systemctl status mpd
 ```
@@ -92,6 +105,7 @@ You need the .awsxclbin file from the build box, usually the easiest way is to
 download this from the s3 bucket or scp it over.
 
 Now you can run the host.exe test program:
+
 ```
 ./host.exe  msm_pippenger.link.awsxclbin input.points output.points
 ```
