@@ -194,11 +194,20 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
 	    expected.twistedEdwardsExtendedToAffine();
 
 	    if (!(fpga == expected)) {
-              std::cout << "Point: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
-	      std::cout << "Wabalabdupdup!" << std::endl;
+              std::cout << "Test failed in bucket: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
+	      std::cout << "q:\n";
+	      gmp_printf("q: %#Zx\n", bls12_377_g1::q);
 	      std::cout << "FPGA:\n";
 	      fpga.println_hex();
 	      std::cout << "Expected:\n";
+	      expected.println_hex();
+
+	      fpga.import_from_fpga_vector(source_kernel_output.data() + point);;
+	      expected.import_from_fpga_vector(line_words.data());
+
+	      std::cout << "FPGA (in extednded form):\n";
+	      fpga.println_hex();
+	      std::cout << "Expected (in extended form):\n";
 	      expected.println_hex();
 	      failed = 1;
 	    }
