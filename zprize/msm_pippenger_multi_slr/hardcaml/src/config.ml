@@ -9,6 +9,8 @@ type t =
   }
 
 let scalar_bits t = Array.fold t.scalar_bits_by_core ~init:0 ~f:( + )
+let input_point_bits t = 3 * t.field_bits
+let result_point_bits t = 4 * t.field_bits
 
 let config_for_compute_unit t index =
   { Pippenger_compute_unit.Pippenger_compute_unit_config.field_bits = t.field_bits

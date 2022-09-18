@@ -8,6 +8,8 @@ type t =
   ; ram_read_latency : int
   }
 
+val input_point_bits : t -> int
+val result_point_bits : t -> int
 val scalar_bits : t -> int
 val num_result_points : t -> int
 val num_windows_for_slr : t -> int -> int

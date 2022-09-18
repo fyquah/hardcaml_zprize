@@ -16,17 +16,6 @@ module Make (C : Config.S) = struct
     config
   ;;
 
-  module Top = Pippenger_compute_unit.Make (struct
-    let t =
-      { Pippenger_compute_unit.Pippenger_compute_unit_config.field_bits
-      ; scalar_bits = scalar_bits_by_core.(0)
-      ; controller_log_stall_fifo_depth
-      ; window_size_bits
-      ; ram_read_latency
-      }
-    ;;
-  end)
-
   module I = struct
     type 'a t =
       { ap_clk : 'a
@@ -59,14 +48,37 @@ module Make (C : Config.S) = struct
   end
 
   let scalar_bits = Config.scalar_bits config
-  let input_bits = scalar_bits + Top.input_point_bits
+  let input_point_bits = Config.input_point_bits config
+  let result_point_bits = Config.result_point_bits config
+  let input_bits = scalar_bits + input_point_bits
   let axi_bits = Axi512.Config.data_bits
   let alignment_bits = 512
   let log2_alignment_bits = Int.ceil_log2 alignment_bits
   let input_l_bits = Int.round_up ~to_multiple_of:axi_bits input_bits
-  let output_l_width = Int.round_up Top.result_point_bits ~to_multiple_of:axi_bits
+  let output_l_width = Int.round_up result_point_bits ~to_multiple_of:axi_bits
 
-  let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_dest } =
+  let scalar_bit_positions ~core_index =
+    let lo = ref 0 in
+    for i = 0 to core_index - 1 do
+      lo := !lo + scalar_bits_by_core.(i)
+    done;
+    let w = scalar_bits_by_core.(core_index) in
+    !lo + w - 1, !lo
+  ;;
+
+  type comppute_unit =
+    { scalar_and_input_point_ready : Signal.t
+    ; result_point : Signal.t
+    ; result_point_valid : Signal.t
+    ; last_result_point : Signal.t
+    }
+
+  let create
+    ~build_mode
+    ~core_index
+    scope
+    { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_dest }
+    =
     let ( -- ) = Scope.naming scope in
     (* We need to decode the AXI stream input into scalars and points. *)
     let clock = ap_clk in
@@ -85,22 +97,50 @@ module Make (C : Config.S) = struct
     let input_point_and_scalar =
       sel_bottom
         (log_shift srl input_l.value (sll input_offset.value log2_alignment_bits))
-        (scalar_bits + Top.input_point_bits)
+        (scalar_bits + input_point_bits)
     in
     let top =
-      Top.hierarchical
-        ~build_mode
-        scope
-        { clock
-        ; clear
-        ; scalar = input_point_and_scalar.:+[Top.input_point_bits, Some scalar_bits]
-        ; input_point =
-            Top.Mixed_add.Xyt.Of_signal.unpack
-              input_point_and_scalar.:+[0, Some Top.input_point_bits]
-        ; scalar_valid = scalar_valid.value
-        ; last_scalar = last_scalar.value
-        ; result_point_ready = result_point_ready.value
-        }
+      let module Pippenger_compute_unit =
+        Pippenger_compute_unit.Make (struct
+          let t =
+            { Pippenger_compute_unit.Pippenger_compute_unit_config.field_bits
+            ; scalar_bits = scalar_bits_by_core.(core_index)
+            ; controller_log_stall_fifo_depth
+            ; window_size_bits
+            ; ram_read_latency
+            }
+          ;;
+        end)
+      in
+      let scalar =
+        let hi, lo = scalar_bit_positions ~core_index in
+        input_point_and_scalar.:[input_point_bits + hi, input_point_bits + lo]
+      in
+      let { Pippenger_compute_unit.O.result_point
+          ; result_point_valid
+          ; last_result_point
+          ; scalar_and_input_point_ready
+          }
+        =
+        Pippenger_compute_unit.hierarchical
+          ~build_mode
+          scope
+          { clock
+          ; clear
+          ; scalar
+          ; input_point =
+              Pippenger_compute_unit.Mixed_add.Xyt.Of_signal.unpack
+                input_point_and_scalar.:+[0, Some Pippenger_compute_unit.input_point_bits]
+          ; scalar_valid = scalar_valid.value
+          ; last_scalar = last_scalar.value
+          ; result_point_ready = result_point_ready.value
+          }
+      in
+      { scalar_and_input_point_ready
+      ; result_point = Pippenger_compute_unit.Mixed_add.Xyzt.Of_signal.pack result_point
+      ; result_point_valid
+      ; last_result_point
+      }
     in
     let valid_input_bits =
       Variable.reg spec ~width:(num_bits_to_represent input_l_bits)
@@ -157,15 +197,12 @@ module Make (C : Config.S) = struct
           [ output_buffer_valid <-- gnd
           ; valid_output_bits <--. 0
           ; result_point_ready <-- vdd
-          ; output_l
-            <-- uresize
-                  (Top.Mixed_add.Xyzt.Of_signal.pack top.result_point)
-                  output_l_width
+          ; output_l <-- uresize top.result_point output_l_width
           ; when_
               (top.result_point_valid &: result_point_ready.value)
               [ output_buffer_valid <-- vdd
               ; fpga_to_host.tvalid <-- vdd
-              ; valid_output_bits <--. Top.result_point_bits
+              ; valid_output_bits <--. result_point_bits
               ]
           ]
       ; when_
@@ -209,8 +246,8 @@ module Make (C : Config.S) = struct
     }
   ;;
 
-  let hierarchical ~build_mode scope =
+  let hierarchical ~build_mode ~core_index scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ~name:"kernel_for_vitis" ~scope (create ~build_mode)
+    H.hierarchical ~name:"kernel_for_vitis" ~scope (create ~core_index ~build_mode)
   ;;
 end

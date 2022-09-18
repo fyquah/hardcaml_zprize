@@ -32,6 +32,7 @@ module Make (Config : Config.S) : sig
 
   val hierarchical
     :  build_mode:Build_mode.t
+    -> core_index:int
     -> Scope.t
     -> Signal.t Interface.Create_fn(I)(O).t
 end

@@ -20,11 +20,16 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
       Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()
     in
     let create = Kernel.hierarchical ~build_mode:Simulation scope in
+    let core_index = 0 in
     if verilator
     then
       let module V = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O) in
-      V.create ~clock_names:[ "clock" ] ~cache_dir:"/tmp/kernel/" ~verbose:true create
-    else Sim.create ~config:Cyclesim.Config.trace_all create
+      V.create
+        ~clock_names:[ "clock" ]
+        ~cache_dir:"/tmp/kernel/"
+        ~verbose:true
+        (create ~core_index)
+    else Sim.create ~config:Cyclesim.Config.trace_all (create ~core_index)
   ;;
 
   let display_rules =
