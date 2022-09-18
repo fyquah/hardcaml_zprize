@@ -14,8 +14,6 @@ module type Config = sig
   val twiddle_4step_config : twiddle_4step_config option
 end
 
-module Gf = Gf_bits.Make (Hardcaml.Signal)
-
 module Make (Config : Config) = struct
   let logn = Config.logn
   let n = 1 lsl logn
@@ -33,9 +31,12 @@ module Make (Config : Config) = struct
 
   let gf_mul ~clock a b =
     let pipe x =
-      Gf.to_bits x |> Signal.pipeline (Reg_spec.create ~clock ()) ~n:1 |> Gf.of_bits
+      Gf.Signal.to_bits x
+      |> Signal.pipeline (Reg_spec.create ~clock ()) ~n:1
+      |> Gf.Signal.of_bits
     in
-    Gf.mul ~pipe (pipe (Gf.of_bits a)) (pipe (Gf.of_bits b)) |> Gf.to_bits
+    Gf.Signal.mul ~pipe (pipe (Gf.Signal.of_bits a)) (pipe (Gf.Signal.of_bits b))
+    |> Gf.Signal.to_bits
   ;;
 
   module Twiddle_factor_stream = struct
@@ -45,13 +46,13 @@ module Make (Config : Config) = struct
       type 'a t =
         { clock : 'a
         ; start_twiddles : 'a
-        ; omegas : 'a list [@bits Gf.num_bits] [@length pipe_length]
+        ; omegas : 'a list [@bits Gf.Signal.num_bits] [@length pipe_length]
         }
       [@@deriving sexp_of, hardcaml]
     end
 
     module O = struct
-      type 'a t = { w : 'a [@bits Gf.num_bits] } [@@deriving sexp_of, hardcaml]
+      type 'a t = { w : 'a [@bits Gf.Signal.num_bits] } [@@deriving sexp_of, hardcaml]
     end
 
     module Var = Always.Variable
@@ -60,7 +61,7 @@ module Make (Config : Config) = struct
     let create _scope (i : _ I.t) =
       let pipe_length = List.length i.omegas in
       let spec = Reg_spec.create ~clock:i.clock () in
-      let w = Always.Variable.reg ~width:Gf.num_bits spec in
+      let w = Always.Variable.reg ~width:Gf.Signal.num_bits spec in
       let omega_step, omega_pipe = List.last_exn i.omegas, List.drop_last_exn i.omegas in
       let multiplier_output = gf_mul ~clock:i.clock w.value omega_step in
       let count = Var.reg spec ~width:(Int.ceil_log2 (multiply_latency + 1)) in
@@ -68,7 +69,7 @@ module Make (Config : Config) = struct
         compile
           [ w <-- mux count.value (omega_pipe @ [ multiplier_output ])
           ; when_ (count.value <>:. pipe_length - 1) [ count <-- count.value +:. 1 ]
-          ; when_ i.start_twiddles [ w <-- Gf.to_bits Gf.one; count <--. 0 ]
+          ; when_ i.start_twiddles [ w <-- Gf.Signal.to_bits Gf.Signal.one; count <--. 0 ]
           ]);
       { O.w = w.value }
     ;;
@@ -81,9 +82,10 @@ module Make (Config : Config) = struct
     let initial_pipeline_factors root =
       let inverse_root = Roots.inverse.(root) in
       let rec f acc i =
-        if i = pipe_length then [] else acc :: f (Gf_z.( * ) acc inverse_root) (i + 1)
+        if i = pipe_length then [] else acc :: f (Gf.Z.( * ) acc inverse_root) (i + 1)
       in
-      f inverse_root 0 |> List.map ~f:(fun x -> Gf.to_bits (Gf.of_z (Gf_z.to_z x)))
+      f inverse_root 0
+      |> List.map ~f:(fun x -> Gf.Signal.to_bits (Gf.Signal.of_z (Gf.Z.to_z x)))
     ;;
   end
 
@@ -95,7 +97,7 @@ module Make (Config : Config) = struct
         ; start : 'a
         ; first_iter : 'a
         ; first_4step_pass : 'a
-        ; twiddle_update_in : 'a [@bits Gf.num_bits]
+        ; twiddle_update_in : 'a [@bits Gf.Signal.num_bits]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -103,7 +105,7 @@ module Make (Config : Config) = struct
     module Twiddle_update = struct
       type 'a t =
         { valid : 'a
-        ; factors : 'a array [@bits Gf.num_bits] [@length 2]
+        ; factors : 'a array [@bits Gf.Signal.num_bits] [@length 2]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -117,7 +119,8 @@ module Make (Config : Config) = struct
         ; m : 'a [@bits logn]
         ; addr1 : 'a [@bits logn]
         ; addr2 : 'a [@bits logn]
-        ; omegas : 'a list [@bits Gf.num_bits] [@length Twiddle_factor_stream.pipe_length]
+        ; omegas : 'a list
+             [@bits Gf.Signal.num_bits] [@length Twiddle_factor_stream.pipe_length]
         ; start_twiddles : 'a
         ; first_stage : 'a
         ; last_stage : 'a
@@ -141,8 +144,8 @@ module Make (Config : Config) = struct
 
     module Var = Always.Variable
 
-    let gf_z_to_bits g = Gf_z.to_z g |> Gf.of_z |> Gf.to_bits
-    let twiddle_root row iter = Gf_z.pow Roots.inverse.(logn * 2) (row * (iter + 1))
+    let gf_z_to_bits g = Gf.Z.to_z g |> Gf.Signal.of_z |> Gf.Signal.to_bits
+    let twiddle_root row iter = Gf.Z.pow Roots.inverse.(logn * 2) (row * (iter + 1))
 
     let twiddle_scale_z =
       List.init Twiddle_factor_stream.pipe_length ~f:(fun col ->
@@ -206,7 +209,7 @@ module Make (Config : Config) = struct
         Array.init Twiddle_factor_stream.pipe_length ~f:(fun col ->
           Var.reg
             (Reg_spec.override ~clear_to:(twiddle_root row col |> gf_z_to_bits) spec)
-            ~width:Gf.num_bits)
+            ~width:Gf.Signal.num_bits)
       in
       Array.iteri twiddle_omegas ~f:(fun i t ->
         ignore (t.value -- ("twiddle_omega" ^ Int.to_string i) : Signal.t));
@@ -390,9 +393,10 @@ module Make (Config : Config) = struct
       type 'a t =
         { clock : 'a
         ; clear : 'a
-        ; d1 : 'a [@bits Gf.num_bits]
-        ; d2 : 'a [@bits Gf.num_bits]
-        ; omegas : 'a list [@bits Gf.num_bits] [@length Twiddle_factor_stream.pipe_length]
+        ; d1 : 'a [@bits Gf.Signal.num_bits]
+        ; d2 : 'a [@bits Gf.Signal.num_bits]
+        ; omegas : 'a list
+             [@bits Gf.Signal.num_bits] [@length Twiddle_factor_stream.pipe_length]
         ; start_twiddles : 'a
         ; twiddle_stage : 'a
         ; twiddle_update : 'a Controller.Twiddle_update.t
@@ -402,15 +406,21 @@ module Make (Config : Config) = struct
 
     module O = struct
       type 'a t =
-        { q1 : 'a [@bits Gf.num_bits]
-        ; q2 : 'a [@bits Gf.num_bits]
-        ; twiddle_update_q : 'a [@bits Gf.num_bits]
+        { q1 : 'a [@bits Gf.Signal.num_bits]
+        ; q2 : 'a [@bits Gf.Signal.num_bits]
+        ; twiddle_update_q : 'a [@bits Gf.Signal.num_bits]
         }
       [@@deriving sexp_of, hardcaml]
     end
 
-    let ( +: ) a b = Gf.( + ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
-    let ( -: ) a b = Gf.( - ) (Gf.of_bits a) (Gf.of_bits b) |> Gf.to_bits
+    let ( +: ) a b =
+      Gf.Signal.( + ) (Gf.Signal.of_bits a) (Gf.Signal.of_bits b) |> Gf.Signal.to_bits
+    ;;
+
+    let ( -: ) a b =
+      Gf.Signal.( - ) (Gf.Signal.of_bits a) (Gf.Signal.of_bits b) |> Gf.Signal.to_bits
+    ;;
+
     let ( *: ) = `Dont_use_me
     let `Dont_use_me = ( *: )
 
@@ -474,16 +484,16 @@ module Make (Config : Config) = struct
         ; start : 'a
         ; first_iter : 'a
         ; first_4step_pass : 'a
-        ; d1 : 'a [@bits Gf.num_bits]
-        ; d2 : 'a [@bits Gf.num_bits]
+        ; d1 : 'a [@bits Gf.Signal.num_bits]
+        ; d2 : 'a [@bits Gf.Signal.num_bits]
         }
       [@@deriving sexp_of, hardcaml]
     end
 
     module O = struct
       type 'a t =
-        { q1 : 'a [@bits Gf.num_bits]
-        ; q2 : 'a [@bits Gf.num_bits]
+        { q1 : 'a [@bits Gf.Signal.num_bits]
+        ; q2 : 'a [@bits Gf.Signal.num_bits]
         ; addr1_in : 'a [@bits logn]
         ; addr2_in : 'a [@bits logn]
         ; read_enable_in : 'a
@@ -561,7 +571,7 @@ module Make (Config : Config) = struct
         ; first_4step_pass : 'a
         ; first_iter : 'a
         ; flip : 'a
-        ; wr_d : 'a [@bits Gf.num_bits]
+        ; wr_d : 'a [@bits Gf.Signal.num_bits]
         ; wr_en : 'a
         ; wr_addr : 'a [@bits logn]
         ; rd_en : 'a
@@ -573,7 +583,7 @@ module Make (Config : Config) = struct
     module O = struct
       type 'a t =
         { done_ : 'a
-        ; rd_q : 'a [@bits Gf.num_bits]
+        ; rd_q : 'a [@bits Gf.Signal.num_bits]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -587,7 +597,8 @@ module Make (Config : Config) = struct
         ~clear:i.clear
         ~flip:i.flip
         ~write_port_a:{ address = i.wr_addr; data = i.wr_d; enable = i.wr_en }
-        ~write_port_b:{ address = zero logn; data = zero Gf.num_bits; enable = gnd }
+        ~write_port_b:
+          { address = zero logn; data = zero Gf.Signal.num_bits; enable = gnd }
         ~read_port_a:{ address = reverse core.addr1_in; enable = core.read_enable_in }
         ~read_port_b:{ address = reverse core.addr2_in; enable = core.read_enable_in }
     ;;

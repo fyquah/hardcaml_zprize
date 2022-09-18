@@ -1,5 +1,5 @@
 open! Base
-module Gf = Gf_bits.Make (Hardcaml.Signal)
+module Gf = Gf.Signal
 
 module I = struct
   type 'a t =

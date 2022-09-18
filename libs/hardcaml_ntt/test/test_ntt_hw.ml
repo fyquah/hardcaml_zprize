@@ -2,6 +2,7 @@ open! Base
 open Hardcaml
 open Hardcaml_waveterm
 open Expect_test_helpers_base
+module Gf = Hardcaml_ntt.Gf.Bits
 
 let%expect_test "addressing" =
   let module Ntt =
@@ -66,8 +67,6 @@ let%expect_test "addressing" =
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
 
-module Gf = Hardcaml_ntt.Gf_bits.Make (Bits)
-
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim_result =
@@ -82,7 +81,7 @@ let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim
       let scl = ref Gf.one in
       let step = ref Gf.one in
       let n2 =
-        Hardcaml_ntt.Roots.inverse.(logn + logn) |> Hardcaml_ntt.Gf_z.to_z |> Gf.of_z
+        Hardcaml_ntt.Roots.inverse.(logn + logn) |> Hardcaml_ntt.Gf.Z.to_z |> Gf.of_z
       in
       for _ = 0 to row - 1 do
         step := Gf.mul !step n2
