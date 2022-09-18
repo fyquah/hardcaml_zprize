@@ -38,7 +38,7 @@ let command_test_vectors =
         flag "-set-scalars-to-one" no_arg ~doc:"Force the scalars to always be 1"
       and set_all_points_to_trivial =
         flag
-          "-set-all-points-to-identity"
+          "-set-all-points-to-trivial"
           no_arg
           ~doc:"Force all the affine points to always be identity"
       in
@@ -54,6 +54,11 @@ let command_test_vectors =
         let module Top = Msm_pippenger.Top.Make (Config) in
         let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config)
         in
+        let _params =
+          Lazy.force Twisted_edwards_model_lib.Bls12_377_params.twisted_edwards
+        in
+        let q = Ark_bls12_377_g1.modulus () in
+        printf "q = 0x%s\n" (Z.format "x" q);
         let input_points = Utils.random_inputs ~seed num_points in
         let input_points =
           if set_scalars_to_one
