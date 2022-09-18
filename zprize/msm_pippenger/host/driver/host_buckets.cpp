@@ -38,6 +38,7 @@ using namespace std::chrono;
 int test_streaming(const std::string& binaryFile, std::string& input_points, std::string& output_points)
 {
     bls12_377_g1::init();
+    bls12_377_g1::print_params();
 
     int num_points, num_output_points;
     std::ifstream input_file(input_points);
@@ -193,8 +194,14 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
 	    fpga.twistedEdwardsExtendedToAffine();
 	    expected.twistedEdwardsExtendedToAffine();
 
-	    if (!(fpga == expected)) {
-              std::cout << "Test failed in bucket: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
+	    bool failed_this = !(fpga == expected);
+
+	    if (failed_this) {
+		    failed = failed_this;
+              std::cout << "Bucket: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
+	      if (failed_this) {
+		      std::cout << "  Bucket failed" << std::endl;
+	      }
 	      std::cout << "q:\n";
 	      gmp_printf("q: %#Zx\n", bls12_377_g1::q);
 	      std::cout << "FPGA:\n";
@@ -202,14 +209,13 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
 	      std::cout << "Expected:\n";
 	      expected.println_hex();
 
-	      fpga.import_from_fpga_vector(source_kernel_output.data() + point);;
+	      fpga.import_from_fpga_vector(source_kernel_output.data() + point, true);;
 	      expected.import_from_fpga_vector(line_words.data());
 
 	      std::cout << "FPGA (in extednded form):\n";
 	      fpga.println_hex();
 	      std::cout << "Expected (in extended form):\n";
 	      expected.println_hex();
-	      failed = 1;
 	    }
 
             point = point + (BYTES_PER_OUTPUT/4);

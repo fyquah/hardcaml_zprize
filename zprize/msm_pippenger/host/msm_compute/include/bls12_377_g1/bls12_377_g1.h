@@ -280,7 +280,7 @@ class Xyzt {
     t.set_32b(words_t);
   }
 
-  void import_from_fpga_vector(const uint32_t packed_repr[]) {
+  void import_from_fpga_vector(const uint32_t packed_repr[], bool debug = false) {
     mpz_t tmp1;
     mpz_t tmp2;
     mpz_t tmp3;
@@ -305,17 +305,25 @@ class Xyzt {
      */
     set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 0);
     set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 1);
-    mpz_cdiv_q_2exp(tmp3, tmp1, 377);
+    mpz_fdiv_q_2exp(tmp3, tmp1, 377);
     mpz_mul_2exp(tmp4, tmp2, 7);
     mpz_ior(y.v, tmp3, tmp4);
     w = mpz_sizeinbase(y.v, 2);
+    if (debug ) {
+
+    gmp_printf("tmp1 = %#Zx\n", tmp1);
+    gmp_printf("tmp2 = %#Zx\n", tmp2);
+    gmp_printf("tmp3 = %#Zx\n", tmp3);
+    gmp_printf("tmp4 = %#Zx\n", tmp4);
+    }
+
     for (size_t i = 377; i < w; i++) {
 	    mpz_clrbit(y.v, i);
     }
 
     set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 1);
     set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 2);
-    mpz_cdiv_q_2exp(tmp3, tmp1, 384 - 14);
+    mpz_fdiv_q_2exp(tmp3, tmp1, 384 - 14);
     mpz_mul_2exp(tmp4, tmp2, 14);
     mpz_ior(z.v, tmp3, tmp4);
     w = mpz_sizeinbase(z.v, 2);
@@ -325,7 +333,7 @@ class Xyzt {
 
     set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 2);
     set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 3);
-    mpz_cdiv_q_2exp(tmp3, tmp1, 384 - 21);
+    mpz_fdiv_q_2exp(tmp3, tmp1, 384 - 21);
     mpz_mul_2exp(tmp4, tmp2, 21);
     mpz_ior(t.v, tmp3, tmp4);
     w = mpz_sizeinbase(t.v, 2);
