@@ -4,14 +4,27 @@ set(CMAKE_CXX_STANDARD 17)
 set(COMMON_DIR ${CMAKE_SOURCE_DIR}/../../../libs/vitis_infrastructure/common)
 
 # program to perform precomputation + stream points in
-add_executable(host host_msm.cpp ${COMMON_DIR}/includes/xcl2/xcl2.cpp)
+add_executable(host_msm host_msm.cpp ${COMMON_DIR}/includes/xcl2/xcl2.cpp)
 
 # add include directories
-target_include_directories(host
+target_include_directories(host_msm
 	PUBLIC $ENV{XILINX_XRT}/include
 	PUBLIC $ENV{XILINX_VIVADO}/include
 	PUBLIC ${COMMON_DIR}/includes/xcl2)
 
 # add libraries to link against
-target_link_directories(host PUBLIC /opt/xilinx/xrt/lib)
-target_link_libraries(host PUBLIC OpenCL rt uuid xrt_coreutil xilinxopencl msm_compute gmp) # stdc++ 
+target_link_directories(host_msm PUBLIC /opt/xilinx/xrt/lib)
+target_link_libraries(host_msm PUBLIC OpenCL rt uuid xrt_coreutil xilinxopencl msm_compute gmp) # stdc++ 
+
+# program compute the raw fpga output against a reference
+add_executable(host_buckets host_buckets.cpp ${COMMON_DIR}/includes/xcl2/xcl2.cpp)
+
+# add include directories
+target_include_directories(host_buckets
+	PUBLIC $ENV{XILINX_XRT}/include
+	PUBLIC $ENV{XILINX_VIVADO}/include
+	PUBLIC ${COMMON_DIR}/includes/xcl2)
+
+# add libraries to link against
+target_link_directories(host_buckets PUBLIC /opt/xilinx/xrt/lib)
+target_link_libraries(host_buckets PUBLIC OpenCL rt uuid xrt_coreutil xilinxopencl msm_compute gmp) # stdc++ 

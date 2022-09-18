@@ -15,6 +15,8 @@
 */
 #include "xcl2.hpp"
 
+#include "bls12_377_g1/bls12_377_g1.h"
+
 #include <experimental/xrt_device.h>
 #include <experimental/xrt_kernel.h>
 
@@ -165,17 +167,43 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     if (output_file.is_open()) {
     	unsigned int point = 0;
     	while (std::getline(output_file, line)) {
+	    std::vector<uint32_t> line_words;
+
             for (unsigned int i = 0; i < line.length(); i += 8) {
               std::string byteString = line.substr(line.length() - i - 8, 8);
 
-              uint32_t expected =  strtol(byteString.c_str(), NULL, 16);
-	      uint32_t fpga = source_kernel_output[point + i/8];
-
-	      if (fpga != expected) {
-		      failed = 1;
-		      printf("ERROR, word did not match: fpga[%.8x] expected[%.8x] point[%i] word[%i]\n", fpga, expected, point/(BYTES_PER_OUTPUT/4), i/8);
-	      }
+              line_words.push_back(strtol(byteString.c_str(), NULL, 16));
             }
+
+            bls12_377_g1::Xyzt fpga;
+            bls12_377_g1::Xyzt expected;
+            
+            fpga.import_from_fpga_vector(source_kernel_output.data() + ((BYTES_PER_OUTPUT/4) * point));;
+	    expected.import_from_fpga_vector(line_words.data());
+
+	    std::cout << "Point: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
+	    std::cout << "FPGA:\n";
+	    fpga.println_hex();
+	    std::cout << "Expected:\n";
+	    expected.println_hex();
+
+
+	    if (fpga.is_z_zero()) {
+		    std::cout << "Z is zero?!\n";
+	    } else {
+		    fpga.twistedEdwardsExtendedToAffine();
+		    expected.twistedEdwardsExtendedToAffine();
+
+		    if (!(fpga == expected)) {
+		      std::cout << "Wabalabdupdup!" << std::endl;
+		      std::cout << "FPGA:\n";
+		      fpga.println();
+		      std::cout << "Expected:\n";
+		      expected.println();
+		    }
+	    }
+
+
             point = point + (BYTES_PER_OUTPUT/4);
     	}
     	output_file.close();
