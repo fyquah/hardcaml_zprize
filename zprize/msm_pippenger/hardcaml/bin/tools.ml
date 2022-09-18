@@ -34,6 +34,8 @@ let command_test_vectors =
           "-seed"
           (optional_with_default 0 int)
           ~doc:" The seed to use for point generation"
+      and set_scalars_to_one =
+        flag "-set-scalars-to-one" no_arg ~doc:"Force the scalars to always be 1"
       in
       fun () ->
         let module Config = struct
@@ -48,6 +50,13 @@ let command_test_vectors =
         let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config)
         in
         let input_points = Utils.random_inputs ~seed num_points in
+        let input_points =
+          if set_scalars_to_one
+          then
+            Array.map input_points ~f:(fun p ->
+              { p with scalar = Bits.one (Bits.width p.scalar) })
+          else input_points
+        in
         Out_channel.write_all
           input_filename
           ~data:
