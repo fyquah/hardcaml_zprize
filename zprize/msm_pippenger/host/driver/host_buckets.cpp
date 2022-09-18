@@ -35,6 +35,30 @@ using namespace std::chrono;
 #define BYTES_PER_INPUT (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 
+class LogTimeTaken {
+private:
+  const char *descr;
+  std::chrono::time_point<std::chrono::steady_clock> start;
+
+public:
+  LogTimeTaken(const char *descr)
+    : descr(descr), start(std::chrono::steady_clock::now()) {}
+
+  ~LogTimeTaken() {
+    auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+    std::cout << "[" << descr << "] " << elapsed_seconds.count() << "s\n";
+  }
+};
+
+template<typename F>
+static auto
+bench(const char *descr, F f) {
+  LogTimeTaken log_time_taken(descr);
+  return f();
+}
+
+
 int test_streaming(const std::string& binaryFile, std::string& input_points, std::string& output_points)
 {
     bls12_377_g1::init();
@@ -137,29 +161,36 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     OCL_CHECK(err, err = krnl_s2mm.setArg(2, output_size));
 
     // Copy input data to device global memory
-    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr));
-    OCL_CHECK(err, err = q.finish());
+    bench("Copying scalars and points to gmem", [&]() {
+        OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr));
+        OCL_CHECK(err, err = q.finish());
+        });
 
     // Start timer from here
     auto start = high_resolution_clock::now();
 
-    OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s));
-    std::cout << "Launched writer kernel!" << std::endl;
+    bench("Doing actual work", [&]() {
+        OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s));
+        std::cout << "Launched writer kernel!" << std::endl;
 
-    // Launch the reader kernel
-    OCL_CHECK(err, err = q.enqueueTask(krnl_s2mm));
-    std::cout << "Launched reader kernel!" << std::endl;
+        // Launch the reader kernel
+        OCL_CHECK(err, err = q.enqueueTask(krnl_s2mm));
+        std::cout << "Launched reader kernel!" << std::endl;
 
-    // Wait for kernels to finish its operation
-    OCL_CHECK(err, err = q.finish());
+        // Wait for kernels to finish its operation
+        OCL_CHECK(err, err = q.finish());
+
+        });
 
     // Stop timer here
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
 
-    // Copy Result from Device Global Memory to Host Local Memory
-    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({ buffer_output}, CL_MIGRATE_MEM_OBJECT_HOST));
-    OCL_CHECK(err, err = q.finish());
+    bench("Copying results back from gmem", [&]() {
+        // Copy Result from Device Global Memory to Host Local Memory
+        OCL_CHECK(err, err = q.enqueueMigrateMemObjects({ buffer_output}, CL_MIGRATE_MEM_OBJECT_HOST));
+        OCL_CHECK(err, err = q.finish());
+        });
 
     // OPENCL HOST CODE AREA END
 
