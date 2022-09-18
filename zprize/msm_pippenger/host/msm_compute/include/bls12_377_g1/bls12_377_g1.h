@@ -202,6 +202,10 @@ class GFq {
   bool operator==(const GFq& other) const {
     return mpz_cmp(v, other.v) == 0;
   }
+
+  bool operator!=(const GFq& other) const {
+    return mpz_cmp(v, other.v) != 0;
+  }
 };
 
 // parameter constants
@@ -509,6 +513,10 @@ class Xyzt {
 
   bool operator==(const Xyzt &other) const {
     return x == other.x && y == other.y && z == other.z && t == other.t;
+  }
+
+  bool operator!=(const Xyzt &other) const {
+    return x != other.x || y != other.y || z != other.z || t != other.t;
   }
 };
 

@@ -37,6 +37,7 @@ using namespace std::chrono;
 
 int test_streaming(const std::string& binaryFile, std::string& input_points, std::string& output_points)
 {
+    bls12_377_g1::init();
 
     int num_points, num_output_points;
     std::ifstream input_file(input_points);
@@ -54,6 +55,9 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
 
     auto input_size = (BYTES_PER_INPUT * num_points) / 4;
     auto output_size = (BYTES_PER_OUTPUT * num_output_points) / 4;
+
+    std::cout << "NUmber of input points: " << num_points << std::endl;
+    std::cout << "NUmber of output points: " << num_output_points << std::endl;
 
     cl_int err;
     cl::CommandQueue q;
@@ -166,6 +170,10 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     output_file.open(output_points);
     if (output_file.is_open()) {
     	unsigned int point = 0;
+
+        bls12_377_g1::Xyzt fpga;
+        bls12_377_g1::Xyzt expected;
+
     	while (std::getline(output_file, line)) {
 	    std::vector<uint32_t> line_words;
 
@@ -175,34 +183,28 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
               line_words.push_back(strtol(byteString.c_str(), NULL, 16));
             }
 
-            bls12_377_g1::Xyzt fpga;
-            bls12_377_g1::Xyzt expected;
-            
-            fpga.import_from_fpga_vector(source_kernel_output.data() + ((BYTES_PER_OUTPUT/4) * point));;
+            fpga.import_from_fpga_vector(source_kernel_output.data() + point);;
 	    expected.import_from_fpga_vector(line_words.data());
 
-	    std::cout << "Point: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
-	    std::cout << "FPGA:\n";
-	    fpga.println_hex();
-	    std::cout << "Expected:\n";
-	    expected.println_hex();
+	    // std::cout << "Point: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
+	    // std::cout << "  Bytes per otput" << BYTES_PER_OUTPUT << std::endl;
+	    // std::cout << "FPGA:\n";
+	    // fpga.println_hex();
+	    // std::cout << "Expected:\n";
+	    // expected.println_hex();
 
+	    fpga.twistedEdwardsExtendedToAffine();
+	    expected.twistedEdwardsExtendedToAffine();
 
-	    if (fpga.is_z_zero()) {
-		    std::cout << "Z is zero?!\n";
-	    } else {
-		    fpga.twistedEdwardsExtendedToAffine();
-		    expected.twistedEdwardsExtendedToAffine();
-
-		    if (!(fpga == expected)) {
-		      std::cout << "Wabalabdupdup!" << std::endl;
-		      std::cout << "FPGA:\n";
-		      fpga.println();
-		      std::cout << "Expected:\n";
-		      expected.println();
-		    }
+	    if (!(fpga == expected)) {
+              std::cout << "Point: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
+	      std::cout << "Wabalabdupdup!" << std::endl;
+	      std::cout << "FPGA:\n";
+	      fpga.println();
+	      std::cout << "Expected:\n";
+	      expected.println();
+	      failed = 1;
 	    }
-
 
             point = point + (BYTES_PER_OUTPUT/4);
     	}
