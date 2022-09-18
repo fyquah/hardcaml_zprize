@@ -100,16 +100,16 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     // Load input points from the test file
     input_file.open(input_points);
     if (input_file.is_open()) {
-    	unsigned int point = 0;
-    	while (std::getline(input_file, line)) {
+      unsigned int point = 0;
+      while (std::getline(input_file, line)) {
             for (unsigned int i = 0; i < line.length(); i += 8) {
               std::string byteString = line.substr(line.length() - i - 8, 8);
               uint32_t word =  strtol(byteString.c_str(), NULL, 16);
               source_kernel_input[point+(i/8)] = word;
             }
             point = point + (BYTES_PER_INPUT/4);
-    	}
-    	input_file.close();
+      }
+      input_file.close();
     }
 
     // OPENCL HOST CODE AREA START
@@ -150,7 +150,7 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     OCL_CHECK(err, cl::Buffer buffer_input(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, vector_input_size_bytes,
                                            source_kernel_input.data(), &err));
     OCL_CHECK(err, cl::Buffer buffer_output(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, vector_output_size_bytes,
-                                       	   source_kernel_output.data(), &err));
+                                            source_kernel_output.data(), &err));
 
     // Set the "Kernel 0" Arguments
     OCL_CHECK(err, err = krnl_mm2s.setArg(0, buffer_input));
@@ -184,7 +184,6 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
 
     // Stop timer here
     auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
 
     bench("Copying results back from gmem", [&]() {
         // Copy Result from Device Global Memory to Host Local Memory
@@ -198,60 +197,55 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     int failed = 0;
     output_file.open(output_points);
     if (output_file.is_open()) {
-    	unsigned int point = 0;
+      unsigned int point = 0;
 
         bls12_377_g1::Xyzt fpga;
         bls12_377_g1::Xyzt expected;
 
-    	while (std::getline(output_file, line)) {
-	    std::vector<uint32_t> line_words;
+      while (std::getline(output_file, line)) {
+        std::vector<uint32_t> line_words;
 
-            for (unsigned int i = 0; i < line.length(); i += 8) {
-              std::string byteString = line.substr(line.length() - i - 8, 8);
+        for (unsigned int i = 0; i < line.length(); i += 8) {
+          std::string byteString = line.substr(line.length() - i - 8, 8);
 
-              line_words.push_back(strtol(byteString.c_str(), NULL, 16));
-            }
+          line_words.push_back(strtol(byteString.c_str(), NULL, 16));
+        }
 
-            fpga.import_from_fpga_vector(source_kernel_output.data() + point);;
-	    expected.import_from_fpga_vector(line_words.data());
+        fpga.import_from_fpga_vector(source_kernel_output.data() + point);;
+        expected.import_from_fpga_vector(line_words.data());
 
-	    // std::cout << "Point: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
-	    // std::cout << "  Bytes per otput" << BYTES_PER_OUTPUT << std::endl;
-	    // std::cout << "FPGA:\n";
-	    // fpga.println_hex();
-	    // std::cout << "Expected:\n";
-	    // expected.println_hex();
+        // std::cout << "Point: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
+        // std::cout << "  Bytes per otput" << BYTES_PER_OUTPUT << std::endl;
+        // std::cout << "FPGA:\n";
+        // fpga.println_hex();
+        // std::cout << "Expected:\n";
+        // expected.println_hex();
 
-	    fpga.twistedEdwardsExtendedToAffine();
-	    expected.twistedEdwardsExtendedToAffine();
+        fpga.twistedEdwardsExtendedToAffine();
+        expected.twistedEdwardsExtendedToAffine();
 
-	    bool failed_this = !(fpga == expected);
+        if (!(fpga == expected)) {
+          failed = 1;
+          std::cout << "Bucket " << point / (BYTES_PER_OUTPUT/4) << "failed:" << std::endl;
+          std::cout << "q:\n";
+          gmp_printf("q: %#Zx\n", bls12_377_g1::q);
+          std::cout << "FPGA:\n";
+          fpga.println_hex();
+          std::cout << "Expected:\n";
+          expected.println_hex();
 
-	    if (failed_this) {
-		    failed = failed_this;
-              std::cout << "Bucket: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
-	      if (failed_this) {
-		      std::cout << "  Bucket failed" << std::endl;
-	      }
-	      std::cout << "q:\n";
-	      gmp_printf("q: %#Zx\n", bls12_377_g1::q);
-	      std::cout << "FPGA:\n";
-	      fpga.println_hex();
-	      std::cout << "Expected:\n";
-	      expected.println_hex();
+          fpga.import_from_fpga_vector(source_kernel_output.data() + point, true);;
+          expected.import_from_fpga_vector(line_words.data());
 
-	      fpga.import_from_fpga_vector(source_kernel_output.data() + point, true);;
-	      expected.import_from_fpga_vector(line_words.data());
+          std::cout << "FPGA (in extednded form):\n";
+          fpga.println_hex();
+          std::cout << "Expected (in extended form):\n";
+          expected.println_hex();
+        }
 
-	      std::cout << "FPGA (in extednded form):\n";
-	      fpga.println_hex();
-	      std::cout << "Expected (in extended form):\n";
-	      expected.println_hex();
-	    }
-
-            point = point + (BYTES_PER_OUTPUT/4);
-    	}
-    	output_file.close();
+        point = point + (BYTES_PER_OUTPUT/4);
+      }
+      output_file.close();
     }
 
     std::cout << "STREAMING TEST FINISHED, ";
@@ -260,9 +254,6 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     } else {
         std::cout << "test FAILED" << std::endl;
     }
-
-    std::cout << "Time taken: "
-         << duration.count() << " microseconds" << std::endl;
 
     return failed;
 }

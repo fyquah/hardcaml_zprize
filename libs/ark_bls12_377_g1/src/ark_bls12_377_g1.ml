@@ -11,7 +11,9 @@ module External = struct
      * *)
     let%bind.List extension = [ "so"; "dylib" ] in
     let%bind.List dir =
-      (* CR fyquah: This is getting out of hand! refactor this *)
+      (* CR-someday fyquah: This is getting out of hand! refactor to keep
+       * looking until root and terminate dynamically.
+       *)
       [ "."
       ; "../"
       ; "../../"

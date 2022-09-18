@@ -149,10 +149,6 @@ class GFq {
     reduce();
   }
   void set_div(const GFq &a, const GFq &b) {
-    if (mpz_cmp_si(b.v, 1) == 0) {
-	    mpz_set(v, a.v);
-	    return;
-    }
     mpz_t b_inverse;
     init_empty(b_inverse);
     mpz_invert(b_inverse, b.v, q);
@@ -280,7 +276,10 @@ class Xyzt {
     t.set_32b(words_t);
   }
 
-  void import_from_fpga_vector(const uint32_t packed_repr[], bool debug = false) {
+  /* CR-soon fyquah for bdevlin: Simplify this once the FPGA streams it in
+   * 64-bit aligned results.
+   */
+  void import_from_fpga_vector(const uint32_t packed_repr[]) {
     mpz_t tmp1;
     mpz_t tmp2;
     mpz_t tmp3;
@@ -309,13 +308,6 @@ class Xyzt {
     mpz_mul_2exp(tmp4, tmp2, 7);
     mpz_ior(y.v, tmp3, tmp4);
     w = mpz_sizeinbase(y.v, 2);
-    if (debug ) {
-
-    gmp_printf("tmp1 = %#Zx\n", tmp1);
-    gmp_printf("tmp2 = %#Zx\n", tmp2);
-    gmp_printf("tmp3 = %#Zx\n", tmp3);
-    gmp_printf("tmp4 = %#Zx\n", tmp4);
-    }
 
     for (size_t i = 377; i < w; i++) {
 	    mpz_clrbit(y.v, i);
@@ -359,8 +351,6 @@ class Xyzt {
     t.set_mul(x, y);
   }
   void twistedEdwardsExtendedToAffine() {
-    // gmp_printf("(X = %#Zx, Z = %#Zx)\n", x.v, z.v);
-    // fflush(stdout);
     x.set_div(x, z);
     y.set_div(y, z);
     z.set(ONE_WORDS);

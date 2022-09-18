@@ -40,7 +40,7 @@ let command_test_vectors =
         flag
           "-set-all-points-to-trivial"
           no_arg
-          ~doc:"Force all the affine points to always be identity"
+          ~doc:" (WARNING: Not valid points on curve!)"
       in
       fun () ->
         let module Config = struct
@@ -58,10 +58,6 @@ let command_test_vectors =
           Lazy.force Twisted_edwards_model_lib.Bls12_377_params.twisted_edwards
         in
         let q = Ark_bls12_377_g1.modulus () in
-        printf "q = 0x%s\n%!" (Z.format "x" q);
-        printf "a = 0x%s\n%!" (Z.format "x" params.a);
-        printf "d = 0x%s\n%!" (Z.format "x" params.d);
-        printf "twisted_scale = 0x%s\n%!" (Z.format "x" params.twisted_scale);
         let input_points = Utils.random_inputs ~seed num_points in
         let input_points =
           if set_scalars_to_one
