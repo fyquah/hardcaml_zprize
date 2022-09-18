@@ -1,5 +1,6 @@
 (executables
  (names generate simulate tools)
+ (promote)
  (libraries
    core
    core_unix
