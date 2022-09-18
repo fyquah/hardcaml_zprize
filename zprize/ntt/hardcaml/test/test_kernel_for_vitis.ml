@@ -1,13 +1,12 @@
 open! Core
 open Hardcaml
 open! Hardcaml_waveterm
-module Gf_z = Hardcaml_ntt.Gf_z
-module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits)
+module Gf = Hardcaml_ntt.Gf
 
 module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
   open Config
   module Kernel = Zprize_ntt.For_vitis.Make (Config)
-  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf_z)
+  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf.Z)
   module Test_top = Test_top.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
   module VSim = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O)
@@ -83,7 +82,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
         ~f:(fun (n, m) ->
           printf "\n%s\n\n" n;
           print_matrix m);
-    if [%equal: Gf_z.t array array] hw_results sw_results
+    if [%equal: Gf.Z.t array array] hw_results sw_results
     then print_s [%message "Hardware and software reference results match!"]
     else raise_s [%message "ERROR: Hardware and software results do not match :("]
   ;;
@@ -95,7 +94,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
     (input_coefs : Z.t array array)
     =
     let sim, waves, inputs, outputs = create_sim ~verilator waves in
-    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf_z.of_z) in
+    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf.Z.of_z) in
     let results = ref [] in
     let num_results = ref 0 in
     let cycle ?(n = 1) () =
@@ -135,7 +134,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
              controller_to_compute.tdata
                := List.init num_cores ~f:(fun core ->
                     coefs.((pass * num_cores) + core).(i))
-                  |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
+                  |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
                   |> Bits.concat_lsb;
              while Bits.is_gnd !(controller_to_compute_dest.tready) do
                cycle ()
@@ -158,7 +157,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
                controller_to_compute.tvalid := Bits.vdd;
                controller_to_compute.tdata
                  := List.map indices ~f:(fun (r, c) -> coefs.(r).(c))
-                    |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
+                    |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
                     |> Bits.concat_lsb;
                while Bits.is_gnd !(controller_to_compute_dest.tready) do
                  cycle ()

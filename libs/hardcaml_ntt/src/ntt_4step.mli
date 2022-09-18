@@ -12,7 +12,7 @@ end
 module Make (Config : Config) : sig
   val logcores : int
 
-  module Gf : module type of Gf_bits.Make (Hardcaml.Signal)
+  module Gf = Gf.Signal
   module Axi_stream : Hardcaml_axi.Stream.S
 
   module Parallel_cores : sig

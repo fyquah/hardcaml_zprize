@@ -117,8 +117,8 @@ let command_ntt =
         Random.set_state rand_state;
         let input_coefs =
           Array.init (1 lsl logn) ~f:(fun _ ->
-            let c = Hardcaml_ntt.Gf_z.random () in
-            Hardcaml_ntt.Gf_z.to_z c |> Hardcaml_ntt_test.Test_ntt_hw.Gf.of_z)
+            let c = Hardcaml_ntt.Gf.Z.random () in
+            Hardcaml_ntt.Gf.Z.to_z c |> Hardcaml_ntt_test.Test_ntt_hw.Gf.of_z)
         in
         let twiddle_4step_config =
           match rows_per_iteration, log_num_iterations with

@@ -1,5 +1,5 @@
 open! Core
-module Gf : module type of Hardcaml_ntt.Gf_bits.Make (Hardcaml.Bits)
+module Gf = Hardcaml_ntt.Gf.Bits
 
 val inverse_ntt_test
   :  ?twiddle_4step_config:Hardcaml_ntt.Ntt.twiddle_4step_config

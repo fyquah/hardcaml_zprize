@@ -12,8 +12,6 @@ module type Config = sig
   val twiddle_4step_config : twiddle_4step_config option
 end
 
-module Gf : module type of Gf_bits.Make (Signal)
-
 module Make (Config : Config) : sig
   val n : int
   val logn : int

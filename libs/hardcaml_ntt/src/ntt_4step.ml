@@ -21,7 +21,7 @@ module Make (Config : Config) = struct
 
   let cores = 1 lsl logcores
 
-  module Gf = Gf_bits.Make (Hardcaml.Signal)
+  module Gf = Gf.Signal
   module Ntt = Ntt.Make (Config)
 
   module Axi_stream = Hardcaml_axi.Stream.Make (struct

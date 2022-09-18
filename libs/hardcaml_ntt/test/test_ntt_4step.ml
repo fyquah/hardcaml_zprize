@@ -1,5 +1,5 @@
 open Core
-module Gf = Hardcaml_ntt.Gf_z
+module Gf = Hardcaml_ntt.Gf.Z
 module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf)
 
 let%expect_test "form 2d input matrix, transpose" =
