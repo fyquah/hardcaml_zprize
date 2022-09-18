@@ -39,6 +39,15 @@ let last_window_size_bits_for_slr t slr =
 
 let window_size_bits_for_slr t slr = (config_for_compute_unit t slr).window_size_bits
 
+let last_window_for_core t ~core_index =
+  let num_windows_before_this_core = ref 0 in
+  for i = 0 to core_index - 1 do
+    num_windows_before_this_core
+      := !num_windows_before_this_core + num_windows_for_slr t i
+  done;
+  !num_windows_before_this_core + num_windows_for_slr t core_index - 1
+;;
+
 module type S = sig
   val t : t
 end

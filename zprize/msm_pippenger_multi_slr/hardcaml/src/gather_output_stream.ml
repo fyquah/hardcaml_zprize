@@ -26,22 +26,17 @@ module Make (C : Config.S) = struct
 
   let create (_ : Scope.t) { I.clock; clear; sub_fpga_to_hosts; fpga_to_host_dest } =
     let spec = Reg_spec.create ~clock ~clear () in
-    let which_stream = wire (Int.ceil_log2 num_cores) in
-    let sub_fpga_to_host_selected =
+    let which_stream = wire (Int.max (Int.ceil_log2 num_cores) 1) in
+    let is_last_stream = which_stream ==:. num_cores - 1 in
+    let chosen =
       Axi512.Stream.Source.Of_signal.mux which_stream (Array.to_list sub_fpga_to_hosts)
     in
     which_stream
     <== reg
           spec
-          ~enable:
-            (sub_fpga_to_host_selected.tvalid
-            &: sub_fpga_to_host_selected.tlast
-            &: fpga_to_host_dest.tready)
-          (mux2
-             (which_stream ==:. num_cores - 1)
-             (zero (Int.ceil_log2 num_cores))
-             (which_stream +:. 1));
-    { O.fpga_to_host = sub_fpga_to_host_selected
+          ~enable:(chosen.tvalid &: chosen.tlast &: fpga_to_host_dest.tready)
+          (mux2 is_last_stream (zero (Int.ceil_log2 num_cores)) (which_stream +:. 1));
+    { O.fpga_to_host = { chosen with tlast = chosen.tlast &: is_last_stream }
     ; sub_fpga_to_host_dests =
         Array.init num_cores ~f:(fun core_index ->
           { Axi512.Stream.Dest.tready =
