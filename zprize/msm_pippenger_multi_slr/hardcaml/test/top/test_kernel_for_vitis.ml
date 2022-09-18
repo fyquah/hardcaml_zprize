@@ -221,7 +221,7 @@ let%expect_test "Test over small input size" =
   let _result = Test.run_test 8 in
   [%expect
     {|
-    (Expecting (Top.num_result_points 28))
+    (Expecting (num_result_points 28))
     (Got ("List.length (!result_points)" 28))
     PASS |}]
 ;;
@@ -252,13 +252,13 @@ let%expect_test "Test multiple back-back runs" =
   let _waves = test_back_to_back () in
   [%expect
     {|
-    (Expecting (Top.num_result_points 36))
+    (Expecting (num_result_points 36))
     (Got ("List.length (!result_points)" 36))
     PASS
-    (Expecting (Top.num_result_points 36))
+    (Expecting (num_result_points 36))
     (Got ("List.length (!result_points)" 36))
     PASS
-    (Expecting (Top.num_result_points 36))
+    (Expecting (num_result_points 36))
     (Got ("List.length (!result_points)" 36))
     PASS |}]
 ;;
