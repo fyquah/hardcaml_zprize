@@ -69,6 +69,8 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
 
     std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input(input_size);
     std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(output_size);
+    memset(source_kernel_input.data(), 0, sizeof(uint32_t) * source_kernel_input.size());
+    memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
 
     // Load input points from the test file
     input_file.open(input_points);
@@ -134,18 +136,13 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     OCL_CHECK(err, err = krnl_s2mm.setArg(2, output_size));
 
     // Copy input data to device global memory
-    cl::Event write_event;
-    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr, &write_event));
-
-
-    // Launch the writer kernel
-    std::vector<cl::Event> eventVec;
-    eventVec.push_back(write_event);
+    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr));
+    OCL_CHECK(err, err = q.finish());
 
     // Start timer from here
     auto start = high_resolution_clock::now();
 
-    OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s, &eventVec));
+    OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s));
     std::cout << "Launched writer kernel!" << std::endl;
 
     // Launch the reader kernel
@@ -200,9 +197,9 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
               std::cout << "Point: " << point / (BYTES_PER_OUTPUT/4) << std::endl;
 	      std::cout << "Wabalabdupdup!" << std::endl;
 	      std::cout << "FPGA:\n";
-	      fpga.println();
+	      fpga.println_hex();
 	      std::cout << "Expected:\n";
-	      expected.println();
+	      expected.println_hex();
 	      failed = 1;
 	    }
 
