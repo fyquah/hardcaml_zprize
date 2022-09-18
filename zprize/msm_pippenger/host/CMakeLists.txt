@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.13.1)
 project(msm_host)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -49,3 +49,6 @@ enable_testing()
 add_subdirectory(executable)
 add_subdirectory(test)
 add_subdirectory(benchmark)
+
+# CR fyquah for rahulyesantharao: driver probably not the best name?
+add_subdirectory(driver)
