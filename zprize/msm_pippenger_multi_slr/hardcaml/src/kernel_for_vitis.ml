@@ -7,7 +7,7 @@ module Make (C : Config.S) = struct
   let config = C.t
 
   let { Config.field_bits
-      ; scalar_bits_by_slr
+      ; scalar_bits_by_core
       ; controller_log_stall_fifo_depth
       ; window_size_bits
       ; ram_read_latency
@@ -19,7 +19,7 @@ module Make (C : Config.S) = struct
   module Top = Pippenger_compute_unit.Make (struct
     let t =
       { Pippenger_compute_unit.Pippenger_compute_unit_config.field_bits
-      ; scalar_bits = Map.find_exn scalar_bits_by_slr SLR2
+      ; scalar_bits = scalar_bits_by_core.(0)
       ; controller_log_stall_fifo_depth
       ; window_size_bits
       ; ram_read_latency

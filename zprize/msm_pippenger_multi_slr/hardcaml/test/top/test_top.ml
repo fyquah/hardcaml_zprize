@@ -10,7 +10,7 @@ module Make (C : Pippenger_compute_unit.Pippenger_compute_unit_config.S) = struc
     let t =
       { Config.field_bits = C.t.field_bits
       ; ram_read_latency = C.t.ram_read_latency
-      ; scalar_bits_by_slr = Map.of_alist_exn (module Slr) [ SLR2, C.t.scalar_bits ]
+      ; scalar_bits_by_core = [| C.t.scalar_bits |]
       ; controller_log_stall_fifo_depth = C.t.controller_log_stall_fifo_depth
       ; window_size_bits
       }
