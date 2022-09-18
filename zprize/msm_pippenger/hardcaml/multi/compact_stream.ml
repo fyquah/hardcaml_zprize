@@ -3,7 +3,10 @@ open Hardcaml
 open Hardcaml_axi
 open Signal
 
-module Make (Config : Config.S) = struct
+module Make (C : Config.S) = struct
+  let field_bits = C.t.field_bits
+  let scalar_bits = Config.scalar_bits C.t
+
   module I = struct
     type 'a t =
       { clock : 'a
@@ -23,8 +26,8 @@ module Make (Config : Config.S) = struct
   end
 
   let num_256_words_per_point =
-    (Int.round_up ~to_multiple_of:256 (Config.field_bits * 3)
-    + Int.round_up ~to_multiple_of:256 Config.scalar_bits)
+    (Int.round_up ~to_multiple_of:256 (field_bits * 3)
+    + Int.round_up ~to_multiple_of:256 scalar_bits)
     / 256
   ;;
 

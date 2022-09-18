@@ -3,13 +3,23 @@ open Hardcaml
 open Signal
 module Axi512 = Hardcaml_axi.Axi512
 
-module Make (Config : Config.S) = struct
-  module Top = Pippenger_compute_unit.Make (struct
-    open Config
+module Make (C : Config.S) = struct
+  let config = C.t
 
+  let { Config.field_bits
+      ; scalar_bits_by_slr
+      ; controller_log_stall_fifo_depth
+      ; window_size_bits
+      ; ram_read_latency
+      }
+    =
+    config
+  ;;
+
+  module Top = Pippenger_compute_unit.Make (struct
     let t =
       { Pippenger_compute_unit.Config.field_bits
-      ; scalar_bits
+      ; scalar_bits = Map.find_exn scalar_bits_by_slr SLR2
       ; controller_log_stall_fifo_depth
       ; window_size_bits
       ; ram_read_latency
@@ -48,7 +58,8 @@ module Make (Config : Config.S) = struct
     ;;
   end
 
-  let input_bits = Config.scalar_bits + Top.input_point_bits
+  let scalar_bits = Config.scalar_bits config
+  let input_bits = scalar_bits + Top.input_point_bits
   let axi_bits = Axi512.Config.data_bits
   let alignment_bits = 512
   let log2_alignment_bits = Int.ceil_log2 alignment_bits
@@ -74,7 +85,7 @@ module Make (Config : Config.S) = struct
     let input_point_and_scalar =
       sel_bottom
         (log_shift srl input_l.value (sll input_offset.value log2_alignment_bits))
-        (Config.scalar_bits + Top.input_point_bits)
+        (scalar_bits + Top.input_point_bits)
     in
     let top =
       Top.hierarchical
@@ -82,8 +93,7 @@ module Make (Config : Config.S) = struct
         scope
         { clock
         ; clear
-        ; scalar =
-            input_point_and_scalar.:+[Top.input_point_bits, Some Config.scalar_bits]
+        ; scalar = input_point_and_scalar.:+[Top.input_point_bits, Some scalar_bits]
         ; input_point =
             Top.Mixed_add.Xyt.Of_signal.unpack
               input_point_and_scalar.:+[0, Some Top.input_point_bits]
