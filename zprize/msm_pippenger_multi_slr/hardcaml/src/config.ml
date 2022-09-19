@@ -78,7 +78,7 @@ end
 module Bls12_377 : S = struct
   let t =
     { field_bits = 377
-    ; scalar_bits_by_core = [| 253 |]
+    ; scalar_bits_by_core = [| 84; 84; 85 |]
     ; controller_log_stall_fifo_depth = 2
     ; window_size_bits = 12
     ; ram_read_latency = 1

@@ -45,7 +45,7 @@ module Make (C : Config.S) = struct
       let dn_dest = if i = n - 1 then input.dn_dest else outputs.(i + 1).up_dest in
       Axi512.Stream.Register.O.Of_signal.( <== )
         outputs.(i)
-        (Axi512.Stream.Register.create
+        (Axi512.Stream.Register.hierarchical
            scope
            { clock = input.clock; clear = input.clear; up; dn_dest })
     done;
