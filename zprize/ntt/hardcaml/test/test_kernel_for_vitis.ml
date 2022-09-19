@@ -1,13 +1,12 @@
 open! Core
 open Hardcaml
 open! Hardcaml_waveterm
-module Gf_z = Hardcaml_ntt.Gf_z
-module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits)
+module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
+module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
   open Config
   module Kernel = Zprize_ntt.For_vitis.Make (Config)
-  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf_z)
+  module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
   module Test_top = Test_top.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
   module VSim = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O)
@@ -24,7 +23,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
   let print_matrix = Test_top.print_matrix
   let copy_matrix = Test_top.copy_matrix
   let get_results = Test_top.get_results
-  let transpose = Ntt_sw.transpose
+  let transpose = Reference_model.transpose
 
   let create_sim ~verilator waves =
     let sim =
@@ -70,7 +69,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
      rather than the 4step algorithm the hw uses. *)
   let reference_intt coefs =
     let coefs = Array.concat (Array.to_list (Array.copy coefs)) in
-    Ntt_sw.inverse_dit coefs;
+    Reference_model.inverse_dit coefs;
     Array.init n ~f:(fun row -> Array.init n ~f:(fun col -> coefs.((row * n) + col)))
   ;;
 
@@ -83,7 +82,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
         ~f:(fun (n, m) ->
           printf "\n%s\n\n" n;
           print_matrix m);
-    if [%equal: Gf_z.t array array] hw_results sw_results
+    if [%equal: Gf.Z.t array array] hw_results sw_results
     then print_s [%message "Hardware and software reference results match!"]
     else raise_s [%message "ERROR: Hardware and software results do not match :("]
   ;;
@@ -95,7 +94,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
     (input_coefs : Z.t array array)
     =
     let sim, waves, inputs, outputs = create_sim ~verilator waves in
-    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf_z.of_z) in
+    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf.Z.of_z) in
     let results = ref [] in
     let num_results = ref 0 in
     let cycle ?(n = 1) () =
@@ -135,7 +134,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
              controller_to_compute.tdata
                := List.init num_cores ~f:(fun core ->
                     coefs.((pass * num_cores) + core).(i))
-                  |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
+                  |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
                   |> Bits.concat_lsb;
              while Bits.is_gnd !(controller_to_compute_dest.tready) do
                cycle ()
@@ -158,7 +157,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
                controller_to_compute.tvalid := Bits.vdd;
                controller_to_compute.tdata
                  := List.map indices ~f:(fun (r, c) -> coefs.(r).(c))
-                    |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
+                    |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
                     |> Bits.concat_lsb;
                while Bits.is_gnd !(controller_to_compute_dest.tready) do
                  cycle ()
@@ -186,3 +185,22 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
     waves
   ;;
 end
+
+let%expect_test "vitis kernel test" =
+  let module Config = struct
+    let logn = 5
+    let logcores = 3
+
+    let twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option =
+      Some { rows_per_iteration = 1 lsl logcores; log_num_iterations = logn - logcores }
+    ;;
+  end
+  in
+  let module Test = Make (Config) in
+  let input_coefs = Test.random_input_coef_matrix () in
+  ignore
+    (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
+      : Waveform.t option);
+  [%expect {|
+    "Hardware and software reference results match!" |}]
+;;

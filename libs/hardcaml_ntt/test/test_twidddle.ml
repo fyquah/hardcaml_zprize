@@ -2,42 +2,16 @@ open Base
 open Hardcaml
 open! Hardcaml_waveterm
 open Expect_test_helpers_base
-module Gf = Hardcaml_ntt.Gf_z
-module Ntt = Hardcaml_ntt.Ntt_sw.Make (Gf)
+module Gf = Hardcaml_ntt.Gf.Z
+module Ntt = Hardcaml_ntt.Reference_model.Make (Gf)
 
 let logn = 3
 let n = 1 lsl logn
-
-module Ntt_hw = Hardcaml_ntt.Ntt.Make (struct
-  let logn = logn
-  let twiddle_4step_config = None
-end)
 
 let%expect_test "show twiddle generation" =
   let a = Array.init n ~f:(fun _ -> Array.init n ~f:(fun _ -> Gf.one)) in
   Ntt.apply_twiddles Ntt.inverse_roots.(n) a;
   print_s [%message (a : Gf.t array array)];
-  (* note; symmetric across the diagonal
-
-     Implemented iteratively, we calculate Ti = T(i-1) * w. The multiplier will
-     have a given pipeline latency (maybe 4 clocks), so this feedback is a
-     problem.
-
-     Can we do it in batches?
-
-     T0 = 1
-     T1 = T0 * w
-     T2 = T0 * w2
-     T3 = T0 * w3
-     ....but then what?????
-
-
-     0 0 0 0
-     0 1 2 3
-     0 2 4 6
-     0 3 6 9
-
-  *)
   [%expect
     {|
     (a (
@@ -144,13 +118,13 @@ let%expect_test "show twiddle generation" =
 ;;
 
 let%expect_test "" =
-  let module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits) in
+  let module Gf_bits = Hardcaml_ntt.Gf.Bits in
   let module Sim =
     Cyclesim.With_interface
-      (Ntt_hw.Twiddle_factor_stream.I)
-      (Ntt_hw.Twiddle_factor_stream.O)
+      (Hardcaml_ntt.Twiddle_factor_stream.I)
+      (Hardcaml_ntt.Twiddle_factor_stream.O)
   in
-  let sim = Sim.create (Ntt_hw.Twiddle_factor_stream.create (Scope.create ())) in
+  let sim = Sim.create (Hardcaml_ntt.Twiddle_factor_stream.create (Scope.create ())) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
