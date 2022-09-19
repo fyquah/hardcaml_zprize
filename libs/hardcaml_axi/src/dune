@@ -1,5 +1,6 @@
 (library
  (name hardcaml_axi)
+ (public_name zprize.hardcaml_axi)
  (libraries base hardcaml)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))
