@@ -5,6 +5,11 @@ open Signal
 module Make (Config : Four_step_config.S) = struct
   open Config
 
+  let () =
+    if Config.logblocks <> 0
+    then raise_s [%message "Parallel_cores can only be instantiated with a single block"]
+  ;;
+
   let cores = 1 lsl logcores
 
   module I = struct

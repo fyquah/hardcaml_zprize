@@ -33,6 +33,7 @@ let command_kernel =
             ;;
 
             let logcores = logcores
+            let logblocks = 0
           end)
         in
         let input_coefs =
@@ -85,6 +86,7 @@ let command_kernel_for_vitis =
             ;;
 
             let logcores = logcores
+            let logblocks = 0
           end)
         in
         let input_coefs =

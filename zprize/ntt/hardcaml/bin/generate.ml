@@ -18,6 +18,7 @@ let command_kernel =
             ;;
 
             let logcores = 3
+            let logblocks = 0
           end)
         in
         let module Circuit =

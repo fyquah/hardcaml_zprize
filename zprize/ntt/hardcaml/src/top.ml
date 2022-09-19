@@ -11,6 +11,7 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
   module Store_sm = Store_sm.Make (Config)
 
   let cores = 1 lsl logcores
+  let blocks = 1 lsl logblocks
 
   module I = struct
     type 'a t =
@@ -64,11 +65,13 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
         ; clear = i.clear
         ; start = i.start
         ; first_4step_pass = i.first_4step_pass
-        ; wr_d = i.data_in.tdata |> split_lsb ~part_width:Gf.num_bits |> Array.of_list
-        ; wr_en = repeat (i.data_in.tvalid &: load_sm.tready) cores
-        ; wr_addr = load_sm.wr_addr
-        ; rd_en = repeat store_sm.rd_en cores
-        ; rd_addr = store_sm.rd_addr
+        ; wr_d =
+            (* XX aray: generalize for multiple blocks *)
+            [| i.data_in.tdata |> split_lsb ~part_width:Gf.num_bits |> Array.of_list |]
+        ; wr_en = repeat (i.data_in.tvalid &: load_sm.tready) blocks
+        ; wr_addr = [| load_sm.wr_addr |]
+        ; rd_en = repeat store_sm.rd_en blocks
+        ; rd_addr = [| store_sm.rd_addr |]
         ; input_done = load_sm.done_
         ; output_done = store_sm.done_
         }
@@ -77,7 +80,7 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
     start_output <== cores.start_output;
     { O.data_out =
         { tvalid = store_sm.tvalid
-        ; tdata = cores.rd_q |> Array.to_list |> concat_lsb
+        ; tdata = cores.rd_q.(0) |> Array.to_list |> concat_lsb
         ; tlast = gnd
         ; tkeep = ones (num_cores * Gf.num_bits / 8)
         ; tstrb = ones (num_cores * Gf.num_bits / 8)

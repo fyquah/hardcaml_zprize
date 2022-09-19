@@ -38,7 +38,7 @@ module Make (Config : Four_step_config.S) = struct
       ; first_4step_pass : 'a
       ; first_iter : 'a
       ; flip : 'a
-      ; wr_d : 'a Q2d.t
+      ; wr_d : 'a Q2d.t [@rtlprefix "wr_"]
       ; wr_en : 'a [@bits blocks]
       ; wr_addr : 'a array [@bits logn] [@length blocks]
       ; rd_en : 'a [@bits blocks]
@@ -50,7 +50,7 @@ module Make (Config : Four_step_config.S) = struct
   module O = struct
     type 'a t =
       { done_ : 'a
-      ; rd_q : 'a Q2d.t
+      ; rd_q : 'a Q2d.t [@rtlprefix "rd_"]
       }
     [@@deriving sexp_of, hardcaml]
   end

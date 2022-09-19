@@ -8,6 +8,7 @@ module Make (Config : Four_step_config.S) : sig
 
   module Gf = Gf.Signal
   module Axi_stream : Hardcaml_axi.Stream.S
+  module Multi_parallel_cores : module type of Multi_parallel_cores.Make (Config)
 
   module I : sig
     type 'a t =
@@ -15,11 +16,11 @@ module Make (Config : Four_step_config.S) : sig
       ; clear : 'a
       ; start : 'a
       ; first_4step_pass : 'a
-      ; wr_d : 'a array
+      ; wr_d : 'a Multi_parallel_cores.Q2d.t
       ; wr_en : 'a
-      ; wr_addr : 'a
+      ; wr_addr : 'a array
       ; rd_en : 'a
-      ; rd_addr : 'a
+      ; rd_addr : 'a array
       ; input_done : 'a
       ; output_done : 'a
       }
@@ -31,7 +32,7 @@ module Make (Config : Four_step_config.S) : sig
       { done_ : 'a
       ; start_input : 'a
       ; start_output : 'a
-      ; rd_q : 'a array
+      ; rd_q : 'a Multi_parallel_cores.Q2d.t
       }
     [@@deriving sexp_of, hardcaml]
   end
