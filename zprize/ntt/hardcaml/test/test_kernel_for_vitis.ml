@@ -190,6 +190,7 @@ let%expect_test "vitis kernel test" =
   let module Config = struct
     let logn = 5
     let logcores = 3
+    let logblocks = 0
 
     let twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option =
       Some { rows_per_iteration = 1 lsl logcores; log_num_iterations = logn - logcores }

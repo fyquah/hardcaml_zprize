@@ -1,7 +1,7 @@
 open! Base
 open! Hardcaml
 
-module Make (Config : Multi_parallel_cores_config.S) : sig
+module Make (Config : Four_step_config.S) : sig
   (** 2D array of [Gf] values.  Indexed by [a.(block).(core)] *)
   module Q2d : Hardcaml.Interface.S with type 'a t = 'a array array
 

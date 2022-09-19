@@ -160,6 +160,8 @@ end
 module Config = struct
   let logn = 5
   let log_rows_per_iteration = 3
+  let logcores = 3
+  let logblocks = 0
 
   let twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option =
     Some
@@ -167,8 +169,6 @@ module Config = struct
       ; log_num_iterations = (logn * 2) - log_rows_per_iteration
       }
   ;;
-
-  let logcores = 3
 end
 
 module Test = Make (Config)

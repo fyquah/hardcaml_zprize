@@ -2,8 +2,9 @@ open! Base
 open! Hardcaml
 open Signal
 
-module Make (Config : Multi_parallel_cores_config.S) = struct
+module Make (Config : Four_step_config.S) = struct
   open Config
+  module Parallel_cores = Parallel_cores.Make (Config)
 
   let blocks = 1 lsl logblocks
   let cores = 1 lsl logcores
@@ -53,8 +54,6 @@ module Make (Config : Multi_parallel_cores_config.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
   end
-
-  module Parallel_cores = Parallel_cores.Make (Config)
 
   let create ~build_mode scope (i : _ I.t) =
     let o =

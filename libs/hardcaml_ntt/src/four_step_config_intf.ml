@@ -2,6 +2,7 @@ module type S = sig
   include Core_config.S
 
   val logcores : int
+  val logblocks : int
 end
 
 module type Four_step_config = sig
