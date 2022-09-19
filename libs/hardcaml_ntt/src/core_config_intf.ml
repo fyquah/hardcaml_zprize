@@ -12,7 +12,7 @@ module type S = sig
 end
 
 module type Core_config = sig
-  type nonrec twiddle_4step_config = twiddle_4step_config
+  type nonrec twiddle_4step_config = twiddle_4step_config [@@deriving sexp_of]
 
   val ram_output_pipelining : int
   val ram_latency : int

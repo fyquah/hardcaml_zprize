@@ -3,10 +3,10 @@ open Hardcaml
 open! Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
+module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
   open Config
   module Kernel = Zprize_ntt.For_vitis.Make (Config)
-  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf.Z)
+  module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
   module Test_top = Test_top.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
   module VSim = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O)
@@ -23,7 +23,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
   let print_matrix = Test_top.print_matrix
   let copy_matrix = Test_top.copy_matrix
   let get_results = Test_top.get_results
-  let transpose = Ntt_sw.transpose
+  let transpose = Reference_model.transpose
 
   let create_sim ~verilator waves =
     let sim =
@@ -69,7 +69,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
      rather than the 4step algorithm the hw uses. *)
   let reference_intt coefs =
     let coefs = Array.concat (Array.to_list (Array.copy coefs)) in
-    Ntt_sw.inverse_dit coefs;
+    Reference_model.inverse_dit coefs;
     Array.init n ~f:(fun row -> Array.init n ~f:(fun col -> coefs.((row * n) + col)))
   ;;
 

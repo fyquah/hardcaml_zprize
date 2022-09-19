@@ -3,13 +3,7 @@
 open! Base
 open Hardcaml
 
-module type Config = sig
-  include Core_config.S
-
-  val logcores : int
-end
-
-module Make (Config : Config) : sig
+module Make (Config : Four_step_config.S) : sig
   val logcores : int
 
   module Gf = Gf.Signal
@@ -50,35 +44,6 @@ module Make (Config : Config) : sig
       :  build_mode:Build_mode.t
       -> Scope.t
       -> Signal.t Interface.Create_fn(I)(O).t
-  end
-
-  module Controller : sig
-    module I : sig
-      type 'a t =
-        { clock : 'a
-        ; clear : 'a
-        ; start : 'a
-        ; input_done : 'a
-        ; output_done : 'a
-        ; cores_done : 'a
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module O : sig
-      type 'a t =
-        { done_ : 'a
-        ; start_input : 'a
-        ; start_output : 'a
-        ; start_cores : 'a
-        ; first_iter : 'a
-        ; flip : 'a
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module Core : sig

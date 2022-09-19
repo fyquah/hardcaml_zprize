@@ -3,8 +3,8 @@ open Hardcaml
 open Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
-  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf.Z)
+module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
+  module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
   module Top = Zprize_ntt.Top.Make (Config)
   module Sim = Cyclesim.With_interface (Top.I) (Top.O)
 
@@ -21,7 +21,9 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
       Array.init (1 lsl logn) ~f:(fun _ -> Gf.Z.random () |> Gf.Z.to_z))
   ;;
 
-  let twiddle m = Ntt_sw.apply_twiddles Ntt_sw.inverse_roots.(logn + logn) m
+  let twiddle m =
+    Reference_model.apply_twiddles Reference_model.inverse_roots.(logn + logn) m
+  ;;
 
   let print_matrix c =
     Array.iteri c ~f:(fun row c ->
@@ -86,7 +88,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
 
   let expected ~verbose ~first_4step_pass input_coefs hw_results =
     let sw_results = copy_matrix input_coefs in
-    Array.iter sw_results ~f:Ntt_sw.inverse_dit;
+    Array.iter sw_results ~f:Reference_model.inverse_dit;
     if first_4step_pass then twiddle sw_results;
     if verbose
     then

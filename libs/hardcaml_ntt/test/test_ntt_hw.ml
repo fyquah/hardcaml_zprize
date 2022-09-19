@@ -70,7 +70,7 @@ let%expect_test "addressing" =
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim_result =
-  let module Ntt = Hardcaml_ntt.Ntt_sw.Make (Gf) in
+  let module Ntt = Hardcaml_ntt.Reference_model.Make (Gf) in
   Ntt.inverse_dit coefs;
   (* if twiddling is enabled (as used for the 4step implementation), model it. *)
   if first_4step_pass
@@ -111,17 +111,17 @@ let inverse_ntt_test
   =
   let n = Array.length input_coefs in
   let logn = Int.ceil_log2 n in
-  let module Ntt =
-    Hardcaml_ntt.Ntt.Make (struct
+  let module Single_core =
+    Hardcaml_ntt.Single_core.With_rams (struct
       let logn = logn
       let twiddle_4step_config = twiddle_4step_config
     end)
   in
-  let module Sim = Cyclesim.With_interface (Ntt.With_rams.I) (Ntt.With_rams.O) in
+  let module Sim = Cyclesim.With_interface (Single_core.I) (Single_core.O) in
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
-      (Ntt.With_rams.create
+      (Single_core.create
          ~row
          ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))

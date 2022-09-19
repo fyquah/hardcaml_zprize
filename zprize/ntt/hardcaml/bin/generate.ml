@@ -11,7 +11,9 @@ let command_kernel =
           Zprize_ntt.For_vitis.Make (struct
             let logn = logn
 
-            let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
+            let twiddle_4step_config
+              : Hardcaml_ntt.Core_config.twiddle_4step_config option
+              =
               Some { rows_per_iteration = 8; log_num_iterations = logn - 3 }
             ;;
 
@@ -36,13 +38,12 @@ let command_ntt =
     [%map_open.Command
       let logn = anon ("LOGN" %: int) in
       fun () ->
-        let module Ntts =
-          Hardcaml_ntt.Ntt.Make (struct
+        let module Ntt =
+          Hardcaml_ntt.Single_core.With_rams (struct
             let logn = logn
             let twiddle_4step_config = None
           end)
         in
-        let module Ntt = Ntts.With_rams in
         let module Circuit = Circuit.With_interface (Ntt.I) (Ntt.O) in
         let scope = Scope.create ~flatten_design:false () in
         let circ =

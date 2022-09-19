@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
+module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
   include Config
   module Ntt_4step = Hardcaml_ntt.Ntt_4step.Make (Config)
   module Axi_stream = Ntt_4step.Axi_stream
