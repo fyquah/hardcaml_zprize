@@ -36,6 +36,22 @@ module Make (C : Config.S) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
+  let axis_pipeline ~n scope (input : _ Axi512.Stream.Register.I.t) =
+    let outputs =
+      Array.init n ~f:(fun _ -> Axi512.Stream.Register.O.Of_signal.wires ())
+    in
+    for i = 0 to n - 1 do
+      let up = if i = 0 then input.up else outputs.(i - 1).dn in
+      let dn_dest = if i = n - 1 then input.dn_dest else outputs.(i).up_dest in
+      Axi512.Stream.Register.O.Of_signal.( <== )
+        outputs.(i)
+        (Axi512.Stream.Register.create
+           scope
+           { clock = input.clock; clear = input.clear; up; dn_dest })
+    done;
+    { Axi512.Stream.Register.O.dn = outputs.(n - 1).dn; up_dest = outputs.(0).up_dest }
+  ;;
+
   let create ~build_mode (scope : Scope.t) (i : _ I.t) =
     let ap_clk = i.ap_clk in
     let ap_rst_n = i.ap_rst_n in
@@ -66,7 +82,8 @@ module Make (C : Config.S) = struct
       ~f:(fun core_index splitter_to_sub_kernels_register ->
       Axi512.Stream.Register.O.Of_signal.( <== )
         splitter_to_sub_kernels_register
-        (Axi512.Stream.Register.create
+        (axis_pipeline
+           ~n:2
            scope
            { clock
            ; clear
@@ -90,7 +107,8 @@ module Make (C : Config.S) = struct
       ~f:(fun core_index sub_kernels_to_gatherer_register ->
       Axi512.Stream.Register.O.Of_signal.( <== )
         sub_kernels_to_gatherer_register
-        (Axi512.Stream.Register.create
+        (axis_pipeline
+           ~n:2
            scope
            { clock
            ; clear
