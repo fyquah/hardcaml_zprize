@@ -42,7 +42,7 @@ module Make (C : Config.S) = struct
     in
     for i = 0 to n - 1 do
       let up = if i = 0 then input.up else outputs.(i - 1).dn in
-      let dn_dest = if i = n - 1 then input.dn_dest else outputs.(i).up_dest in
+      let dn_dest = if i = n - 1 then input.dn_dest else outputs.(i + 1).up_dest in
       Axi512.Stream.Register.O.Of_signal.( <== )
         outputs.(i)
         (Axi512.Stream.Register.create
@@ -83,7 +83,7 @@ module Make (C : Config.S) = struct
       Axi512.Stream.Register.O.Of_signal.( <== )
         splitter_to_sub_kernels_register
         (axis_pipeline
-           ~n:2
+           ~n:3
            scope
            { clock
            ; clear
@@ -108,7 +108,7 @@ module Make (C : Config.S) = struct
       Axi512.Stream.Register.O.Of_signal.( <== )
         sub_kernels_to_gatherer_register
         (axis_pipeline
-           ~n:2
+           ~n:3
            scope
            { clock
            ; clear

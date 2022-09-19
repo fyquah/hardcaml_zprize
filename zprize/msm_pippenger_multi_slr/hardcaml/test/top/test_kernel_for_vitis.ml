@@ -90,7 +90,6 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
         let bucket =
           Bits.to_int (Bits.select input.scalar (!lo + window_size_bits - 1) !lo)
         in
-        printf "i = %d, bucket = %d\n" i bucket;
         windows.(i).(bucket)
           <- Utils.Twisted_edwards.add_unified
                (force Twisted_edwards_model_lib.Bls12_377_params.twisted_edwards)
@@ -116,6 +115,7 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
         Option.iter sim_and_waves.waves ~f:(fun waves ->
           Waveform.Serialize.marshall waves "a.hardcamlwaveform.Z"));
     let inputs = Utils.random_inputs ~seed num_inputs in
+    (*
     Array.iter inputs ~f:(fun input ->
       let affine_point_with_t =
         Utils.Affine_point_with_t.map
@@ -124,41 +124,9 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
       in
       let sexp_of_z z = Sexp.Atom (Z.format "x" z) in
       print_s ([%sexp_of: z Utils.Affine_point_with_t.t] affine_point_with_t));
+       *)
     let expected_bucket_outputs = expected_bucket_outputs inputs in
-    let dbg_in_valid =
-      List.Assoc.find_exn
-        (Cyclesim.internal_ports sim)
-        ~equal:String.equal
-        "kernel$pippenger_core_1$top$adder$i$valid_in"
-    in
-    let dbg_x =
-      List.Assoc.find_exn
-        (Cyclesim.internal_ports sim)
-        ~equal:String.equal
-        "kernel$pippenger_core_1$top$adder$i$p2$x"
-    in
-    let dbg_y =
-      List.Assoc.find_exn
-        (Cyclesim.internal_ports sim)
-        ~equal:String.equal
-        "kernel$pippenger_core_1$top$adder$i$p2$y"
-    in
-    let dbg_t =
-      List.Assoc.find_exn
-        (Cyclesim.internal_ports sim)
-        ~equal:String.equal
-        "kernel$pippenger_core_1$top$adder$i$p2$t"
-    in
-    let cycle () =
-      Cyclesim.cycle sim;
-      if Bits.is_vdd !dbg_in_valid
-      then (
-        let x = Bits.to_z ~signedness:Unsigned !dbg_x in
-        let y = Bits.to_z ~signedness:Unsigned !dbg_y in
-        let t = Bits.to_z ~signedness:Unsigned !dbg_t in
-        let sexp_of_z z = Sexp.Atom (Z.format "x" z) in
-        print_s [%message "debug!" (x : z) (y : z) (t : z)])
-    in
+    let cycle () = Cyclesim.cycle sim in
     i.fpga_to_host_dest.tready := Bits.vdd;
     for idx = 0 to num_inputs - 1 do
       let input = inputs.(idx) in
@@ -228,7 +196,6 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
             ; z = to_z result_point.z
             }
           in
-          printf "bucket = %d, window = %d core_index = %d\n" !bucket !window !core_index;
           let obtained = Utils.twisted_edwards_extended_to_affine obtained_extended in
           let expected_extended = expected_bucket_outputs.(!window).(!bucket) in
           let expected = Utils.twisted_edwards_extended_to_affine expected_extended in
@@ -236,7 +203,10 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
           then
             print_s
               [%message
-                "Doesnt match expected!"
+                "bucket result Doesnt match expected!"
+                  (!core_index : int)
+                  (!window : int)
+                  (!bucket : int)
                   (obtained_extended : Utils.Twisted_edwards.extended)
                   (expected_extended : Utils.Twisted_edwards.extended)
                   (expected : Utils.Weierstrass.affine option)
@@ -315,7 +285,7 @@ let%expect_test "Test over small input size" =
   let module Config = struct
     let t =
       { Msm_pippenger_multi_slr.Config.field_bits = 377
-      ; scalar_bits_by_core = [| 5; 5; 5 |]
+      ; scalar_bits_by_core = [| 7; 7; 7 |]
       ; controller_log_stall_fifo_depth = 2
       ; window_size_bits = 2
       ; ram_read_latency = 1
@@ -327,109 +297,8 @@ let%expect_test "Test over small input size" =
   let _result = Test.run_test 3 in
   [%expect
     {|
-    ((x
-      91cc1f89c5ba2b00ec8a766f03f21d3b0ad0791c3b93f6e584cc9f29f7ebefc7468c91c6e7bd8cd1c7e1309fa963e8)
-     (y
-      5980ae72bf91bc1e388402d190de3b7e2e459dfa82f4bb815243363443c5fa61abeb8578c333753225da747ec63bdc)
-     (t
-      15e283ceaf5a24978133482e18dadbd18df020a469a1d0430e78f01f100023f49db5202cd8c6f2d6caedcd90dc33cb7))
-    ((x
-      195f780e1f0bf374f5b78c350b66fcf8264f6c8599730b12fb67fb68ed27bd6b66e20654dd2b89d68467195d5efae0b)
-     (y
-      46b2f9b8a8e7fb939f816a155645fcc7402c33ad34a415e3d8f30fbe56dd5e1eebb43095ca9e07ca246cf2833fe598)
-     (t
-      e2dce8a191f825111604cb3c60f3e4fbed390df10b46fa934ef9c0256463bd7ff98e524ee5429860faf262a590bf1d))
-    ((x
-      142a7d8576d80b567863de2f09ec8278eef466ae7fe1b643a228eda4d30182eee167f47ad1f5df1d5cb7ee635cca90b)
-     (y
-      15dd0470086df8d267158e1e586e23556fdfabfbb267d09c44c6f6dd5b4deb9688272e123b2b77f30e8d98d9a31a80e)
-     (t
-      cce68d6aad2f9c50dcce26ea4fb58f3a6067b7155ee083ac9174dfa214f4f0f658d4ac07ec62ff6de70623e7360f7a))
-    (all_window_size_bits (2 3 2 3 2 3))
-    i = 0, bucket = 2
-    i = 1, bucket = 7
-    i = 2, bucket = 2
-    i = 3, bucket = 4
-    i = 4, bucket = 1
-    i = 5, bucket = 2
-    i = 0, bucket = 0
-    i = 1, bucket = 2
-    i = 2, bucket = 1
-    i = 3, bucket = 6
-    i = 4, bucket = 2
-    i = 5, bucket = 6
-    i = 0, bucket = 3
-    i = 1, bucket = 2
-    i = 2, bucket = 0
-    i = 3, bucket = 3
-    i = 4, bucket = 0
-    i = 5, bucket = 7
-    (debug!
-     (x
-      91cc1f89c5ba2b00ec8a766f03f21d3b0ad0791c3b93f6e584cc9f29f7ebefc7468c91c6e7bd8cd1c7e1309fa963e8)
-     (y
-      5980ae72bf91bc1e388402d190de3b7e2e459dfa82f4bb815243363443c5fa61abeb8578c333753225da747ec63bdc)
-     (t
-      15e283ceaf5a24978133482e18dadbd18df020a469a1d0430e78f01f100023f49db5202cd8c6f2d6caedcd90dc33cb7))
-    (debug!
-     (x
-      91cc1f89c5ba2b00ec8a766f03f21d3b0ad0791c3b93f6e584cc9f29f7ebefc7468c91c6e7bd8cd1c7e1309fa963e8)
-     (y
-      5980ae72bf91bc1e388402d190de3b7e2e459dfa82f4bb815243363443c5fa61abeb8578c333753225da747ec63bdc)
-     (t
-      15e283ceaf5a24978133482e18dadbd18df020a469a1d0430e78f01f100023f49db5202cd8c6f2d6caedcd90dc33cb7))
-    (debug!
-     (x
-      195f780e1f0bf374f5b78c350b66fcf8264f6c8599730b12fb67fb68ed27bd6b66e20654dd2b89d68467195d5efae0b)
-     (y
-      46b2f9b8a8e7fb939f816a155645fcc7402c33ad34a415e3d8f30fbe56dd5e1eebb43095ca9e07ca246cf2833fe598)
-     (t
-      e2dce8a191f825111604cb3c60f3e4fbed390df10b46fa934ef9c0256463bd7ff98e524ee5429860faf262a590bf1d))
-    (debug!
-     (x
-      195f780e1f0bf374f5b78c350b66fcf8264f6c8599730b12fb67fb68ed27bd6b66e20654dd2b89d68467195d5efae0b)
-     (y
-      46b2f9b8a8e7fb939f816a155645fcc7402c33ad34a415e3d8f30fbe56dd5e1eebb43095ca9e07ca246cf2833fe598)
-     (t
-      e2dce8a191f825111604cb3c60f3e4fbed390df10b46fa934ef9c0256463bd7ff98e524ee5429860faf262a590bf1d))
-    (debug!
-     (x
-      142a7d8576d80b567863de2f09ec8278eef466ae7fe1b643a228eda4d30182eee167f47ad1f5df1d5cb7ee635cca90b)
-     (y
-      15dd0470086df8d267158e1e586e23556fdfabfbb267d09c44c6f6dd5b4deb9688272e123b2b77f30e8d98d9a31a80e)
-     (t
-      cce68d6aad2f9c50dcce26ea4fb58f3a6067b7155ee083ac9174dfa214f4f0f658d4ac07ec62ff6de70623e7360f7a))
-    (Expecting (num_result_points 30))
-    bucket = 3, window = 0 core_index = 0
-    bucket = 2, window = 0 core_index = 0
-    bucket = 1, window = 0 core_index = 0
-    bucket = 7, window = 1 core_index = 0
-    bucket = 6, window = 1 core_index = 0
-    bucket = 5, window = 1 core_index = 0
-    bucket = 4, window = 1 core_index = 0
-    bucket = 3, window = 1 core_index = 0
-    bucket = 2, window = 1 core_index = 0
-    bucket = 1, window = 1 core_index = 0
-    bucket = 3, window = 2 core_index = 1
-    bucket = 2, window = 2 core_index = 1
-    bucket = 1, window = 2 core_index = 1
-    bucket = 7, window = 3 core_index = 1
-    bucket = 6, window = 3 core_index = 1
-    bucket = 5, window = 3 core_index = 1
-    bucket = 4, window = 3 core_index = 1
-    bucket = 3, window = 3 core_index = 1
-    bucket = 2, window = 3 core_index = 1
-    bucket = 1, window = 3 core_index = 1
-    bucket = 3, window = 4 core_index = 2
-    bucket = 2, window = 4 core_index = 2
-    bucket = 1, window = 4 core_index = 2
-    bucket = 7, window = 5 core_index = 2
-    bucket = 6, window = 5 core_index = 2
-    bucket = 5, window = 5 core_index = 2
-    bucket = 4, window = 5 core_index = 2
-    bucket = 3, window = 5 core_index = 2
-    bucket = 2, window = 5 core_index = 2
-    bucket = 1, window = 5 core_index = 2
-    (Got ("List.length (!result_points)" 30))
+    (all_window_size_bits (2 2 3 2 2 3 2 2 3))
+    (Expecting (num_result_points 39))
+    (Got ("List.length (!result_points)" 39))
     PASS |}]
 ;;
