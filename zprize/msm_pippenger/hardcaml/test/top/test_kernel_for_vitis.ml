@@ -40,8 +40,10 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     Int.round_up (Config.scalar_bits + (3 * Config.field_bits)) ~to_multiple_of:512 / 512
   ;;
 
+  let drop_t = false
+
   let num_clocks_per_output =
-    Int.round_up (4 * Config.field_bits) ~to_multiple_of:512 / 512
+    Int.round_up ((if drop_t then 3 else 4) * Config.field_bits) ~to_multiple_of:512 / 512
   ;;
 
   type result =
@@ -124,6 +126,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
     let window = ref 0 in
     let is_last = ref false in
+    let field_bits = Config.field_bits in
+    let aligned_field_bits = Int.round_up field_bits ~to_multiple_of:64 in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     while (not !is_last) && !cycle_cnt < timeout do
       i.fpga_to_host_dest.tready := Bits.random ~width:1;
@@ -139,15 +143,32 @@ module Make (Config : Msm_pippenger.Config.S) = struct
           word := 0;
           is_last := Bits.to_bool !(o.fpga_to_host.tlast);
           let to_z b = Bits.to_constant b |> Constant.to_z ~signedness:Unsigned in
-          let result_point = Utils.Extended.Of_bits.unpack !output_buffer in
           let extended : Utils.Twisted_edwards.extended =
-            { x = to_z result_point.x
-            ; y = to_z result_point.y
-            ; t = to_z result_point.t
-            ; z = to_z result_point.z
+            { x = to_z (Bits.select !output_buffer (field_bits - 1) 0)
+            ; y =
+                to_z
+                  (Bits.select
+                     !output_buffer
+                     (aligned_field_bits + field_bits - 1)
+                     aligned_field_bits)
+            ; t =
+                (if drop_t
+                then Z.zero
+                else
+                  to_z
+                    (Bits.select
+                       !output_buffer
+                       ((3 * aligned_field_bits) + field_bits - 1)
+                       (aligned_field_bits * 3)))
+            ; z =
+                to_z
+                  (Bits.select
+                     !output_buffer
+                     ((2 * aligned_field_bits) + field_bits - 1)
+                     (aligned_field_bits * 2))
             }
           in
-          let affine = Utils.twisted_edwards_extended_to_affine extended in
+          let affine = Utils.twisted_edwards_extended_to_affine ~has_t:true extended in
           result_points
             := { Utils.point = affine; bucket = !bucket; window = !window }
                :: !result_points;
