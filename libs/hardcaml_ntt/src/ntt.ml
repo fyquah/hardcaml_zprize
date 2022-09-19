@@ -15,6 +15,8 @@ module type Config = sig
 end
 
 module Make (Config : Config) = struct
+  module Var = Always.Variable
+
   let logn = Config.logn
   let n = 1 lsl logn
   let multiply_latency = 6
@@ -55,7 +57,6 @@ module Make (Config : Config) = struct
       type 'a t = { w : 'a [@bits Gf.Signal.num_bits] } [@@deriving sexp_of, hardcaml]
     end
 
-    module Var = Always.Variable
     open Signal
 
     let create _scope (i : _ I.t) =
@@ -97,15 +98,20 @@ module Make (Config : Config) = struct
         ; start : 'a
         ; first_iter : 'a
         ; first_4step_pass : 'a
-        ; twiddle_update_in : 'a [@bits Gf.Signal.num_bits]
         }
       [@@deriving sexp_of, hardcaml]
     end
 
     module Twiddle_update = struct
+      let sync_cycles =
+        max
+          (Twiddle_factor_stream.pipe_length + ram_output_pipelining + 1)
+          (datapath_latency + 1)
+      ;;
+
       type 'a t =
         { valid : 'a
-        ; factors : 'a array [@bits Gf.Signal.num_bits] [@length 2]
+        ; index : 'a [@bits max 1 (Int.ceil_log2 sync_cycles)]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -142,19 +148,7 @@ module Make (Config : Config) = struct
       [@@deriving compare, enumerate, sexp_of, variants]
     end
 
-    module Var = Always.Variable
-
-    let gf_z_to_bits g = Gf.Z.to_z g |> Gf.Signal.of_z |> Gf.Signal.to_bits
-    let twiddle_root row iter = Gf.Z.pow Roots.inverse.(logn * 2) (row * (iter + 1))
-
-    let twiddle_scale_z =
-      List.init Twiddle_factor_stream.pipe_length ~f:(fun col ->
-        twiddle_root twiddle_4step_config.rows_per_iteration col)
-    ;;
-
-    let twiddle_scale = twiddle_scale_z |> List.map ~f:gf_z_to_bits
-
-    let create ?(row = 0) scope (inputs : _ I.t) =
+    let create scope (inputs : _ I.t) =
       let open Signal in
       let ( -- ) = Scope.naming scope in
       let spec = Reg_spec.create ~clock:inputs.clock ~clear:inputs.clear () in
@@ -193,26 +187,15 @@ module Make (Config : Config) = struct
       let last_stage = Var.reg spec ~width:1 in
       let twiddle_stage = Var.reg spec ~width:1 in
       let twiddle_update = Var.reg spec ~width:1 in
-      let sync_cycles =
-        max
-          (Twiddle_factor_stream.pipe_length + ram_output_pipelining + 1)
-          (datapath_latency + 1)
+      let sync_count =
+        Var.reg spec ~width:(max 1 (Int.ceil_log2 Twiddle_update.sync_cycles))
       in
-      let sync_count = Var.reg spec ~width:(max 1 (Int.ceil_log2 sync_cycles)) in
       let sync_count_next = sync_count.value +:. 1 in
       let flip = Var.wire ~default:gnd in
       let read_write_enable = Var.wire ~default:gnd in
       let if_twiddle_supported ((s : State.t), p) =
         if support_4step_twiddle then s, p else s, []
       in
-      let twiddle_omegas =
-        Array.init Twiddle_factor_stream.pipe_length ~f:(fun col ->
-          Var.reg
-            (Reg_spec.override ~clear_to:(twiddle_root row col |> gf_z_to_bits) spec)
-            ~width:Gf.Signal.num_bits)
-      in
-      Array.iteri twiddle_omegas ~f:(fun i t ->
-        ignore (t.value -- ("twiddle_omega" ^ Int.to_string i) : Signal.t));
       Always.(
         compile
           [ start_twiddles <--. 0
@@ -232,12 +215,6 @@ module Make (Config : Config) = struct
                       ; last_stage <--. 0
                       ; twiddle_stage <--. 0
                       ; twiddle_update <--. 0
-                      ; when_
-                          inputs.first_iter
-                          [ for_ 0 (Twiddle_factor_stream.pipe_length - 1) (fun col ->
-                              twiddle_omegas.(col)
-                              <-- (twiddle_root row col |> gf_z_to_bits))
-                          ]
                       ; sm.set_next Looping
                       ]
                   ] )
@@ -262,7 +239,7 @@ module Make (Config : Config) = struct
               ; ( Sync
                 , [ sync_count <-- sync_count_next
                   ; when_
-                      (sync_count.value ==:. sync_cycles - 1)
+                      (sync_count.value ==:. Twiddle_update.sync_cycles - 1)
                       [ sm.set_next Looping
                       ; sync_count <--. 0
                       ; start_twiddles <--. 1
@@ -315,7 +292,7 @@ module Make (Config : Config) = struct
                         (sync_count.value ==:. Twiddle_factor_stream.pipe_length - 1)
                         [ twiddle_update <--. 0 ]
                     ; when_
-                        (sync_count.value ==:. sync_cycles - 1)
+                        (sync_count.value ==:. Twiddle_update.sync_cycles - 1)
                         [ twiddle_stage <--. 0
                         ; twiddle_update <--. 0
                         ; last_stage <-- gnd
@@ -327,23 +304,6 @@ module Make (Config : Config) = struct
                         ]
                     ] )
               ]
-          ; (* latch updated twiddle omegas *)
-            proc
-              [ when_
-                  (pipeline
-                     spec
-                     ~n:(Twiddle_factor_stream.pipe_length + ram_output_pipelining)
-                     twiddle_update.value)
-                  [ (* depending on the pipe dpeth, this might not work.*)
-                    for_
-                      0
-                      (Array.length twiddle_omegas - 1)
-                      (fun i ->
-                        if i = Array.length twiddle_omegas - 1
-                        then twiddle_omegas.(i) <-- inputs.twiddle_update_in
-                        else twiddle_omegas.(i) <-- twiddle_omegas.(i + 1).value)
-                  ]
-              ]
           ]);
       { O.done_ = done_.value
       ; i = i.value
@@ -352,36 +312,23 @@ module Make (Config : Config) = struct
       ; m = m.value
       ; addr1 = addr1.value
       ; addr2 = addr2.value
-      ; omegas =
-          (if support_4step_twiddle
-          then
-            List.init Twiddle_factor_stream.pipe_length ~f:(fun idx ->
-              mux2 twiddle_stage.value twiddle_omegas.(idx).value omegas.(idx))
-          else List.init Twiddle_factor_stream.pipe_length ~f:(fun idx -> omegas.(idx)))
+      ; omegas = List.init Twiddle_factor_stream.pipe_length ~f:(fun idx -> omegas.(idx))
       ; start_twiddles = start_twiddles.value
       ; first_stage = first_stage.value
       ; last_stage = last_stage.value
       ; twiddle_stage = twiddle_stage.value
       ; twiddle_update =
           { valid = twiddle_update.value
-          ; factors =
-              (let sync_count_piped =
-                 pipeline ~n:(1 + ram_output_pipelining) spec sync_count.value
-               in
-               [| mux
-                    sync_count_piped
-                    (Array.to_list twiddle_omegas |> List.map ~f:(fun v -> v.value))
-                ; mux sync_count_piped twiddle_scale
-               |])
+          ; index = pipeline ~n:(1 + ram_output_pipelining) spec sync_count.value
           }
       ; read_write_enable = read_write_enable.value
       ; flip = flip.value
       }
     ;;
 
-    let hierarchy ?row scope =
+    let hierarchy scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"ctrl" ~scope (create ?row)
+      Hier.hierarchical ~name:"ctrl" ~scope create
     ;;
   end
 
@@ -393,6 +340,8 @@ module Make (Config : Config) = struct
       type 'a t =
         { clock : 'a
         ; clear : 'a
+        ; start : 'a
+        ; first_iter : 'a
         ; d1 : 'a [@bits Gf.Signal.num_bits]
         ; d2 : 'a [@bits Gf.Signal.num_bits]
         ; omegas : 'a list
@@ -413,6 +362,16 @@ module Make (Config : Config) = struct
       [@@deriving sexp_of, hardcaml]
     end
 
+    let gf_z_to_bits g = Gf.Z.to_z g |> Gf.Signal.of_z |> Gf.Signal.to_bits
+    let twiddle_root row iter = Gf.Z.pow Roots.inverse.(logn * 2) (row * (iter + 1))
+
+    let twiddle_scale_z =
+      List.init Twiddle_factor_stream.pipe_length ~f:(fun col ->
+        twiddle_root twiddle_4step_config.rows_per_iteration col)
+    ;;
+
+    let twiddle_scale = twiddle_scale_z |> List.map ~f:gf_z_to_bits
+
     let ( +: ) a b =
       Gf.Signal.( + ) (Gf.Signal.of_bits a) (Gf.Signal.of_bits b) |> Gf.Signal.to_bits
     ;;
@@ -424,12 +383,16 @@ module Make (Config : Config) = struct
     let ( *: ) = `Dont_use_me
     let `Dont_use_me = ( *: )
 
-    let create scope (i : _ I.t) =
+    let create ?(row = 0) scope (i : _ I.t) =
       let ( -- ) = Scope.naming scope in
       let spec_with_clear = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
       let spec_no_clear = Reg_spec.create ~clock:i.clock () in
       let pipe ?(clear = false) ~n d =
         pipeline ~n (if clear then spec_with_clear else spec_no_clear) d
+      in
+      let twiddle_omegas =
+        Array.init Twiddle_factor_stream.pipe_length ~f:(fun _ ->
+          Var.reg spec_no_clear ~width:Gf.Signal.num_bits)
       in
       (* The latency of the input data must be adjusted to match the latency of
          the twiddle factor calculation *)
@@ -438,21 +401,62 @@ module Make (Config : Config) = struct
           scope
           { clock = i.clock
           ; start_twiddles = pipe ~n:ram_output_pipelining ~clear:true i.start_twiddles
-          ; omegas = i.omegas
+          ; omegas =
+              (if support_4step_twiddle
+              then
+                List.init Twiddle_factor_stream.pipe_length ~f:(fun idx ->
+                  mux2
+                    i.twiddle_stage
+                    twiddle_omegas.(idx).value
+                    (List.nth_exn i.omegas idx))
+              else i.omegas)
           }
       in
+      Array.iteri twiddle_omegas ~f:(fun i t ->
+        ignore (t.value -- ("twiddle_omega" ^ Int.to_string i) : Signal.t));
       let w = w -- "twiddle_factor" in
-      let t =
+      let t = wire Gf.Signal.num_bits -- "T" in
+      Always.(
+        compile
+          [ when_
+              (i.start &: i.first_iter)
+              [ for_ 0 (Twiddle_factor_stream.pipe_length - 1) (fun col ->
+                  twiddle_omegas.(col) <-- (twiddle_root row col |> gf_z_to_bits))
+              ]
+          ; when_
+              (pipeline
+                 spec_with_clear
+                 ~n:(Twiddle_factor_stream.pipe_length + ram_output_pipelining)
+                 i.twiddle_update.valid)
+              [ (* depending on the pipe dpeth, this might not work.*)
+                for_
+                  0
+                  (Array.length twiddle_omegas - 1)
+                  (fun i ->
+                    if i = Array.length twiddle_omegas - 1
+                    then twiddle_omegas.(i) <-- t
+                    else twiddle_omegas.(i) <-- twiddle_omegas.(i + 1).value)
+              ]
+          ]);
+      let () =
+        let twiddle_omega =
+          mux
+            i.twiddle_update.index
+            (Array.to_list twiddle_omegas |> List.map ~f:(fun v -> v.value))
+        in
+        let twiddle_scale = mux i.twiddle_update.index twiddle_scale in
+        t
+        <==
         let a =
           mux2
             (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.valid)
-            i.twiddle_update.factors.(0)
+            twiddle_omega
             (pipe ~n:ram_output_pipelining i.d2)
         in
         let b =
           mux2
             (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.valid)
-            i.twiddle_update.factors.(1)
+            twiddle_scale
             w
         in
         gf_mul ~clock:i.clock a b -- "T"
@@ -468,9 +472,9 @@ module Make (Config : Config) = struct
       }
     ;;
 
-    let hierarchy scope =
+    let hierarchy ?row scope =
       let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~name:"dp" ~scope create
+      Hier.hierarchical ~name:"dp" ~scope (create ?row)
     ;;
   end
 
@@ -514,22 +518,23 @@ module Make (Config : Config) = struct
       let datapath = Datapath.O.Of_signal.wires () in
       let controller =
         Controller.hierarchy
-          ?row
           scope
           { Controller.I.clock = i.clock
           ; clear = i.clear
           ; start = i.start
           ; first_iter = i.first_iter
           ; first_4step_pass = i.first_4step_pass
-          ; twiddle_update_in = datapath.twiddle_update_q
           }
       in
       Datapath.O.Of_signal.assign
         datapath
         (Datapath.hierarchy
+           ?row
            scope
            { Datapath.I.clock = i.clock
            ; clear = i.clear
+           ; start = i.start
+           ; first_iter = i.first_iter
            ; d1 = i.d1
            ; d2 = i.d2
            ; omegas = controller.omegas
