@@ -3,7 +3,7 @@ open Hardcaml
 open Signal
 
 module type Config = sig
-  include Ntt.Config
+  include Core_config.S
 
   val logcores : int
 end
