@@ -40,6 +40,7 @@ let command_kernel_for_vitis =
           let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
         end
         in
+<<<<<<< HEAD
         let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config)
         in
         let result = Test_kernel.run_test ~waves ~seed ~timeout ~verilator num_points in
@@ -59,6 +60,15 @@ let command_vitis_kernel_back_to_back =
 
 let command_test_cases =
   Command.group ~summary:"" [ "kernel-back-to-back", command_vitis_kernel_back_to_back ]
+=======
+        let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config) in
+        let result = Test_kernel.run_test ~timeout ~verilator num_points in
+        if waves
+        then
+          Hardcaml_waveterm_interactive.run
+            ~display_rules:Test_kernel.display_rules
+            result.waves]
+>>>>>>> refs/remotes/origin/ntt-rename
 ;;
 
 let command_top =
@@ -103,7 +113,11 @@ let command_top =
         end
         in
         let module Test_top = Msm_pippenger_test_top.Test_top.Make (Config) in
+<<<<<<< HEAD
         let result = Test_top.run_test ~seed ~timeout ~verilator num_points in
+=======
+        let result = Test_top.run_test ~timeout ~verilator num_points in
+>>>>>>> refs/remotes/origin/ntt-rename
         if waves
         then
           Hardcaml_waveterm_interactive.run
