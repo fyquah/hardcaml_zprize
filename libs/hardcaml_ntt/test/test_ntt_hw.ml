@@ -5,14 +5,14 @@ open Expect_test_helpers_base
 module Gf = Hardcaml_ntt.Gf.Bits
 
 let%expect_test "addressing" =
-  let module Ntt =
-    Hardcaml_ntt.Ntt.Make (struct
+  let module Controller =
+    Hardcaml_ntt.Controller.Make (struct
       let logn = 3
       let twiddle_4step_config = None
     end)
   in
-  let module Sim = Cyclesim.With_interface (Ntt.Controller.I) (Ntt.Controller.O) in
-  let sim = Sim.create (Ntt.Controller.create (Scope.create ~flatten_design:true ())) in
+  let module Sim = Cyclesim.With_interface (Controller.I) (Controller.O) in
+  let sim = Sim.create (Controller.create (Scope.create ~flatten_design:true ())) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   inputs.clear := Bits.vdd;
@@ -75,7 +75,9 @@ let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim
   (* if twiddling is enabled (as used for the 4step implementation), model it. *)
   if first_4step_pass
   then (
-    match (twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option) with
+    match
+      (twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option)
+    with
     | None -> ()
     | Some { rows_per_iteration = _; log_num_iterations = _ } ->
       let scl = ref Gf.one in

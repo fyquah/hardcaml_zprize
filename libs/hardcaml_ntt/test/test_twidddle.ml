@@ -8,11 +8,6 @@ module Ntt = Hardcaml_ntt.Ntt_sw.Make (Gf)
 let logn = 3
 let n = 1 lsl logn
 
-module Ntt_hw = Hardcaml_ntt.Ntt.Make (struct
-  let logn = logn
-  let twiddle_4step_config = None
-end)
-
 let%expect_test "show twiddle generation" =
   let a = Array.init n ~f:(fun _ -> Array.init n ~f:(fun _ -> Gf.one)) in
   Ntt.apply_twiddles Ntt.inverse_roots.(n) a;
@@ -126,10 +121,10 @@ let%expect_test "" =
   let module Gf_bits = Hardcaml_ntt.Gf.Bits in
   let module Sim =
     Cyclesim.With_interface
-      (Ntt_hw.Twiddle_factor_stream.I)
-      (Ntt_hw.Twiddle_factor_stream.O)
+      (Hardcaml_ntt.Twiddle_factor_stream.I)
+      (Hardcaml_ntt.Twiddle_factor_stream.O)
   in
-  let sim = Sim.create (Ntt_hw.Twiddle_factor_stream.create (Scope.create ())) in
+  let sim = Sim.create (Hardcaml_ntt.Twiddle_factor_stream.create (Scope.create ())) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in

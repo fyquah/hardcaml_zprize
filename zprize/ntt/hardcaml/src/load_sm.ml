@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Ntt.Config) = struct
+module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
 
   module State = struct

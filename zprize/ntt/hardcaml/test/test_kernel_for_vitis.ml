@@ -191,7 +191,7 @@ let%expect_test "vitis kernel test" =
     let logn = 5
     let logcores = 3
 
-    let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
+    let twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option =
       Some { rows_per_iteration = 1 lsl logcores; log_num_iterations = logn - logcores }
     ;;
   end
@@ -201,7 +201,6 @@ let%expect_test "vitis kernel test" =
   ignore
     (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
-  [%expect
-    {|
+  [%expect {|
     "Hardware and software reference results match!" |}]
 ;;

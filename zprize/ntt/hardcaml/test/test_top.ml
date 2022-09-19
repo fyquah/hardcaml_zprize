@@ -159,7 +159,7 @@ module Config = struct
   let logn = 5
   let log_rows_per_iteration = 3
 
-  let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
+  let twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option =
     Some
       { rows_per_iteration = 1 lsl log_rows_per_iteration
       ; log_num_iterations = (logn * 2) - log_rows_per_iteration
