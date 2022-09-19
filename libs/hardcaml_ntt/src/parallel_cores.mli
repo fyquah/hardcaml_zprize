@@ -27,10 +27,15 @@ module Make (Config : Four_step_config.S) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create : build_mode:Build_mode.t -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val create
+    :  ?single_controller:bool
+    -> build_mode:Build_mode.t
+    -> Scope.t
+    -> Signal.t Interface.Create_fn(I)(O).t
 
   val hierarchy
-    :  build_mode:Build_mode.t
+    :  ?single_controller:bool
+    -> build_mode:Build_mode.t
     -> Scope.t
     -> Signal.t Interface.Create_fn(I)(O).t
 end

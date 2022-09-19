@@ -46,7 +46,6 @@ module Make (Config : Core_config.S) = struct
 
   let create ?row scope (i : _ I.t) =
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
-    let datapath = Datapath.O.Of_signal.wires () in
     let controller =
       Controller.hierarchy
         scope
@@ -57,22 +56,22 @@ module Make (Config : Core_config.S) = struct
         ; first_4step_pass = i.first_4step_pass
         }
     in
-    Datapath.O.Of_signal.assign
-      datapath
-      (Datapath.hierarchy
-         ?row
-         scope
-         { Datapath.I.clock = i.clock
-         ; clear = i.clear
-         ; start = i.start
-         ; first_iter = i.first_iter
-         ; d1 = i.d1
-         ; d2 = i.d2
-         ; omegas = controller.omegas
-         ; start_twiddles = controller.start_twiddles
-         ; twiddle_stage = controller.twiddle_stage
-         ; twiddle_update = controller.twiddle_update
-         });
+    let datapath =
+      Datapath.hierarchy
+        ?row
+        scope
+        { Datapath.I.clock = i.clock
+        ; clear = i.clear
+        ; start = i.start
+        ; first_iter = i.first_iter
+        ; d1 = i.d1
+        ; d2 = i.d2
+        ; omegas = controller.omegas
+        ; start_twiddles = controller.start_twiddles
+        ; twiddle_stage = controller.twiddle_stage
+        ; twiddle_update = controller.twiddle_update
+        }
+    in
     let pipe = pipeline spec ~n:(datapath_latency + 1) in
     { O.q1 = datapath.q1
     ; q2 = datapath.q2
@@ -130,21 +129,48 @@ module With_rams (Config : Core_config.S) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let input_ram scope build_mode (i : _ I.t) (core : _ Core.O.t) =
+  let input_ram
+    scope
+    build_mode
+    ~clock
+    ~clear
+    ~flip
+    ~wr_addr
+    ~wr_d
+    ~wr_en
+    ~addr1_in
+    ~addr2_in
+    ~read_enable_in
+    =
     Bram.create_dual
       (Scope.sub_scope scope "ram_in")
       ~build_mode
       ~size:n
-      ~clock:i.clock
-      ~clear:i.clear
-      ~flip:i.flip
-      ~write_port_a:{ address = i.wr_addr; data = i.wr_d; enable = i.wr_en }
+      ~clock
+      ~clear
+      ~flip
+      ~write_port_a:{ address = wr_addr; data = wr_d; enable = wr_en }
       ~write_port_b:{ address = zero logn; data = zero Gf.Signal.num_bits; enable = gnd }
-      ~read_port_a:{ address = reverse core.addr1_in; enable = core.read_enable_in }
-      ~read_port_b:{ address = reverse core.addr2_in; enable = core.read_enable_in }
+      ~read_port_a:{ address = reverse addr1_in; enable = read_enable_in }
+      ~read_port_b:{ address = reverse addr2_in; enable = read_enable_in }
   ;;
 
-  let transpose_ram scope build_mode (i : _ I.t) (core : _ Core.O.t) ~flip ~last_stage =
+  let transpose_ram
+    scope
+    build_mode
+    ~clock
+    ~clear
+    ~addr1_in
+    ~addr1_out
+    ~q1
+    ~addr2_in
+    ~addr2_out
+    ~q2
+    ~read_enable_in
+    ~write_enable_out
+    ~flip
+    ~last_stage
+    =
     let scope = Scope.sub_scope scope "ram_transp" in
     let ( -- ) = Scope.naming scope in
     let q0, q1 =
@@ -152,21 +178,15 @@ module With_rams (Config : Core_config.S) = struct
         scope
         ~build_mode
         ~size:n
-        ~clock:i.clock
-        ~clear:i.clear
+        ~clock
+        ~clear
         ~flip
         ~write_port_a:
-          { address = core.addr1_out
-          ; data = core.q1
-          ; enable = core.write_enable_out &: ~:last_stage
-          }
+          { address = addr1_out; data = q1; enable = write_enable_out &: ~:last_stage }
         ~write_port_b:
-          { address = core.addr2_out
-          ; data = core.q2
-          ; enable = core.write_enable_out &: ~:last_stage
-          }
-        ~read_port_a:{ address = core.addr1_in; enable = core.read_enable_in }
-        ~read_port_b:{ address = core.addr2_in; enable = core.read_enable_in }
+          { address = addr2_out; data = q2; enable = write_enable_out &: ~:last_stage }
+        ~read_port_a:{ address = addr1_in; enable = read_enable_in }
+        ~read_port_b:{ address = addr2_in; enable = read_enable_in }
     in
     q0 -- "q0", q1 -- "q1"
   ;;
@@ -174,30 +194,35 @@ module With_rams (Config : Core_config.S) = struct
   let output_ram
     scope
     build_mode
-    (i : _ I.t)
-    (core : _ Core.O.t)
+    ~clock
+    ~clear
+    ~flip
     ~last_stage
     ~twiddle_stage
+    ~rd_addr
+    ~rd_en
+    ~addr1_out
+    ~q1
+    ~addr2_out
+    ~q2
+    ~write_enable_out
     =
     let q, _ =
       Bram.create_dual
         (Scope.sub_scope scope "ram_out")
         ~build_mode
         ~size:n
-        ~clock:i.clock
-        ~clear:i.clear
-        ~flip:i.flip
+        ~clock
+        ~clear
+        ~flip
         ~write_port_a:
-          { address = core.addr1_out
-          ; data = core.q1
-          ; enable = core.write_enable_out &: (last_stage &: ~:twiddle_stage)
+          { address = addr1_out
+          ; data = q1
+          ; enable = write_enable_out &: (last_stage &: ~:twiddle_stage)
           }
         ~write_port_b:
-          { address = core.addr2_out
-          ; data = core.q2
-          ; enable = core.write_enable_out &: last_stage
-          }
-        ~read_port_a:{ address = i.rd_addr; enable = i.rd_en }
+          { address = addr2_out; data = q2; enable = write_enable_out &: last_stage }
+        ~read_port_a:{ address = rd_addr; enable = rd_en }
         ~read_port_b:{ address = zero logn; enable = gnd }
     in
     q
@@ -208,9 +233,36 @@ module With_rams (Config : Core_config.S) = struct
     let core = Core.O.Of_signal.wires () in
     let pipe ~n d = pipeline spec ~n d in
     (* input and output rams *)
-    let d_in_0, d_in_1 = input_ram scope build_mode i core in
+    let d_in_0, d_in_1 =
+      input_ram
+        scope
+        build_mode
+        ~clock:i.clock
+        ~clear:i.clear
+        ~flip:i.flip
+        ~wr_addr:i.wr_addr
+        ~wr_d:i.wr_d
+        ~wr_en:i.wr_en
+        ~addr1_in:core.addr1_in
+        ~addr2_in:core.addr2_in
+        ~read_enable_in:core.read_enable_in
+    in
     let d_out_0, d_out_1 =
-      transpose_ram scope build_mode i core ~flip:core.flip ~last_stage:core.last_stage
+      transpose_ram
+        scope
+        build_mode
+        ~clock:i.clock
+        ~clear:i.clear
+        ~addr1_in:core.addr1_in
+        ~addr1_out:core.addr1_out
+        ~q1:core.q1
+        ~addr2_in:core.addr2_in
+        ~addr2_out:core.addr2_out
+        ~q2:core.q2
+        ~read_enable_in:core.read_enable_in
+        ~write_enable_out:core.write_enable_out
+        ~flip:core.flip
+        ~last_stage:core.last_stage
     in
     (* core *)
     Core.O.iter2
@@ -232,10 +284,18 @@ module With_rams (Config : Core_config.S) = struct
       output_ram
         scope
         build_mode
-        i
-        core
+        ~clock:i.clock
+        ~clear:i.clear
+        ~flip:i.flip
         ~last_stage:(pipe ~n:(datapath_latency + 1) core.last_stage)
         ~twiddle_stage:(pipe ~n:(datapath_latency + 1) core.twiddle_stage)
+        ~rd_addr:i.rd_addr
+        ~rd_en:i.rd_en
+        ~addr1_out:core.addr1_out
+        ~q1:core.q1
+        ~addr2_out:core.addr2_out
+        ~q2:core.q2
+        ~write_enable_out:core.write_enable_out
     in
     { O.done_ = core.done_; rd_q = d_out }
   ;;

@@ -42,6 +42,8 @@ module Make (Config : Core_config.S) : sig
 end
 
 module With_rams (Config : Core_config.S) : sig
+  module Core : module type of Make (Config)
+
   module I : sig
     type 'a t =
       { clock : 'a
@@ -66,6 +68,54 @@ module With_rams (Config : Core_config.S) : sig
       }
     [@@deriving sexp_of, hardcaml]
   end
+
+  val input_ram
+    :  Scope.t
+    -> Build_mode.t
+    -> clock:Signal.t
+    -> clear:Signal.t
+    -> flip:Signal.t
+    -> wr_addr:Signal.t
+    -> wr_d:Signal.t
+    -> wr_en:Signal.t
+    -> addr1_in:Signal.t
+    -> addr2_in:Signal.t
+    -> read_enable_in:Signal.t
+    -> Signal.t * Signal.t
+
+  val transpose_ram
+    :  Scope.t
+    -> Build_mode.t
+    -> clock:Signal.t
+    -> clear:Signal.t
+    -> addr1_in:Signal.t
+    -> addr1_out:Signal.t
+    -> q1:Signal.t
+    -> addr2_in:Signal.t
+    -> addr2_out:Signal.t
+    -> q2:Signal.t
+    -> read_enable_in:Signal.t
+    -> write_enable_out:Signal.t
+    -> flip:Signal.t
+    -> last_stage:Signal.t
+    -> Signal.t * Signal.t
+
+  val output_ram
+    :  Scope.t
+    -> Build_mode.t
+    -> clock:Signal.t
+    -> clear:Signal.t
+    -> flip:Signal.t
+    -> last_stage:Signal.t
+    -> twiddle_stage:Signal.t
+    -> rd_addr:Signal.t
+    -> rd_en:Signal.t
+    -> addr1_out:Signal.t
+    -> q1:Signal.t
+    -> addr2_out:Signal.t
+    -> q2:Signal.t
+    -> write_enable_out:Signal.t
+    -> Signal.t
 
   val create
     :  ?row:int
