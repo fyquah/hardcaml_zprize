@@ -2,16 +2,17 @@ open! Base
 open Hardcaml
 open Hardcaml_waveterm
 open Expect_test_helpers_base
+module Gf = Hardcaml_ntt.Gf.Bits
 
 let%expect_test "addressing" =
-  let module Ntt =
-    Hardcaml_ntt.Ntt.Make (struct
+  let module Controller =
+    Hardcaml_ntt.Controller.Make (struct
       let logn = 3
       let twiddle_4step_config = None
     end)
   in
-  let module Sim = Cyclesim.With_interface (Ntt.Controller.I) (Ntt.Controller.O) in
-  let sim = Sim.create (Ntt.Controller.create (Scope.create ~flatten_design:true ())) in
+  let module Sim = Cyclesim.With_interface (Controller.I) (Controller.O) in
+  let sim = Sim.create (Controller.create (Scope.create ~flatten_design:true ())) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   inputs.clear := Bits.vdd;
@@ -33,13 +34,8 @@ let%expect_test "addressing" =
     │                  ││    └───────────────────────────────────────────────────────────────│
     │first_4step_pass  ││                                                                    │
     │                  ││────────────────────────────────────────────────────────────────────│
-    │first_iter        ││                                                                    │
-    │                  ││────────────────────────────────────────────────────────────────────│
     │start             ││    ┌───┐                                                           │
     │                  ││────┘   └───────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────│
-    │twiddle_update_in ││ 0000000000000000                                                   │
-    │                  ││────────────────────────────────────────────────────────────────────│
     │                  ││────────────┬───┬───┬───┬───────────────────────────────────┬───┬───│
     │addr1             ││ 0          │2  │4  │6  │7                                  │0  │1  │
     │                  ││────────────┴───┴───┴───┴───────────────────────────────────┴───┴───│
@@ -48,12 +44,6 @@ let%expect_test "addressing" =
     │                  ││────────┴───┴───┴───┴───┴───────────────────────────────────┴───┴───│
     │done_             ││    ┌───┐                                                           │
     │                  ││────┘   └───────────────────────────────────────────────────────────│
-    │                  ││────┬───────────────────────────────────────────────────────────────│
-    │factors0          ││ 00.│0000000000000001                                               │
-    │                  ││────┴───────────────────────────────────────────────────────────────│
-    │                  ││────────────────────────────────────────────────────────────────────│
-    │factors1          ││ 0000000000000001                                                   │
-    │                  ││────────────────────────────────────────────────────────────────────│
     │first_stage       ││        ┌───────────────────────────────────────────────────┐       │
     │                  ││────────┘                                                   └───────│
     │flip              ││                                                        ┌───┐       │
@@ -61,28 +51,39 @@ let%expect_test "addressing" =
     │                  ││────────────────────────────────────────────────────────────┬───────│
     │i                 ││ 0                                                          │1      │
     │                  ││────────────────────────────────────────────────────────────┴───────│
+    │                  ││────────────────────────────────────┬───┬───┬───┬───┬───┬───┬───┬───│
+    │index             ││ 0                                  │1  │2  │3  │4  │5  │6  │7  │8  │
+    │                  ││────────────────────────────────────┴───┴───┴───┴───┴───┴───┴───┴───│
     │                  ││────────────────────────┬───────────────────────────────────┬───┬───│
     │j                 ││ 0                      │1                                  │0  │1  │
+    │                  ││────────────────────────┴───────────────────────────────────┴───┴───│
+    │                  ││────────────┬───┬───┬───────────────────────────────────────┬───────│
+    │k                 ││ 0          │2  │4  │6                                      │0      │
+    │                  ││────────────┴───┴───┴───────────────────────────────────────┴───────│
+    │last_stage        ││                                                                    │
+    │                  ││────────────────────────────────────────────────────────────────────│
+    │                  ││────────┬───────────────────────────────────────────────────┬───────│
+    │m                 ││ 0      │1                                                  │2      │
     └──────────────────┘└────────────────────────────────────────────────────────────────────┘ |}]
 ;;
-
-module Gf = Hardcaml_ntt.Gf_bits.Make (Bits)
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim_result =
-  let module Ntt = Hardcaml_ntt.Ntt_sw.Make (Gf) in
+  let module Ntt = Hardcaml_ntt.Reference_model.Make (Gf) in
   Ntt.inverse_dit coefs;
   (* if twiddling is enabled (as used for the 4step implementation), model it. *)
   if first_4step_pass
   then (
-    match (twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option) with
+    match
+      (twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option)
+    with
     | None -> ()
     | Some { rows_per_iteration = _; log_num_iterations = _ } ->
       let scl = ref Gf.one in
       let step = ref Gf.one in
       let n2 =
-        Hardcaml_ntt.Roots.inverse.(logn + logn) |> Hardcaml_ntt.Gf_z.to_z |> Gf.of_z
+        Hardcaml_ntt.Roots.inverse.(logn + logn) |> Hardcaml_ntt.Gf.Z.to_z |> Gf.of_z
       in
       for _ = 0 to row - 1 do
         step := Gf.mul !step n2
@@ -110,17 +111,17 @@ let inverse_ntt_test
   =
   let n = Array.length input_coefs in
   let logn = Int.ceil_log2 n in
-  let module Ntt =
-    Hardcaml_ntt.Ntt.Make (struct
+  let module Single_core =
+    Hardcaml_ntt.Single_core.With_rams (struct
       let logn = logn
       let twiddle_4step_config = twiddle_4step_config
     end)
   in
-  let module Sim = Cyclesim.With_interface (Ntt.With_rams.I) (Ntt.With_rams.O) in
+  let module Sim = Cyclesim.With_interface (Single_core.I) (Single_core.O) in
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
-      (Ntt.With_rams.create
+      (Single_core.create
          ~row
          ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))

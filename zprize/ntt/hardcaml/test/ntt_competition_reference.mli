@@ -2,6 +2,6 @@
 
 open Base
 
-module Make (Gf : Hardcaml_ntt.Gf_intf.S) : sig
+module Make (Gf : Hardcaml_ntt.Gf.S) : sig
   val ntt : Gf.t array -> unit
 end

@@ -35,7 +35,7 @@ let inverse =
    ; "4614640910117430873"
    ; "1753635133440165772"
   |]
-  |> Array.map ~f:(fun const -> Z.of_string const |> Gf_z.of_z)
+  |> Array.map ~f:(fun const -> Z.of_string const |> Gf.Z.of_z)
 ;;
 
-let forward = Array.map inverse ~f:Gf_z.inverse
+let forward = Array.map inverse ~f:Gf.Z.inverse

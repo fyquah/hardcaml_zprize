@@ -8,7 +8,6 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
 
   let { Msm_pippenger_multi_slr.Config.field_bits; _ } = Config.t
   let scalar_bits = Msm_pippenger_multi_slr.Config.scalar_bits Config.t
-  let window_size_bits = Config.t.window_size_bits
 
   module Affine_point = struct
     type 'a t =
@@ -127,6 +126,10 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
       List.group from_fpga ~break:(fun a b -> a.window <> b.window)
     in
     let total_result = ref pidentity in
+    let all_window_size_bits =
+      Array.of_list (Msm_pippenger_multi_slr.Config.all_window_size_bits Config.t)
+    in
+    let double_times = ref 0 in
     List.iteri sorted_by_window ~f:(fun window_idx window ->
       (* sum this window *)
       let cnt1 = ref pidentity in
@@ -140,9 +143,8 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
           cnt2 := Ark_bls12_377_g1.add !cnt2 !cnt1);
       (* add to running sum *)
       total_result
-        := Ark_bls12_377_g1.add
-             !total_result
-             (double !cnt2 ~times:(window_size_bits * window_idx)));
+        := Ark_bls12_377_g1.add !total_result (double !cnt2 ~times:!double_times);
+      double_times := !double_times + all_window_size_bits.(window_idx));
     !total_result
   ;;
 

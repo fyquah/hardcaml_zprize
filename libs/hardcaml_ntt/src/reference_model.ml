@@ -1,8 +1,9 @@
 open Base
 open Hardcaml
 open! Bits
+module Gf_z = Gf.Z
 
-module Make (Gf : Gf_intf.S) = struct
+module Make (Gf : Gf.S) = struct
   let forward_roots = Array.map Roots.forward ~f:(fun z -> Gf_z.to_z z |> Gf.of_z)
   let inverse_roots = Array.map Roots.inverse ~f:(fun z -> Gf_z.to_z z |> Gf.of_z)
 

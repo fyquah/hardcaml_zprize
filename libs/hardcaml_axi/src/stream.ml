@@ -123,5 +123,10 @@ module Make (X : Config.S) = struct
       ; up_dest = { tready = s_axis_tready_reg.value }
       }
     ;;
+
+    let hierarchical scope i =
+      let module H = Hierarchy.In_scope (I) (O) in
+      H.hierarchical ~name:"axis_register" ~scope create i
+    ;;
   end
 end

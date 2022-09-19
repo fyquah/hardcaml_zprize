@@ -1,4 +1,4 @@
-module Make (Config : Hardcaml_ntt.Ntt.Config) : sig
+module Make (Config : Hardcaml_ntt.Core_config.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a

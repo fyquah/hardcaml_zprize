@@ -12,7 +12,7 @@ type affine =
   { x : z
   ; y : z
   }
-[@@deriving sexp_of]
+[@@deriving sexp_of, equal]
 
 type affine_with_t =
   { x : Z.t
@@ -42,7 +42,9 @@ let affine_neg ({ x; y } : affine) : affine = { x; y = modulo_neg y }
 
 let extended_to_affine ?(has_t = true) { x; y; z; t } : affine =
   let open Modulo_ops in
-  if has_t then assert (equal (x / z * (y / z)) (t / z));
+  if has_t && not (equal (x / z * (y / z)) (t / z))
+  then
+    Stdio.print_s [%message "Check for t did not pass!" (x : z) (y : z) (z : z) (t : z)];
   { x = x / z; y = y / z }
 ;;
 

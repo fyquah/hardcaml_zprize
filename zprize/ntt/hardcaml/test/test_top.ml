@@ -1,11 +1,10 @@
 open Core
 open Hardcaml
 open Hardcaml_waveterm
-module Gf_z = Hardcaml_ntt.Gf_z
-module Gf_bits = Hardcaml_ntt.Gf_bits.Make (Bits)
+module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
-  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf_z)
+module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
+  module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
   module Top = Zprize_ntt.Top.Make (Config)
   module Sim = Cyclesim.With_interface (Top.I) (Top.O)
 
@@ -19,17 +18,19 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
 
   let random_input_coef_matrix () =
     Array.init (1 lsl logn) ~f:(fun _ ->
-      Array.init (1 lsl logn) ~f:(fun _ -> Gf_z.random () |> Gf_z.to_z))
+      Array.init (1 lsl logn) ~f:(fun _ -> Gf.Z.random () |> Gf.Z.to_z))
   ;;
 
-  let twiddle m = Ntt_sw.apply_twiddles Ntt_sw.inverse_roots.(logn + logn) m
+  let twiddle m =
+    Reference_model.apply_twiddles Reference_model.inverse_roots.(logn + logn) m
+  ;;
 
   let print_matrix c =
     Array.iteri c ~f:(fun row c ->
       printf "%.3i| " row;
       Array.iteri c ~f:(fun col c ->
         if col <> 0 && col % 8 = 0 then printf "\n   | ";
-        printf "%20s " (Z.to_string (Gf_z.to_z c)));
+        printf "%20s " (Z.to_string (Gf.Z.to_z c)));
       printf "\n")
   ;;
 
@@ -82,12 +83,12 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
       let core = row % num_cores in
       Array.init n ~f:(fun col ->
         let idx = (pass * num_cores * (n / num_cores)) + col in
-        Gf_bits.of_bits results.(idx).(core) |> Gf_bits.to_z |> Gf_z.of_z))
+        Gf.Bits.of_bits results.(idx).(core) |> Gf.Bits.to_z |> Gf.Z.of_z))
   ;;
 
   let expected ~verbose ~first_4step_pass input_coefs hw_results =
     let sw_results = copy_matrix input_coefs in
-    Array.iter sw_results ~f:Ntt_sw.inverse_dit;
+    Array.iter sw_results ~f:Reference_model.inverse_dit;
     if first_4step_pass then twiddle sw_results;
     if verbose
     then
@@ -96,7 +97,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
         ~f:(fun (n, m) ->
           printf "\n%s\n\n" n;
           print_matrix m);
-    if [%equal: Gf_z.t array array] hw_results sw_results
+    if [%equal: Gf.Z.t array array] hw_results sw_results
     then print_s [%message "Hardware and software reference results match!"]
     else raise_s [%message "ERROR: Hardware and software results do not match :("]
   ;;
@@ -108,7 +109,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
     (input_coefs : Z.t array array)
     =
     let sim, waves, inputs, outputs = create_sim waves in
-    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf_z.of_z) in
+    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf.Z.of_z) in
     let results = ref [] in
     let cycle ?(n = 1) () =
       assert (n > 0);
@@ -130,7 +131,7 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
         inputs.data_in.tdata
           := List.init num_cores ~f:(fun core ->
                input_coefs.((pass * num_cores) + core).(i))
-             |> List.map ~f:(fun z -> Gf_bits.to_bits (Gf_bits.of_z (Gf_z.to_z z)))
+             |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
              |> Bits.concat_lsb;
         cycle ()
       done;
@@ -160,7 +161,7 @@ module Config = struct
   let logn = 5
   let log_rows_per_iteration = 3
 
-  let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
+  let twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option =
     Some
       { rows_per_iteration = 1 lsl log_rows_per_iteration
       ; log_num_iterations = (logn * 2) - log_rows_per_iteration

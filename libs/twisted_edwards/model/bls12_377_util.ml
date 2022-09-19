@@ -1,7 +1,7 @@
 open Core
 module Extended_euclidean = Field_ops_lib.Extended_euclidean
 
-type z = Z.t
+type z = Z.t [@@deriving equal]
 
 let sexp_of_z z = Sexp.Atom ("0x" ^ Z.format "x" z)
 let half x = Z.div x (Z.of_int 2)

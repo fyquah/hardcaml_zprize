@@ -1,5 +1,6 @@
 (library
  (name field_ops_lib)
+ (public_name zprize.field_ops_lib)
  (libraries base hardcaml hardcaml_circuits ark_bls12_377_g1)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))
