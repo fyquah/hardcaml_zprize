@@ -3,6 +3,8 @@ open Hardcaml
 open Hardcaml_waveterm
 open Msm_pippenger_multi_slr
 
+let () = Hardcaml.Caller_id.set_mode Full_trace
+
 module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
   module Utils = Utils.Make (Config)
   module Kernel = Kernel_for_vitis.Make (Config)
@@ -63,6 +65,8 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
     else { waves = None; sim }
   ;;
 
+  let debug = true
+
   (* CR-someday fyquah: Largely a duplicate of the contents of
    * test_kernel_for_single_instance.ml ..
    *)
@@ -71,6 +75,11 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
     let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
     let sim = sim_and_waves.sim in
     let i, o = Cyclesim.inputs sim, Cyclesim.outputs sim in
+    if debug
+    then
+      at_exit (fun () ->
+        Option.iter sim_and_waves.waves ~f:(fun waves ->
+          Waveform.Serialize.marshall waves "a.hardcamlwaveform"));
     let inputs = Utils.random_inputs ~seed num_inputs in
     Cyclesim.cycle sim;
     i.fpga_to_host_dest.tready := Bits.vdd;
@@ -181,6 +190,7 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
       Cyclesim.cycle sim
     done;
     print_s [%message "Got" (List.length !result_points : int)];
+    if !cycle_cnt = timeout then print_s [%message "Simulation timed out!"];
     let result =
       { waves = sim_and_waves.waves; points = List.rev !result_points; inputs }
     in
@@ -194,6 +204,53 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
             (expected : Ark_bls12_377_g1.affine)
             (fpga_calculated_result : Ark_bls12_377_g1.affine)]
     else print_s [%message "PASS"];
+    if debug
+    then
+      Option.iter sim_and_waves.waves ~f:(fun waves ->
+        Waveform.Serialize.marshall waves "a.hardcamlwaveform");
     result
   ;;
+
+  let run_test
+    ?(waves = debug)
+    ?(seed = 0)
+    ?(timeout = 20_000)
+    ?(verilator = false)
+    num_inputs
+    =
+    run ~waves ~seed ~timeout ~verilator num_inputs ()
+  ;;
 end
+
+let%expect_test "Test over small input size" =
+  let module Config = struct
+    let t =
+      { Msm_pippenger_multi_slr.Config.field_bits = 377
+      ; scalar_bits_by_core = [| 5; 5; 5 |]
+      ; controller_log_stall_fifo_depth = 2
+      ; window_size_bits = 2
+      ; ram_read_latency = 1
+      }
+    ;;
+  end
+  in
+  let module Test = Make (Config) in
+  let _result = Test.run_test 8 in
+  [%expect
+    {|
+    (Expecting (num_result_points 30))
+    (Got ("List.length (!result_points)" 30))
+    ("ERROR: Result points did not match!"
+     (expected
+      ((x
+        0x20c68f38d178e944614ad24b64fb67a31fd611e80d0af74e2439dd248a1adaaa303bf89e80e5654b51787a680440d3)
+       (y
+        0x1612eb5cba22cb5f9e1bfc30d63320096ab1dd7fbcb1240718265a5d0cd867c232c390b60a1097b88b44ea06f2eca19)
+       (infinity false)))
+     (fpga_calculated_result
+      ((x
+        0x8323cd6799f8dadbeaacc1ccabfd364c6bf72fdca67d956e432a12ecee966b218c93fd531c5b299bbe806faf40787f)
+       (y
+        0x5b6de21ea7599c3ca095d9ed535295a09cd8b9e302d0d3588981d371cd0e726140ba4786da49805e0c7887b0b09d79)
+       (infinity false)))) |}]
+;;

@@ -22,16 +22,16 @@ module Make (C : Config.S) = struct
     type 'a t =
       { ap_clk : 'a
       ; ap_rst_n : 'a
-      ; host_to_fpga : 'a Axi512.Stream.Source.t
-      ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t
+      ; host_to_fpga : 'a Axi512.Stream.Source.t [@rtlprefix "host_to_fpga_"]
+      ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "fpga_to_host_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
     type 'a t =
-      { fpga_to_host : 'a Axi512.Stream.Source.t
-      ; host_to_fpga_dest : 'a Axi512.Stream.Dest.t
+      { fpga_to_host : 'a Axi512.Stream.Source.t [@rtlprefix "fpga_to_host_"]
+      ; host_to_fpga_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "host_to_fpga_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -64,6 +64,8 @@ module Make (C : Config.S) = struct
           ; fpga_to_host_dest = sub_fpga_to_host_dests.(core_index)
           })
     in
+    Array.iter2_exn host_to_fpga_dests sub_kernels ~f:(fun d k ->
+      Axi512.Stream.Dest.Of_signal.( <== ) d k.host_to_fpga_dest);
     let gather_output_stream =
       Gather_output_stream.hierarchical
         scope

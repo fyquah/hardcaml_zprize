@@ -40,9 +40,9 @@ let affine_to_affine_with_t ({ x; y } : affine) : affine_with_t =
 
 let affine_neg ({ x; y } : affine) : affine = { x; y = modulo_neg y }
 
-let extended_to_affine { x; y; z; t } : affine =
+let extended_to_affine { x; y; z; t = _ } : affine =
   let open Modulo_ops in
-  assert (equal (x / z * (y / z)) (t / z));
+  (* assert (equal (x / z * (y / z)) (t / z)); *)
   { x = x / z; y = y / z }
 ;;
 

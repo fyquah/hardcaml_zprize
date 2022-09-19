@@ -215,7 +215,6 @@ module Make (C : Config.S) = struct
     compile
       [ fpga_to_host.tstrb <--. -1
       ; fpga_to_host.tkeep <--. -1
-      ; fpga_to_host.tlast <--. 0
       ; when_
           top.scalar_and_input_point_ready
           [ scalar_valid <-- gnd; last_scalar <-- gnd ]
@@ -225,6 +224,7 @@ module Make (C : Config.S) = struct
             , [ valid_input_bits <--. 0
               ; last_l <-- gnd
               ; input_offset <--. 0
+              ; fpga_to_host.tlast <--. 0
               ; when_ host_to_fpga.tvalid [ sm.set_next Working ]
               ] )
           ; ( Working
@@ -234,7 +234,7 @@ module Make (C : Config.S) = struct
                   (fpga_to_host.tvalid.value
                   &: fpga_to_host.tlast.value
                   &: fpga_to_host_dest.tready)
-                  [ sm.set_next Idle ]
+                  [ fpga_to_host.tlast <--. 0; sm.set_next Idle ]
               ] )
           ]
       ];
@@ -248,6 +248,9 @@ module Make (C : Config.S) = struct
 
   let hierarchical ~build_mode ~core_index scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ~name:"kernel_for_vitis" ~scope (create ~core_index ~build_mode)
+    H.hierarchical
+      ~name:(sprintf "pippenger_core_%d" core_index)
+      ~scope
+      (create ~core_index ~build_mode)
   ;;
 end
