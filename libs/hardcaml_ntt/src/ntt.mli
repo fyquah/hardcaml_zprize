@@ -44,7 +44,6 @@ module Make (Config : Config) : sig
         ; start : 'a
         ; first_iter : 'a
         ; first_4step_pass : 'a
-        ; twiddle_update_in : 'a [@bits Gf.num_bits]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -52,7 +51,7 @@ module Make (Config : Config) : sig
     module Twiddle_update : sig
       type 'a t =
         { valid : 'a
-        ; factors : 'a array [@bits Gf.num_bits] [@length 2]
+        ; index : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -78,8 +77,8 @@ module Make (Config : Config) : sig
       [@@deriving sexp_of, hardcaml]
     end
 
-    val create : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-    val hierarchy : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module Datapath : sig
@@ -87,6 +86,8 @@ module Make (Config : Config) : sig
       type 'a t =
         { clock : 'a
         ; clear : 'a
+        ; start : 'a
+        ; first_iter : 'a
         ; d1 : 'a
         ; d2 : 'a
         ; omegas : 'a list
@@ -106,8 +107,8 @@ module Make (Config : Config) : sig
       [@@deriving sexp_of, hardcaml]
     end
 
-    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-    val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val create : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+    val hierarchy : ?row:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   end
 
   module Core : sig

@@ -185,3 +185,23 @@ module Make (Config : Hardcaml_ntt.Ntt_4step.Config) = struct
     waves
   ;;
 end
+
+let%expect_test "vitis kernel test" =
+  let module Config = struct
+    let logn = 5
+    let logcores = 3
+
+    let twiddle_4step_config : Hardcaml_ntt.Ntt.twiddle_4step_config option =
+      Some { rows_per_iteration = 1 lsl logcores; log_num_iterations = logn - logcores }
+    ;;
+  end
+  in
+  let module Test = Make (Config) in
+  let input_coefs = Test.random_input_coef_matrix () in
+  ignore
+    (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
+      : Waveform.t option);
+  [%expect
+    {|
+    "Hardware and software reference results match!" |}]
+;;
