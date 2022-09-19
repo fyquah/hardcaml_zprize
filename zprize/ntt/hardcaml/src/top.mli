@@ -2,9 +2,9 @@ open! Base
 open Hardcaml
 
 module Make (Config : Hardcaml_ntt.Four_step_config.S) : sig
-  module Ntt_4step : module type of Hardcaml_ntt.Ntt_4step.Make (Config)
-  module Axi_stream = Ntt_4step.Axi_stream
-  module Gf = Ntt_4step.Gf
+  module Four_step : module type of Hardcaml_ntt.Four_step.Make (Config)
+  module Axi_stream = Four_step.Axi_stream
+  module Gf = Four_step.Gf
   module Load_sm : module type of Load_sm.Make (Config)
   module Store_sm : module type of Store_sm.Make (Config)
 

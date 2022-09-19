@@ -4,8 +4,8 @@ open Signal
 
 module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
   include Config
-  module Ntt_4step = Hardcaml_ntt.Ntt_4step.Make (Config)
-  module Axi_stream = Ntt_4step.Axi_stream
+  module Four_step = Hardcaml_ntt.Four_step.Make (Config)
+  module Axi_stream = Four_step.Axi_stream
   module Transposer = Hardcaml_ntt.Transposer
   module Top = Top.Make (Config)
 

@@ -4,9 +4,9 @@ open Signal
 
 module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
   include Config
-  module Ntt_4step = Hardcaml_ntt.Ntt_4step.Make (Config)
-  module Axi_stream = Ntt_4step.Axi_stream
-  module Gf = Ntt_4step.Gf
+  module Four_step = Hardcaml_ntt.Four_step.Make (Config)
+  module Axi_stream = Four_step.Axi_stream
+  module Gf = Four_step.Gf
   module Load_sm = Load_sm.Make (Config)
   module Store_sm = Store_sm.Make (Config)
 
@@ -57,10 +57,10 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
         }
     in
     let cores =
-      Ntt_4step.Core.create
+      Four_step.create
         ~build_mode
         scope
-        { Ntt_4step.Core.I.clock = i.clock
+        { Four_step.I.clock = i.clock
         ; clear = i.clear
         ; start = i.start
         ; first_4step_pass = i.first_4step_pass

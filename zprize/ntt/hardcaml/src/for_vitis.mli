@@ -2,8 +2,8 @@ open! Base
 open Hardcaml
 
 module Make (Config : Hardcaml_ntt.Four_step_config.S) : sig
-  module Ntt_4step : module type of Hardcaml_ntt.Ntt_4step.Make (Config)
-  module Axi_stream = Ntt_4step.Axi_stream
+  module Four_step : module type of Hardcaml_ntt.Four_step.Make (Config)
+  module Axi_stream = Four_step.Axi_stream
   module Transposer = Hardcaml_ntt.Transposer
   module Top : module type of Top.Make (Config)
 
