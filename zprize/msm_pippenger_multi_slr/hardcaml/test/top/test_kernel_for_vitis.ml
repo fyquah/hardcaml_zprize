@@ -6,6 +6,8 @@ open Msm_pippenger_multi_slr
 let () = Hardcaml.Caller_id.set_mode Full_trace
 
 module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
+  let config = Config.t
+
   module Utils = Utils.Make (Config)
   module Kernel = Kernel_for_vitis.Make (Config)
   module I = Kernel.I
@@ -65,6 +67,40 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
     else { waves = None; sim }
   ;;
 
+  let expected_bucket_outputs (input : _ Utils.Msm_input.t array) =
+    let to_z b = Bits.to_constant b |> Constant.to_z ~signedness:Unsigned in
+    let all_window_size_bits =
+      Msm_pippenger_multi_slr.Config.all_window_size_bits config |> Array.of_list
+    in
+    print_s [%message (all_window_size_bits : int array)];
+    let windows =
+      Array.map all_window_size_bits ~f:(fun window_num_bits ->
+        Array.init (1 lsl window_num_bits) ~f:(fun _ ->
+          Utils.Twisted_edwards.(affine_identity |> affine_to_extended ~z:Z.one)))
+    in
+    Array.iter input ~f:(fun input ->
+      let p : Utils.Twisted_edwards.affine_with_t =
+        { x = to_z input.affine_point_with_t.x
+        ; y = to_z input.affine_point_with_t.y
+        ; t = to_z input.affine_point_with_t.t
+        }
+      in
+      let lo = ref 0 in
+      Array.iteri all_window_size_bits ~f:(fun i window_size_bits ->
+        let bucket =
+          Bits.to_int (Bits.select input.scalar (!lo + window_size_bits - 1) !lo)
+        in
+        printf "i = %d, bucket = %d\n" i bucket;
+        windows.(i).(bucket)
+          <- Utils.Twisted_edwards.add_unified
+               (force Twisted_edwards_model_lib.Bls12_377_params.twisted_edwards)
+               windows.(i).(bucket)
+               p;
+        lo := !lo + window_size_bits));
+    Array.map windows ~f:(fun window ->
+      Array.map window ~f:(fun p -> Utils.twisted_edwards_extended_to_affine p))
+  ;;
+
   let debug = true
 
   (* CR-someday fyquah: Largely a duplicate of the contents of
@@ -79,8 +115,9 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
     then
       at_exit (fun () ->
         Option.iter sim_and_waves.waves ~f:(fun waves ->
-          Waveform.Serialize.marshall waves "a.hardcamlwaveform"));
+          Waveform.Serialize.marshall waves "a.hardcamlwaveform.Z"));
     let inputs = Utils.random_inputs ~seed num_inputs in
+    let expected_bucket_outputs = expected_bucket_outputs inputs in
     Cyclesim.cycle sim;
     i.fpga_to_host_dest.tready := Bits.vdd;
     for idx = 0 to num_inputs - 1 do
@@ -151,7 +188,11 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
             ; z = to_z result_point.z
             }
           in
+          printf "bucket = %d, window = %d core_index = %d\n" !bucket !window !core_index;
           let affine = Utils.twisted_edwards_extended_to_affine extended in
+          let expected = expected_bucket_outputs.(!window).(!bucket) in
+          if not ([%equal: Utils.Weierstrass.affine option] affine expected)
+          then printf "Doesnt match expected!\n";
           result_points
             := { Utils.point = affine; bucket = !bucket; window = !window }
                :: !result_points;
@@ -235,22 +276,105 @@ let%expect_test "Test over small input size" =
   end
   in
   let module Test = Make (Config) in
-  let _result = Test.run_test 8 in
+  let _result = Test.run_test 4 in
   [%expect
     {|
+    (all_window_size_bits (2 3 2 3 2 3))
+    i = 0, bucket = 2
+    i = 1, bucket = 7
+    i = 2, bucket = 2
+    i = 3, bucket = 4
+    i = 4, bucket = 1
+    i = 5, bucket = 2
+    i = 0, bucket = 0
+    i = 1, bucket = 2
+    i = 2, bucket = 1
+    i = 3, bucket = 6
+    i = 4, bucket = 2
+    i = 5, bucket = 6
+    i = 0, bucket = 3
+    i = 1, bucket = 2
+    i = 2, bucket = 0
+    i = 3, bucket = 3
+    i = 4, bucket = 0
+    i = 5, bucket = 7
+    i = 0, bucket = 2
+    i = 1, bucket = 4
+    i = 2, bucket = 0
+    i = 3, bucket = 3
+    i = 4, bucket = 1
+    i = 5, bucket = 2
     (Expecting (num_result_points 30))
+    bucket = 3, window = 0 core_index = 0
+    bucket = 2, window = 0 core_index = 0
+    bucket = 1, window = 0 core_index = 0
+    bucket = 7, window = 1 core_index = 0
+    bucket = 6, window = 1 core_index = 0
+    bucket = 5, window = 1 core_index = 0
+    bucket = 4, window = 1 core_index = 0
+    bucket = 3, window = 1 core_index = 0
+    bucket = 2, window = 1 core_index = 0
+    bucket = 1, window = 1 core_index = 0
+    bucket = 3, window = 2 core_index = 1
+    bucket = 2, window = 2 core_index = 1
+    ("Check for t did not pass!"
+     (x
+      0x98f6380f51d7c13d772419496e7f39d20867f16ff93c4c771fd04cedd667bf060ed502eb9ef632c216c4c27ea58f9f)
+     (y
+      0x16602b9cafe46f078e2100b404378edf8b91677ea0bd2ee05490cd8d10f17e986afae15e30ccdd4c89769d1fb18ef70)
+     (z 0x4)
+     (t
+      0x6df221648756658d9bc0ca4052db4315137a501789396366c4157895e430fce24b303ea631bcb423a13364370cf2d9))
+    Doesnt match expected!
+    bucket = 1, window = 2 core_index = 1
+    ("Check for t did not pass!"
+     (x
+      0x14d2f314073ca1ceabcd1cbf6f5e38cbb2b4d48637d881761ffd84b0d2e175a949669c8a74ae27411ff865757beb829)
+     (y
+      0x11acbe6e2a39fee4e7e05a84f5917f31d00b0ceb4d290578f63cc3ef95b75787baed0c2572a781f2891b3ca0cff9660)
+     (z 0x4)
+     (t
+      0x2eff1656bdbebeb7e207ac18413d1dbb6f3051c242f4cc0f5522a1217efef5d1cf7ec0db950a6079da498a9642fc72))
+    Doesnt match expected!
+    bucket = 7, window = 3 core_index = 1
+    bucket = 6, window = 3 core_index = 1
+    bucket = 5, window = 3 core_index = 1
+    bucket = 4, window = 3 core_index = 1
+    bucket = 3, window = 3 core_index = 1
+    ("Check for t did not pass!"
+     (x
+      0x97882940458437ee67bb4447f1d6dbab4071abebcd844f8e9d1f59b4fff879101819d9ae664a2f322894c03f5ae636)
+     (y
+      0x5d68ff0388cee8578b18285d566cc699964788fb0d4e49e4c07c5b8e05ee430a7955739c3f952ca8c1429138958601)
+     (z
+      0x53be1f86e7b7e59b2dc8abca7409783b1b741136f79281ca8652df0d3ed76bd8d125b2e3149837fe199b424e2c2681)
+     (t
+      0x67a034d046ea1d573ce4de893eab9a9bc11d09240529a8719b6e4b94e3dc62b538456391f9122be0706453aab6580d))
+    Doesnt match expected!
+    bucket = 2, window = 3 core_index = 1
+    bucket = 1, window = 3 core_index = 1
+    bucket = 3, window = 4 core_index = 2
+    bucket = 2, window = 4 core_index = 2
+    bucket = 1, window = 4 core_index = 2
+    bucket = 7, window = 5 core_index = 2
+    bucket = 6, window = 5 core_index = 2
+    bucket = 5, window = 5 core_index = 2
+    bucket = 4, window = 5 core_index = 2
+    bucket = 3, window = 5 core_index = 2
+    bucket = 2, window = 5 core_index = 2
+    bucket = 1, window = 5 core_index = 2
     (Got ("List.length (!result_points)" 30))
     ("ERROR: Result points did not match!"
      (expected
       ((x
-        0x20c68f38d178e944614ad24b64fb67a31fd611e80d0af74e2439dd248a1adaaa303bf89e80e5654b51787a680440d3)
+        0x1152c62d42035ce0601165c58d2c34674d5a5b330ad1891a4039088e74e20290a351384ce0542854ce9455e32d06a9b)
        (y
-        0x1612eb5cba22cb5f9e1bfc30d63320096ab1dd7fbcb1240718265a5d0cd867c232c390b60a1097b88b44ea06f2eca19)
+        0x156cc9ed9863f6dccc3e05e1aa3a1bcbfe9449103ad7d655d974c731d959d59dcbdc51d47c669544b9e47f9fcd8e70a)
        (infinity false)))
      (fpga_calculated_result
       ((x
-        0x8323cd6799f8dadbeaacc1ccabfd364c6bf72fdca67d956e432a12ecee966b218c93fd531c5b299bbe806faf40787f)
+        0x1584cc086fcdcacc8b5f0407041a1da09cad7ff209e9ae156a8bdb4f55e72363fc08623369fad41bb33514733cee05b)
        (y
-        0x5b6de21ea7599c3ca095d9ed535295a09cd8b9e302d0d3588981d371cd0e726140ba4786da49805e0c7887b0b09d79)
+        0x721c9b91f3ab595c14280bab0e738d80ac6ea57b49d72aadab461fe022f456c86e100e838e5c223a90db811749ce76)
        (infinity false)))) |}]
 ;;

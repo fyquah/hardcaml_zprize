@@ -8,6 +8,7 @@ type t =
   ; ram_read_latency : int
   }
 
+val all_window_size_bits : t -> int list
 val input_point_bits : t -> int
 val result_point_bits : t -> int
 val scalar_bits : t -> int

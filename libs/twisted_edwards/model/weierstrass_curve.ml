@@ -24,4 +24,4 @@ type affine =
   { x : z
   ; y : z
   }
-[@@deriving sexp_of]
+[@@deriving sexp_of, equal]
