@@ -1,4 +1,4 @@
-type twiddle_4step_config = Core_config_intf.twiddle_4step_config
+type twiddle_4step_config = Core_config_intf.twiddle_4step_config [@@deriving sexp_of]
 
 module type S = Core_config_intf.S
 

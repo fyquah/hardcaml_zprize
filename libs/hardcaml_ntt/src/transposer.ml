@@ -29,6 +29,7 @@ module Make (M : sig
 end) =
 struct
   include M
+  module Var = Always.Variable
 
   let transposer_memory_depth = 2 * transposer_depth_in_cycles
 
@@ -121,7 +122,7 @@ struct
     ~read_data
     =
     let ( -- ) = Scope.naming scope in
-    let currently_waiting_for = Always.Variable.reg ~width:2 spec in
+    let currently_waiting_for = Var.reg ~width:2 spec in
     let data_is_available =
       let currently_writing = writer.currently_writing in
       let currently_waiting_for = currently_waiting_for.value in
@@ -131,12 +132,10 @@ struct
     in
     let sm = Always.State_machine.create (module Reader.State) spec in
     let sub_address =
-      Always.Variable.reg
-        ~width:(Int.max 1 (Int.ceil_log2 transposer_depth_in_cycles))
-        spec
+      Var.reg ~width:(Int.max 1 (Int.ceil_log2 transposer_depth_in_cycles)) spec
     in
-    let element_offset = Always.Variable.reg ~width:(Int.ceil_log2 8) spec in
-    let tvalid = Always.Variable.reg ~width:1 spec in
+    let element_offset = Var.reg ~width:(Int.ceil_log2 8) spec in
+    let tvalid = Var.reg ~width:1 spec in
     ignore (element_offset.value -- "element_offset" : Signal.t);
     Always.(
       compile
@@ -190,7 +189,7 @@ struct
     ~(transposer_in : 'a Axi512.Stream.Source.t)
     : _ Writer.O.t
     =
-    let currently_writing = Always.Variable.reg ~width:2 spec in
+    let currently_writing = Var.reg ~width:2 spec in
     let transposer_in_dest = Axi512.Stream.Dest.Of_always.reg spec in
     let sm = Always.State_machine.create (module Writer.State) spec in
     let can_start_writing =
@@ -199,11 +198,9 @@ struct
       |: (reader.currently_waiting_for ==: currently_writing.value -:. 1)
     in
     let sub_address =
-      Always.Variable.reg
-        ~width:(Int.max 1 (Int.ceil_log2 transposer_depth_in_cycles))
-        spec
+      Var.reg ~width:(Int.max 1 (Int.ceil_log2 transposer_depth_in_cycles)) spec
     in
-    let write_enables_mask = Always.Variable.reg ~width:transposer_height spec in
+    let write_enables_mask = Var.reg ~width:transposer_height spec in
     let write_address =
       match transposer_depth_in_cycles with
       | 1 -> currently_writing.value.:(0)

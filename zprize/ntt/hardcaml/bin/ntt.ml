@@ -1,6 +1,6 @@
 open! Core
 module Gf = Hardcaml_ntt.Gf.Z
-module Ntt = Hardcaml_ntt.Ntt_sw.Make (Gf)
+module Ntt = Hardcaml_ntt.Reference_model.Make (Gf)
 
 let command =
   Command.basic

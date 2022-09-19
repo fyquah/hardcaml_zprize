@@ -1,6 +1,6 @@
 open! Core
 module Gf = Hardcaml_ntt.Gf.Z
-module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf)
+module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf)
 
 let%expect_test "round trip" =
   (* Test a few sizes, a few times. *)
@@ -11,8 +11,8 @@ let%expect_test "round trip" =
       (* Perform a forward then inverse ntt, scale by 1/n *)
       let input = Array.init n ~f:(fun _ -> Gf.of_z (Z.of_int (Random.int 100_000))) in
       let data = Array.copy input in
-      Ntt_sw.forward_dit data;
-      Ntt_sw.inverse_dit data;
+      Reference_model.forward_dit data;
+      Reference_model.inverse_dit data;
       let result = Array.map data ~f:(Gf.( * ) invn) in
       if not ([%compare.equal: Gf.t array] input result)
       then raise_s [%message (input : Gf.t array) (result : Gf.t array)]

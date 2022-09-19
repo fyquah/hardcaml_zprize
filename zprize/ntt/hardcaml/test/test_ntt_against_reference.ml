@@ -1,8 +1,8 @@
 open! Core
 
 module Test (Gf : Hardcaml_ntt.Gf.S) = struct
-  module Ntt_reference = Ntt_competition_reference.Make (Gf)
-  module Ntt_sw = Hardcaml_ntt.Ntt_sw.Make (Gf)
+  module Competition_reference = Ntt_competition_reference.Make (Gf)
+  module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf)
   module Util = Hardcaml_ntt.Util
 
   let of_z z = Gf.of_z (Z.of_string z)
@@ -18,9 +18,9 @@ module Test (Gf : Hardcaml_ntt.Gf.S) = struct
   ;;
 
   let test input expected =
-    test_transform (Array.copy input) expected Ntt_reference.ntt;
-    test_transform (Array.copy input) expected Ntt_sw.inverse_dit;
-    test_transform (Array.copy input) expected Ntt_sw.inverse_dif
+    test_transform (Array.copy input) expected Competition_reference.ntt;
+    test_transform (Array.copy input) expected Reference_model.inverse_dit;
+    test_transform (Array.copy input) expected Reference_model.inverse_dif
   ;;
 
   let linear n =

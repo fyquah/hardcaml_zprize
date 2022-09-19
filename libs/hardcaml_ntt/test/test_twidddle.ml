@@ -3,7 +3,7 @@ open Hardcaml
 open! Hardcaml_waveterm
 open Expect_test_helpers_base
 module Gf = Hardcaml_ntt.Gf.Z
-module Ntt = Hardcaml_ntt.Ntt_sw.Make (Gf)
+module Ntt = Hardcaml_ntt.Reference_model.Make (Gf)
 
 let logn = 3
 let n = 1 lsl logn
