@@ -109,3 +109,38 @@ Now you can run the host.exe test program:
 ```
 ./host.exe  msm_pippenger.link.awsxclbin input.points output.points
 ```
+
+# Running `host_buckets.exe`
+
+`host_buckets.exe` is a debug application that pumps test vectors into the
+FPGA from a file, and compare against a reference file.
+
+Firstly, compile the host binaries:
+
+```bash
+cd fantastic-carnival/zprize/msm_pippenger/host
+mkdir build/
+cd build/
+
+# Need to explicitly use cmake3 in the aws box, since it's running a pretty old
+# centos
+cmake3 ..
+make -j
+
+# Now, generate the test vectors. This just needs to be done once. Here's an
+# example for debugging with 50k points
+dune build @../../hardcaml/bin/default
+../../hardcaml/bin/tools.exe test-vectors \
+  -num-points 50_000 \
+  -input-filename inputs-50_000.txt \
+  -output-filename outputs-50_000.txt \
+  -seed 1
+
+# Now, run the actual binary. It should say "TEST PASSED" in the end. If you
+# see verbose test output with things that looks like coordinates, your test
+# probably failed.
+./driver/host_buckets \
+  path/to/msm_pippenger.link.awsxclbin \
+  inputs-50000.txt \
+  outputs-50000.txt
+```
