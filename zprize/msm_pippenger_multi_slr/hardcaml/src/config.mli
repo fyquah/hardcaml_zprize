@@ -8,6 +8,7 @@ type t =
   ; ram_read_latency : int
   }
 
+val all_window_size_bits : t -> int list
 val input_point_bits : t -> int
 val result_point_bits : t -> int
 val scalar_bits : t -> int
@@ -15,6 +16,7 @@ val num_result_points : t -> int
 val num_windows_for_slr : t -> int -> int
 val last_window_size_bits_for_slr : t -> int -> int
 val window_size_bits_for_slr : t -> int -> int
+val last_window_for_core : t -> core_index:int -> int
 
 module type S = sig
   val t : t
