@@ -42,8 +42,14 @@ module Make (C : Config.S) = struct
     let clock = ap_clk in
     let clear = ~:ap_rst_n in
     let stream_splitter = Stream_splitter_512.O.Of_signal.wires () in
+    let splitter_to_sub_kernels_registers =
+      Array.init num_cores ~f:(fun _ -> Axi512.Stream.Register.O.Of_signal.wires ())
+    in
     let sub_kernels =
       Array.init num_cores ~f:(fun _ -> Kernel_for_single_instance.O.Of_signal.wires ())
+    in
+    let sub_kernels_to_gatherer_registers =
+      Array.init num_cores ~f:(fun _ -> Axi512.Stream.Register.O.Of_signal.wires ())
     in
     let gather_output_stream = Gather_output_stream.O.Of_signal.wires () in
     Stream_splitter_512.O.Of_signal.assign
@@ -53,8 +59,20 @@ module Make (C : Config.S) = struct
          { clock
          ; clear
          ; up = i.host_to_fpga
-         ; dn_dests = Array.map sub_kernels ~f:(fun k -> k.host_to_fpga_dest)
+         ; dn_dests = Array.map splitter_to_sub_kernels_registers ~f:(fun k -> k.up_dest)
          });
+    Array.iteri
+      splitter_to_sub_kernels_registers
+      ~f:(fun core_index splitter_to_sub_kernels_register ->
+      Axi512.Stream.Register.O.Of_signal.( <== )
+        splitter_to_sub_kernels_register
+        (Axi512.Stream.Register.create
+           scope
+           { clock
+           ; clear
+           ; up = stream_splitter.dns.(core_index)
+           ; dn_dest = sub_kernels.(core_index).host_to_fpga_dest
+           }));
     Array.iteri sub_kernels ~f:(fun core_index sub_kernel ->
       Kernel_for_single_instance.O.Of_signal.assign
         sub_kernel
@@ -64,8 +82,20 @@ module Make (C : Config.S) = struct
            scope
            { ap_clk
            ; ap_rst_n
-           ; host_to_fpga = stream_splitter.dns.(core_index)
-           ; fpga_to_host_dest = gather_output_stream.sub_fpga_to_host_dests.(core_index)
+           ; host_to_fpga = splitter_to_sub_kernels_registers.(core_index).dn
+           ; fpga_to_host_dest = sub_kernels_to_gatherer_registers.(core_index).up_dest
+           }));
+    Array.iteri
+      sub_kernels_to_gatherer_registers
+      ~f:(fun core_index sub_kernels_to_gatherer_register ->
+      Axi512.Stream.Register.O.Of_signal.( <== )
+        sub_kernels_to_gatherer_register
+        (Axi512.Stream.Register.create
+           scope
+           { clock
+           ; clear
+           ; up = sub_kernels.(core_index).fpga_to_host
+           ; dn_dest = gather_output_stream.sub_fpga_to_host_dests.(core_index)
            }));
     Gather_output_stream.O.Of_signal.assign
       gather_output_stream
@@ -73,7 +103,8 @@ module Make (C : Config.S) = struct
          scope
          { clock
          ; clear
-         ; sub_fpga_to_hosts = Array.map sub_kernels ~f:(fun k -> k.fpga_to_host)
+         ; sub_fpga_to_hosts =
+             Array.map sub_kernels_to_gatherer_registers ~f:(fun k -> k.dn)
          ; fpga_to_host_dest = i.fpga_to_host_dest
          });
     { O.fpga_to_host = gather_output_stream.fpga_to_host

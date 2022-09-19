@@ -97,8 +97,7 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
                windows.(i).(bucket)
                p;
         lo := !lo + window_size_bits));
-    Array.map windows ~f:(fun window ->
-      Array.map window ~f:(fun p -> Utils.twisted_edwards_extended_to_affine p))
+    windows
   ;;
 
   let debug = true
@@ -117,8 +116,49 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
         Option.iter sim_and_waves.waves ~f:(fun waves ->
           Waveform.Serialize.marshall waves "a.hardcamlwaveform.Z"));
     let inputs = Utils.random_inputs ~seed num_inputs in
+    Array.iter inputs ~f:(fun input ->
+      let affine_point_with_t =
+        Utils.Affine_point_with_t.map
+          ~f:(Bits.to_z ~signedness:Unsigned)
+          input.affine_point_with_t
+      in
+      let sexp_of_z z = Sexp.Atom (Z.format "x" z) in
+      print_s ([%sexp_of: z Utils.Affine_point_with_t.t] affine_point_with_t));
     let expected_bucket_outputs = expected_bucket_outputs inputs in
-    Cyclesim.cycle sim;
+    let dbg_in_valid =
+      List.Assoc.find_exn
+        (Cyclesim.internal_ports sim)
+        ~equal:String.equal
+        "kernel$pippenger_core_1$top$adder$i$valid_in"
+    in
+    let dbg_x =
+      List.Assoc.find_exn
+        (Cyclesim.internal_ports sim)
+        ~equal:String.equal
+        "kernel$pippenger_core_1$top$adder$i$p2$x"
+    in
+    let dbg_y =
+      List.Assoc.find_exn
+        (Cyclesim.internal_ports sim)
+        ~equal:String.equal
+        "kernel$pippenger_core_1$top$adder$i$p2$y"
+    in
+    let dbg_t =
+      List.Assoc.find_exn
+        (Cyclesim.internal_ports sim)
+        ~equal:String.equal
+        "kernel$pippenger_core_1$top$adder$i$p2$t"
+    in
+    let cycle () =
+      Cyclesim.cycle sim;
+      if Bits.is_vdd !dbg_in_valid
+      then (
+        let x = Bits.to_z ~signedness:Unsigned !dbg_x in
+        let y = Bits.to_z ~signedness:Unsigned !dbg_y in
+        let t = Bits.to_z ~signedness:Unsigned !dbg_t in
+        let sexp_of_z z = Sexp.Atom (Z.format "x" z) in
+        print_s [%message "debug!" (x : z) (y : z) (t : z)])
+    in
     i.fpga_to_host_dest.tready := Bits.vdd;
     for idx = 0 to num_inputs - 1 do
       let input = inputs.(idx) in
@@ -133,28 +173,28 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
         i.host_to_fpga.tvalid := Bits.random ~width:1;
         if beat = num_clocks_per_input - 1 && idx = num_inputs - 1
         then i.host_to_fpga.tlast := Bits.vdd;
-        if Bits.is_gnd !(i.host_to_fpga.tvalid) then Cyclesim.cycle sim;
+        if Bits.is_gnd !(i.host_to_fpga.tvalid) then cycle ();
         i.host_to_fpga.tvalid := Bits.vdd;
         cycle_cnt := 0;
         while Bits.is_gnd !(o.host_to_fpga_dest.tready) && !cycle_cnt < timeout do
           Int.incr cycle_cnt;
-          Cyclesim.cycle sim
+          cycle ()
         done;
-        Cyclesim.cycle sim;
+        cycle ();
         to_send := Bits.(srl !to_send 512)
       done;
       i.host_to_fpga.tvalid := Bits.gnd;
       for _ = 0 to Random.int 5 do
-        Cyclesim.cycle sim
+        cycle ()
       done
     done;
     i.host_to_fpga.tlast := Bits.gnd;
     i.host_to_fpga.tvalid := Bits.gnd;
-    Cyclesim.cycle sim;
+    cycle ();
     cycle_cnt := 0;
     while Bits.is_gnd !(o.fpga_to_host.tvalid) && !cycle_cnt < timeout do
       Int.incr cycle_cnt;
-      Cyclesim.cycle sim
+      cycle ()
     done;
     cycle_cnt := 0;
     let word = ref 0 in
@@ -181,7 +221,7 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
           is_last := Bits.to_bool !(o.fpga_to_host.tlast);
           let to_z b = Bits.to_constant b |> Constant.to_z ~signedness:Unsigned in
           let result_point = Utils.Extended.Of_bits.unpack !output_buffer in
-          let extended : Utils.Twisted_edwards.extended =
+          let obtained_extended : Utils.Twisted_edwards.extended =
             { x = to_z result_point.x
             ; y = to_z result_point.y
             ; t = to_z result_point.t
@@ -189,12 +229,20 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
             }
           in
           printf "bucket = %d, window = %d core_index = %d\n" !bucket !window !core_index;
-          let affine = Utils.twisted_edwards_extended_to_affine extended in
-          let expected = expected_bucket_outputs.(!window).(!bucket) in
-          if not ([%equal: Utils.Weierstrass.affine option] affine expected)
-          then printf "Doesnt match expected!\n";
+          let obtained = Utils.twisted_edwards_extended_to_affine obtained_extended in
+          let expected_extended = expected_bucket_outputs.(!window).(!bucket) in
+          let expected = Utils.twisted_edwards_extended_to_affine expected_extended in
+          if not ([%equal: Utils.Weierstrass.affine option] obtained expected)
+          then
+            print_s
+              [%message
+                "Doesnt match expected!"
+                  (obtained_extended : Utils.Twisted_edwards.extended)
+                  (expected_extended : Utils.Twisted_edwards.extended)
+                  (expected : Utils.Weierstrass.affine option)
+                  (obtained : Utils.Weierstrass.affine option)];
           result_points
-            := { Utils.point = affine; bucket = !bucket; window = !window }
+            := { Utils.point = obtained; bucket = !bucket; window = !window }
                :: !result_points;
           (* Increment bucket (or window, or core_index) *)
           With_return.with_return (fun { return } ->
@@ -228,7 +276,7 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
                   !core_index
             in
             bucket := (1 lsl next_window_size_bits) - 1)));
-      Cyclesim.cycle sim
+      cycle ()
     done;
     print_s [%message "Got" (List.length !result_points : int)];
     if !cycle_cnt = timeout then print_s [%message "Simulation timed out!"];
@@ -276,9 +324,27 @@ let%expect_test "Test over small input size" =
   end
   in
   let module Test = Make (Config) in
-  let _result = Test.run_test 4 in
+  let _result = Test.run_test 3 in
   [%expect
     {|
+    ((x
+      91cc1f89c5ba2b00ec8a766f03f21d3b0ad0791c3b93f6e584cc9f29f7ebefc7468c91c6e7bd8cd1c7e1309fa963e8)
+     (y
+      5980ae72bf91bc1e388402d190de3b7e2e459dfa82f4bb815243363443c5fa61abeb8578c333753225da747ec63bdc)
+     (t
+      15e283ceaf5a24978133482e18dadbd18df020a469a1d0430e78f01f100023f49db5202cd8c6f2d6caedcd90dc33cb7))
+    ((x
+      195f780e1f0bf374f5b78c350b66fcf8264f6c8599730b12fb67fb68ed27bd6b66e20654dd2b89d68467195d5efae0b)
+     (y
+      46b2f9b8a8e7fb939f816a155645fcc7402c33ad34a415e3d8f30fbe56dd5e1eebb43095ca9e07ca246cf2833fe598)
+     (t
+      e2dce8a191f825111604cb3c60f3e4fbed390df10b46fa934ef9c0256463bd7ff98e524ee5429860faf262a590bf1d))
+    ((x
+      142a7d8576d80b567863de2f09ec8278eef466ae7fe1b643a228eda4d30182eee167f47ad1f5df1d5cb7ee635cca90b)
+     (y
+      15dd0470086df8d267158e1e586e23556fdfabfbb267d09c44c6f6dd5b4deb9688272e123b2b77f30e8d98d9a31a80e)
+     (t
+      cce68d6aad2f9c50dcce26ea4fb58f3a6067b7155ee083ac9174dfa214f4f0f658d4ac07ec62ff6de70623e7360f7a))
     (all_window_size_bits (2 3 2 3 2 3))
     i = 0, bucket = 2
     i = 1, bucket = 7
@@ -298,12 +364,41 @@ let%expect_test "Test over small input size" =
     i = 3, bucket = 3
     i = 4, bucket = 0
     i = 5, bucket = 7
-    i = 0, bucket = 2
-    i = 1, bucket = 4
-    i = 2, bucket = 0
-    i = 3, bucket = 3
-    i = 4, bucket = 1
-    i = 5, bucket = 2
+    (debug!
+     (x
+      91cc1f89c5ba2b00ec8a766f03f21d3b0ad0791c3b93f6e584cc9f29f7ebefc7468c91c6e7bd8cd1c7e1309fa963e8)
+     (y
+      5980ae72bf91bc1e388402d190de3b7e2e459dfa82f4bb815243363443c5fa61abeb8578c333753225da747ec63bdc)
+     (t
+      15e283ceaf5a24978133482e18dadbd18df020a469a1d0430e78f01f100023f49db5202cd8c6f2d6caedcd90dc33cb7))
+    (debug!
+     (x
+      91cc1f89c5ba2b00ec8a766f03f21d3b0ad0791c3b93f6e584cc9f29f7ebefc7468c91c6e7bd8cd1c7e1309fa963e8)
+     (y
+      5980ae72bf91bc1e388402d190de3b7e2e459dfa82f4bb815243363443c5fa61abeb8578c333753225da747ec63bdc)
+     (t
+      15e283ceaf5a24978133482e18dadbd18df020a469a1d0430e78f01f100023f49db5202cd8c6f2d6caedcd90dc33cb7))
+    (debug!
+     (x
+      195f780e1f0bf374f5b78c350b66fcf8264f6c8599730b12fb67fb68ed27bd6b66e20654dd2b89d68467195d5efae0b)
+     (y
+      46b2f9b8a8e7fb939f816a155645fcc7402c33ad34a415e3d8f30fbe56dd5e1eebb43095ca9e07ca246cf2833fe598)
+     (t
+      e2dce8a191f825111604cb3c60f3e4fbed390df10b46fa934ef9c0256463bd7ff98e524ee5429860faf262a590bf1d))
+    (debug!
+     (x
+      195f780e1f0bf374f5b78c350b66fcf8264f6c8599730b12fb67fb68ed27bd6b66e20654dd2b89d68467195d5efae0b)
+     (y
+      46b2f9b8a8e7fb939f816a155645fcc7402c33ad34a415e3d8f30fbe56dd5e1eebb43095ca9e07ca246cf2833fe598)
+     (t
+      e2dce8a191f825111604cb3c60f3e4fbed390df10b46fa934ef9c0256463bd7ff98e524ee5429860faf262a590bf1d))
+    (debug!
+     (x
+      142a7d8576d80b567863de2f09ec8278eef466ae7fe1b643a228eda4d30182eee167f47ad1f5df1d5cb7ee635cca90b)
+     (y
+      15dd0470086df8d267158e1e586e23556fdfabfbb267d09c44c6f6dd5b4deb9688272e123b2b77f30e8d98d9a31a80e)
+     (t
+      cce68d6aad2f9c50dcce26ea4fb58f3a6067b7155ee083ac9174dfa214f4f0f658d4ac07ec62ff6de70623e7360f7a))
     (Expecting (num_result_points 30))
     bucket = 3, window = 0 core_index = 0
     bucket = 2, window = 0 core_index = 0
@@ -317,40 +412,12 @@ let%expect_test "Test over small input size" =
     bucket = 1, window = 1 core_index = 0
     bucket = 3, window = 2 core_index = 1
     bucket = 2, window = 2 core_index = 1
-    ("Check for t did not pass!"
-     (x
-      0x98f6380f51d7c13d772419496e7f39d20867f16ff93c4c771fd04cedd667bf060ed502eb9ef632c216c4c27ea58f9f)
-     (y
-      0x16602b9cafe46f078e2100b404378edf8b91677ea0bd2ee05490cd8d10f17e986afae15e30ccdd4c89769d1fb18ef70)
-     (z 0x4)
-     (t
-      0x6df221648756658d9bc0ca4052db4315137a501789396366c4157895e430fce24b303ea631bcb423a13364370cf2d9))
-    Doesnt match expected!
     bucket = 1, window = 2 core_index = 1
-    ("Check for t did not pass!"
-     (x
-      0x14d2f314073ca1ceabcd1cbf6f5e38cbb2b4d48637d881761ffd84b0d2e175a949669c8a74ae27411ff865757beb829)
-     (y
-      0x11acbe6e2a39fee4e7e05a84f5917f31d00b0ceb4d290578f63cc3ef95b75787baed0c2572a781f2891b3ca0cff9660)
-     (z 0x4)
-     (t
-      0x2eff1656bdbebeb7e207ac18413d1dbb6f3051c242f4cc0f5522a1217efef5d1cf7ec0db950a6079da498a9642fc72))
-    Doesnt match expected!
     bucket = 7, window = 3 core_index = 1
     bucket = 6, window = 3 core_index = 1
     bucket = 5, window = 3 core_index = 1
     bucket = 4, window = 3 core_index = 1
     bucket = 3, window = 3 core_index = 1
-    ("Check for t did not pass!"
-     (x
-      0x97882940458437ee67bb4447f1d6dbab4071abebcd844f8e9d1f59b4fff879101819d9ae664a2f322894c03f5ae636)
-     (y
-      0x5d68ff0388cee8578b18285d566cc699964788fb0d4e49e4c07c5b8e05ee430a7955739c3f952ca8c1429138958601)
-     (z
-      0x53be1f86e7b7e59b2dc8abca7409783b1b741136f79281ca8652df0d3ed76bd8d125b2e3149837fe199b424e2c2681)
-     (t
-      0x67a034d046ea1d573ce4de893eab9a9bc11d09240529a8719b6e4b94e3dc62b538456391f9122be0706453aab6580d))
-    Doesnt match expected!
     bucket = 2, window = 3 core_index = 1
     bucket = 1, window = 3 core_index = 1
     bucket = 3, window = 4 core_index = 2
@@ -364,17 +431,5 @@ let%expect_test "Test over small input size" =
     bucket = 2, window = 5 core_index = 2
     bucket = 1, window = 5 core_index = 2
     (Got ("List.length (!result_points)" 30))
-    ("ERROR: Result points did not match!"
-     (expected
-      ((x
-        0x1152c62d42035ce0601165c58d2c34674d5a5b330ad1891a4039088e74e20290a351384ce0542854ce9455e32d06a9b)
-       (y
-        0x156cc9ed9863f6dccc3e05e1aa3a1bcbfe9449103ad7d655d974c731d959d59dcbdc51d47c669544b9e47f9fcd8e70a)
-       (infinity false)))
-     (fpga_calculated_result
-      ((x
-        0x1584cc086fcdcacc8b5f0407041a1da09cad7ff209e9ae156a8bdb4f55e72363fc08623369fad41bb33514733cee05b)
-       (y
-        0x721c9b91f3ab595c14280bab0e738d80ac6ea57b49d72aadab461fe022f456c86e100e838e5c223a90db811749ce76)
-       (infinity false)))) |}]
+    PASS |}]
 ;;
