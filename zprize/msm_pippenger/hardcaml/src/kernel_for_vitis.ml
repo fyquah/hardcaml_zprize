@@ -2,8 +2,10 @@ open Core
 open Hardcaml
 open Signal
 module Axi512 = Hardcaml_axi.Axi512
+module Axi256 = Hardcaml_axi.Axi256
 
 module Make (Config : Config.S) = struct
+  module Compact_stream = Compact_stream.Make (Config)
   module Top = Top.Make (Config)
   module Msm_result_to_host = Msm_result_to_host.Make (Config)
 
@@ -30,25 +32,29 @@ module Make (Config : Config.S) = struct
       | Idle
       | Working
     [@@deriving sexp_of, compare, enumerate]
-
-    let names =
-      List.map all ~f:(function
-        | Idle -> "I"
-        | Working -> "W")
-    ;;
   end
 
   let input_bits = Config.scalar_bits + Top.input_point_bits
-  let axi_bits = Axi512.Config.data_bits
-  let alignment_bits = 512
+  let axi_bits = Axi256.Config.data_bits
+  let alignment_bits = 256
   let log2_alignment_bits = Int.ceil_log2 alignment_bits
   let input_l_bits = Int.round_up ~to_multiple_of:axi_bits input_bits
 
   let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_dest } =
     let ( -- ) = Scope.naming scope in
-    (* We need to decode the AXI stream input into scalars and points. *)
     let clock = ap_clk in
     let clear = ~:ap_rst_n in
+    (* We downconvert to 256 bits for SLR crossings. *)
+    let compact_dn_dest = Axi256.Stream.Dest.Of_always.wire zero in
+    let compact_stream =
+      Compact_stream.create
+        scope
+        { clock
+        ; clear
+        ; up = host_to_fpga
+        ; dn_dest = Axi256.Stream.Dest.Of_always.value compact_dn_dest
+        }
+    in
     let spec = Reg_spec.create ~clock ~clear () in
     let open Always in
     let input_l = Variable.reg spec ~width:input_l_bits in
@@ -101,16 +107,17 @@ module Make (Config : Config.S) = struct
     let valid_input_bits =
       Variable.reg spec ~width:(num_bits_to_represent input_l_bits)
     in
-    let host_to_fpga_dest = Axi512.Stream.Dest.Of_always.wire zero in
     let maybe_shift_input =
-      [ host_to_fpga_dest.tready <-- (valid_input_bits.value <:. input_bits)
+      [ compact_dn_dest.tready <-- (valid_input_bits.value <:. input_bits)
       ; when_
-          (host_to_fpga.tvalid &: host_to_fpga_dest.tready.value)
-          [ input_l <-- sel_top (host_to_fpga.tdata @: input_l.value) input_l_bits
+          (compact_stream.dn.tvalid &: compact_dn_dest.tready.value)
+          [ input_l <-- sel_top (compact_stream.dn.tdata @: input_l.value) input_l_bits
           ; valid_input_bits <-- valid_input_bits.value +:. axi_bits
           ; when_
               (valid_input_bits.value +:. axi_bits >=:. input_bits)
-              [ scalar_valid <-- vdd; when_ host_to_fpga.tlast [ last_scalar <-- vdd ] ]
+              [ scalar_valid <-- vdd
+              ; when_ compact_stream.dn.tlast [ last_scalar <-- vdd ]
+              ]
           ]
       ; when_
           (scalar_valid.value &: top.scalar_and_input_point_ready)
@@ -137,7 +144,7 @@ module Make (Config : Config.S) = struct
           [ ( Idle
             , [ valid_input_bits <--. 0
               ; input_offset <--. 0
-              ; when_ host_to_fpga.tvalid [ sm.set_next Working ]
+              ; when_ compact_stream.dn.tvalid [ sm.set_next Working ]
               ] )
           ; ( Working
             , [ maybe_shift_input
@@ -149,7 +156,7 @@ module Make (Config : Config.S) = struct
               ] )
           ]
       ];
-    { O.host_to_fpga_dest = Axi512.Stream.Dest.Of_always.value host_to_fpga_dest
+    { O.host_to_fpga_dest = compact_stream.up_dest
     ; fpga_to_host = msm_result_to_host.fpga_to_host
     }
   ;;

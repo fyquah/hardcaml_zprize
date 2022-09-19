@@ -26,14 +26,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   ;;
 
   let display_rules =
-    List.concat
-      [ I_rules.default ()
-      ; O_rules.default ()
-      ; [ Display_rule.port_name_is "STATE" ~wave_format:(Index Kernel.State.names)
-        ; Display_rule.default
-        ; Display_rule.port_name_matches ~wave_format:Int (Re.compile (Re.Perl.re ".*"))
-        ]
-      ]
+    List.concat [ I_rules.default (); O_rules.default (); [ Display_rule.default ] ]
   ;;
 
   let num_clocks_per_input =
