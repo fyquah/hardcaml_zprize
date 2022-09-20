@@ -246,9 +246,10 @@ module Make (C : Config.S) = struct
     }
   ;;
 
-  let hierarchical ~build_mode ~core_index scope =
+  let hierarchical ?instance ~build_mode ~core_index scope =
     let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical
+      ?instance
       ~name:(sprintf "pippenger_core_%d" core_index)
       ~scope
       (create ~core_index ~build_mode)

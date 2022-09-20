@@ -6,4 +6,6 @@ type t =
   | SLR2
 [@@deriving sexp_of, compare, enumerate]
 
+val to_string : t -> string
+
 include Comparable.S with type t := t
