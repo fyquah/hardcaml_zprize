@@ -1,8 +1,8 @@
 open! Core
 
-let command_kernel =
+let command_top =
   Command.basic
-    ~summary:"Simulate kernel operation"
+    ~summary:"Simulate top operation"
     [%map_open.Command
       let verbose = flag "-verbose" no_arg ~doc:" Print detailed results"
       and input_coefs = flag "-inputs" (optional string) ~doc:" Input coefficients"
@@ -14,6 +14,11 @@ let command_kernel =
           "-log-cores"
           (optional_with_default 3 int)
           ~doc:" Log number of parallel cores"
+      and logblocks =
+        flag
+          "-log-blocks"
+          (optional_with_default 0 int)
+          ~doc:" Log number of parallel blocks"
       and waves = flag "-waves" no_arg ~doc:" Display interactive waveform"
       and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed" in
       fun () ->
@@ -33,7 +38,7 @@ let command_kernel =
             ;;
 
             let logcores = logcores
-            let logblocks = 0
+            let logblocks = logblocks
           end)
         in
         let input_coefs =
@@ -152,5 +157,5 @@ let () =
   Command_unix.run
     (Command.group
        ~summary:"NTT Simulations"
-       [ "kernel", command_kernel; "vitis", command_kernel_for_vitis; "ntt", command_ntt ])
+       [ "top", command_top; "vitis", command_kernel_for_vitis; "ntt", command_ntt ])
 ;;

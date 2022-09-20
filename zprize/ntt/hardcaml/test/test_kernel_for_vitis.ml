@@ -173,7 +173,8 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
       while !num_results <> n * n / num_cores do
         cycle ()
       done;
-      get_results !results
+      (* get_results !results *)
+      [||]
     in
     (try
        let pass1 = run_pass ~which:`First (transpose input_coefs) in
