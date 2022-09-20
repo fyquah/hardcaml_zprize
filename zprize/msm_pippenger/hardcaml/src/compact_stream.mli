@@ -25,4 +25,5 @@ module Make (Config : Config.S) : sig
 
   val num_256_words_per_point : int
   val create : Scope.t -> Signal.t I.t -> Signal.t O.t
+  val hierarchical : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
