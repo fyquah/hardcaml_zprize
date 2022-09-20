@@ -15,9 +15,9 @@ let scalar_bits t = Array.fold t.scalar_bits_by_core ~init:0 ~f:( + )
 let input_point_bits t = 3 * t.field_bits
 let result_point_bits t = 4 * t.field_bits
 
-let config_for_compute_unit t index =
+let config_for_compute_unit t ~core_index =
   { Pippenger_compute_unit.Pippenger_compute_unit_config.field_bits = t.field_bits
-  ; scalar_bits = t.scalar_bits_by_core.(index)
+  ; scalar_bits = t.scalar_bits_by_core.(core_index)
   ; window_size_bits = t.window_size_bits
   ; ram_read_latency = t.ram_read_latency
   ; controller_log_stall_fifo_depth = t.controller_log_stall_fifo_depth
@@ -29,7 +29,7 @@ let all_window_size_bits t =
     if core_index = Array.length t.scalar_bits_by_core
     then []
     else (
-      let config_compute_units = config_for_compute_unit t core_index in
+      let config_compute_units = config_for_compute_unit t ~core_index in
       let hd =
         let num_windows =
           Pippenger_compute_unit_config.num_windows config_compute_units
@@ -46,29 +46,31 @@ let all_window_size_bits t =
 
 let num_result_points t =
   Array.foldi t.scalar_bits_by_core ~init:0 ~f:(fun i acc _ ->
-    let config = config_for_compute_unit t i in
+    let config = config_for_compute_unit t ~core_index:i in
     acc + Pippenger_compute_unit.Pippenger_compute_unit_config.num_result_points config)
 ;;
 
-let num_windows_for_slr t slr =
+let num_windows_for_core t ~core_index =
   Pippenger_compute_unit.Pippenger_compute_unit_config.num_windows
-    (config_for_compute_unit t slr)
+    (config_for_compute_unit t ~core_index)
 ;;
 
-let last_window_size_bits_for_slr t slr =
+let last_window_size_bits_for_core t ~core_index =
   Pippenger_compute_unit.Pippenger_compute_unit_config.last_window_size_bits
-    (config_for_compute_unit t slr)
+    (config_for_compute_unit t ~core_index)
 ;;
 
-let window_size_bits_for_slr t slr = (config_for_compute_unit t slr).window_size_bits
+let window_size_bits_for_core t ~core_index =
+  (config_for_compute_unit t ~core_index).window_size_bits
+;;
 
 let last_window_for_core t ~core_index =
   let num_windows_before_this_core = ref 0 in
   for i = 0 to core_index - 1 do
     num_windows_before_this_core
-      := !num_windows_before_this_core + num_windows_for_slr t i
+      := !num_windows_before_this_core + num_windows_for_core t ~core_index:i
   done;
-  !num_windows_before_this_core + num_windows_for_slr t core_index - 1
+  !num_windows_before_this_core + num_windows_for_core t ~core_index - 1
 ;;
 
 module type S = sig

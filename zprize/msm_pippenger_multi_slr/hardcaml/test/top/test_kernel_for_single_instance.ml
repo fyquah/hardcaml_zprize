@@ -163,13 +163,19 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
                then (
                  Int.incr window;
                  let num_windows =
-                   Msm_pippenger_multi_slr.Config.num_windows_for_slr Config.t 0
+                   Msm_pippenger_multi_slr.Config.num_windows_for_core
+                     Config.t
+                     ~core_index:0
                  in
                  let last_window_size_bits =
-                   Msm_pippenger_multi_slr.Config.last_window_size_bits_for_slr Config.t 0
+                   Msm_pippenger_multi_slr.Config.last_window_size_bits_for_core
+                     Config.t
+                     ~core_index:0
                  in
                  let window_size_bits =
-                   Msm_pippenger_multi_slr.Config.window_size_bits_for_slr Config.t 0
+                   Msm_pippenger_multi_slr.Config.window_size_bits_for_core
+                     Config.t
+                     ~core_index:0
                  in
                  let next_window_size_bits =
                    if !window = num_windows - 1

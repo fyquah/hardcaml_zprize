@@ -241,13 +241,13 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
                      Config.t
                      ~core_index:!core_index
               then
-                Msm_pippenger_multi_slr.Config.last_window_size_bits_for_slr
+                Msm_pippenger_multi_slr.Config.last_window_size_bits_for_core
                   Config.t
-                  !core_index
+                  ~core_index:!core_index
               else
-                Msm_pippenger_multi_slr.Config.window_size_bits_for_slr
+                Msm_pippenger_multi_slr.Config.window_size_bits_for_core
                   Config.t
-                  !core_index
+                  ~core_index:!core_index
             in
             bucket := (1 lsl next_window_size_bits) - 1)));
       cycle ()
