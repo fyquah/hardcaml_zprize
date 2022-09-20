@@ -235,10 +235,10 @@ let test_back_to_back () =
   in
   let module Test = Make (Config) in
   let sim = Test.create ~waves:true ~verilator:false in
-  let _result0 = Test.run ~sim ~seed:0 ~timeout:1000 ~verilator:false 8 () in
-  let _result1 : Test.result =
-    Test.run ~sim ~seed:1 ~timeout:1000 ~verilator:false 8 ()
-  in
+  (* let _result0 = Test.run ~sim ~seed:0 ~timeout:1000 ~verilator:false 8 () in *)
+  (* let _result1 : Test.result = *)
+  (*   Test.run ~sim ~seed:1 ~timeout:1000 ~verilator:false 8 () *)
+  (* in *)
   let result2 : Test.result = Test.run ~sim ~seed:2 ~timeout:1000 ~verilator:false 8 () in
   Option.value_exn result2.waves
 ;;
