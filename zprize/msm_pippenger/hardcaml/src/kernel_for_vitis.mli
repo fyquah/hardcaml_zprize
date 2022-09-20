@@ -1,5 +1,10 @@
 (** Wraps the MSM pippenger top module with 512 bit AXI stream interfaces that
     can be driven by the AWS shell when compiled with Vitis.
+
+    The 512 bit stream is first converted into a 256 bit stream so that it can
+    efficiently be crossed into all SLRs, and then is unpacked and inputted into
+    the controller. Input to the controller is double buffered so that we
+    maximize performance.
 *)
 
 open Hardcaml
@@ -7,12 +12,6 @@ open Hardcaml_axi
 
 module Make (Config : Config.S) : sig
   module Top : module type of Top.Make (Config)
-
-  module State : sig
-    type t
-
-    val names : string list
-  end
 
   module I : sig
     type 'a t =

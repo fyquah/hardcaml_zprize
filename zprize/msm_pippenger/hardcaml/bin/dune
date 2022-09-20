@@ -7,6 +7,7 @@
    core_unix.command_unix
    hardcaml_waveterm.interactive
    msm_pippenger
+   msm_pippenger_test_components
    msm_pippenger_test_top)
  (preprocess (pps ppx_jane))
 )

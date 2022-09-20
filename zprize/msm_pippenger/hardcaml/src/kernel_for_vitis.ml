@@ -2,9 +2,12 @@ open Core
 open Hardcaml
 open Signal
 module Axi512 = Hardcaml_axi.Axi512
+module Axi256 = Hardcaml_axi.Axi256
 
 module Make (Config : Config.S) = struct
+  module Compact_stream = Compact_stream.Make (Config)
   module Top = Top.Make (Config)
+  module Msm_result_to_host = Msm_result_to_host.Make (Config)
 
   module I = struct
     type 'a t =
@@ -29,40 +32,46 @@ module Make (Config : Config.S) = struct
       | Idle
       | Working
     [@@deriving sexp_of, compare, enumerate]
-
-    let names =
-      List.map all ~f:(function
-        | Idle -> "I"
-        | Working -> "W")
-    ;;
   end
 
-  let input_bits = Config.scalar_bits + Top.input_point_bits
-  let axi_bits = Axi512.Config.data_bits
-  let alignment_bits = 512
-  let log2_alignment_bits = Int.ceil_log2 alignment_bits
-  let input_l_bits = Int.round_up ~to_multiple_of:axi_bits input_bits
-  let output_l_width = Int.round_up Top.result_point_bits ~to_multiple_of:axi_bits
+  let axi_bits = Axi256.Config.data_bits
+
+  let input_bits =
+    Int.round_up Config.scalar_bits ~to_multiple_of:axi_bits
+    + Int.round_up Top.input_point_bits ~to_multiple_of:axi_bits
+  ;;
 
   let create ~build_mode scope { I.ap_clk; ap_rst_n; host_to_fpga; fpga_to_host_dest } =
     let ( -- ) = Scope.naming scope in
-    (* We need to decode the AXI stream input into scalars and points. *)
     let clock = ap_clk in
     let clear = ~:ap_rst_n in
+    (* We downconvert to 256 bits for SLR crossings. *)
+    let compact_dn_dest = Axi256.Stream.Dest.Of_always.wire zero in
+    let compact_stream =
+      Compact_stream.hierarchical
+        scope
+        { clock
+        ; clear
+        ; up = host_to_fpga
+        ; dn_dest = Axi256.Stream.Dest.Of_always.value compact_dn_dest
+        }
+    in
     let spec = Reg_spec.create ~clock ~clear () in
     let open Always in
-    let input_l = Variable.reg spec ~width:input_l_bits in
-    let output_l = Variable.reg spec ~width:output_l_width in
+    (* Two input buffers so that we can keep the controller fed with points. *)
+    let buffer_w_select = Variable.reg spec ~width:1 in
+    let buffer_r_select = Variable.reg spec ~width:1 in
+    let input_l0 = Variable.reg spec ~width:input_bits in
+    let input_l1 = Variable.reg spec ~width:input_bits in
+    let tlast0 = Variable.reg spec ~width:1 in
+    let tlast1 = Variable.reg spec ~width:1 in
+    let scalar_valid0 = Variable.reg spec ~width:1 in
+    let scalar_valid1 = Variable.reg spec ~width:1 in
     let sm = State_machine.create (module State) spec in
-    let scalar_valid = Variable.reg spec ~width:1 in
-    let last_scalar = Variable.reg spec ~width:1 in
-    let result_point_ready = Variable.wire ~default:gnd in
-    let input_offset =
-      Variable.reg spec ~width:(num_bits_to_represent (axi_bits / alignment_bits))
-    in
+    let result_point_ready = wire 1 in
     let input_point_and_scalar =
       sel_bottom
-        (log_shift srl input_l.value (sll input_offset.value log2_alignment_bits))
+        (mux2 buffer_r_select.value input_l1.value input_l0.value)
         (Config.scalar_bits + Top.input_point_bits)
     in
     let top =
@@ -76,115 +85,109 @@ module Make (Config : Config.S) = struct
         ; input_point =
             Top.Mixed_add.Xyt.Of_signal.unpack
               input_point_and_scalar.:+[0, Some Top.input_point_bits]
-        ; scalar_valid = scalar_valid.value
-        ; last_scalar = last_scalar.value
-        ; result_point_ready = result_point_ready.value
+        ; scalar_valid =
+            mux2 buffer_r_select.value scalar_valid1.value scalar_valid0.value
+        ; last_scalar = mux2 buffer_r_select.value tlast1.value tlast0.value
+        ; result_point_ready
         }
     in
-    let valid_input_bits =
-      Variable.reg spec ~width:(num_bits_to_represent input_l_bits)
+    let msm_result_to_host =
+      Msm_result_to_host.hierarchical
+        scope
+        ~drop_t:gnd
+        { clock
+        ; clear
+        ; result_point =
+            { x = top.result_point.x
+            ; y = top.result_point.y
+            ; z = top.result_point.z
+            ; t = top.result_point.t
+            }
+        ; result_point_valid = top.result_point_valid
+        ; last_result_point = top.last_result_point
+        ; fpga_to_host_dest
+        }
     in
-    let host_to_fpga_dest = Axi512.Stream.Dest.Of_always.wire zero in
+    result_point_ready <== msm_result_to_host.result_point_ready;
+    let valid_input_bits0 = Variable.reg spec ~width:(num_bits_to_represent input_bits) in
+    let valid_input_bits1 = Variable.reg spec ~width:(num_bits_to_represent input_bits) in
     let maybe_shift_input =
-      [ host_to_fpga_dest.tready <-- (valid_input_bits.value <:. input_bits)
+      [ compact_dn_dest.tready
+        <-- (mux2 buffer_w_select.value valid_input_bits1.value valid_input_bits0.value
+            <:. input_bits)
       ; when_
-          (host_to_fpga.tvalid &: host_to_fpga_dest.tready.value)
-          [ input_l <-- sel_top (host_to_fpga.tdata @: input_l.value) input_l_bits
-          ; valid_input_bits <-- valid_input_bits.value +:. axi_bits
-          ; when_
-              (valid_input_bits.value +:. axi_bits >=:. input_bits)
-              [ scalar_valid <-- vdd; when_ host_to_fpga.tlast [ last_scalar <-- vdd ] ]
-          ]
-      ; when_
-          (scalar_valid.value &: top.scalar_and_input_point_ready)
-          [ input_offset
-            <-- sll
-                  (srl
-                     (input_offset.value +:. input_bits +:. alignment_bits)
-                     log2_alignment_bits)
-                  log2_alignment_bits
-          ; valid_input_bits <--. 0
-          ]
-      ]
-      |> proc
-    in
-    ignore (input_l.value -- "input_l" : Signal.t);
-    ignore (input_offset.value -- "input_offset" : Signal.t);
-    ignore (valid_input_bits.value -- "valid_input_bits" : Signal.t);
-    let fpga_to_host = Axi512.Stream.Source.Of_always.reg spec in
-    let valid_output_bits =
-      Variable.reg spec ~width:(num_bits_to_represent output_l_width)
-    in
-    ignore (valid_output_bits.value -- "valid_output_bits" : Signal.t);
-    let output_buffer_valid = Variable.reg spec ~width:1 in
-    let last_l = Variable.reg spec ~width:1 in
-    let maybe_shift_output =
-      [ when_
-          (fpga_to_host_dest.tready &: fpga_to_host.tvalid.value)
-          [ valid_output_bits <-- valid_output_bits.value -:. axi_bits
-          ; output_l <-- srl output_l.value axi_bits
-          ; fpga_to_host.tvalid <-- (valid_output_bits.value >=:. axi_bits)
-          ; fpga_to_host.tlast
-            <-- (last_l.value &: (valid_output_bits.value <=:. 2 * axi_bits))
-          ]
-      ; when_
-          (~:(output_buffer_valid.value)
-          |: (valid_output_bits.value
-             <=:. axi_bits
-             &: fpga_to_host_dest.tready
-             &: fpga_to_host.tvalid.value))
-          [ output_buffer_valid <-- gnd
-          ; valid_output_bits <--. 0
-          ; result_point_ready <-- vdd
-          ; output_l
-            <-- uresize
-                  (Top.Mixed_add.Xyzt.Of_signal.pack top.result_point)
-                  output_l_width
-          ; when_
-              (top.result_point_valid &: result_point_ready.value)
-              [ output_buffer_valid <-- vdd
-              ; fpga_to_host.tvalid <-- vdd
-              ; valid_output_bits <--. Top.result_point_bits
+          (compact_stream.dn.tvalid &: compact_dn_dest.tready.value)
+          [ if_
+              buffer_w_select.value
+              [ input_l1
+                <-- sel_top (compact_stream.dn.tdata @: input_l1.value) input_bits
+              ; valid_input_bits1 <-- valid_input_bits1.value +:. axi_bits
+              ; when_
+                  (valid_input_bits1.value +:. axi_bits >=:. input_bits)
+                  [ scalar_valid1 <-- vdd
+                  ; buffer_w_select <-- ~:(buffer_w_select.value)
+                  ; when_ compact_stream.dn.tlast [ tlast1 <-- vdd ]
+                  ]
+              ]
+              [ input_l0
+                <-- sel_top (compact_stream.dn.tdata @: input_l0.value) input_bits
+              ; valid_input_bits0 <-- valid_input_bits0.value +:. axi_bits
+              ; when_
+                  (valid_input_bits0.value +:. axi_bits >=:. input_bits)
+                  [ scalar_valid0 <-- vdd
+                  ; buffer_w_select <-- ~:(buffer_w_select.value)
+                  ; when_ compact_stream.dn.tlast [ tlast0 <-- vdd ]
+                  ]
               ]
           ]
       ; when_
-          (result_point_ready.value &: top.result_point_valid)
-          [ last_l <-- top.last_result_point ]
+          (scalar_valid1.value |: scalar_valid0.value &: top.scalar_and_input_point_ready)
+          [ buffer_r_select <-- ~:(buffer_r_select.value)
+          ; if_
+              buffer_r_select.value
+              [ valid_input_bits1 <--. 0 ]
+              [ valid_input_bits0 <--. 0 ]
+          ]
       ]
       |> proc
     in
+    ignore (input_l0.value -- "input_l" : Signal.t);
+    ignore (valid_input_bits0.value -- "valid_input_bits" : Signal.t);
+    ignore (buffer_r_select.value -- "buffer_r_select" : Signal.t);
+    ignore (buffer_w_select.value -- "buffer_w_select" : Signal.t);
+    ignore (scalar_valid0.value -- "scalar_valid0" : Signal.t);
+    ignore (scalar_valid1.value -- "scalar_valid1" : Signal.t);
     ignore (sm.current -- "state" : Signal.t);
     compile
-      [ fpga_to_host.tstrb <--. -1
-      ; fpga_to_host.tkeep <--. -1
-      ; fpga_to_host.tlast <--. 0
-      ; when_
+      [ when_
           top.scalar_and_input_point_ready
-          [ scalar_valid <-- gnd; last_scalar <-- gnd ]
-      ; when_ fpga_to_host_dest.tready [ fpga_to_host.tvalid <-- gnd ]
+          [ if_
+              buffer_r_select.value
+              [ scalar_valid1 <-- gnd; tlast1 <-- gnd ]
+              [ scalar_valid0 <-- gnd; tlast0 <-- gnd ]
+          ]
       ; sm.switch
           [ ( Idle
-            , [ valid_input_bits <--. 0
-              ; last_l <-- gnd
-              ; input_offset <--. 0
-              ; when_ host_to_fpga.tvalid [ sm.set_next Working ]
+            , [ valid_input_bits0 <--. 0
+              ; valid_input_bits1 <--. 0
+              ; buffer_w_select <--. 0
+              ; buffer_r_select <--. 0
+              ; scalar_valid0 <-- gnd
+              ; scalar_valid1 <-- gnd
+              ; when_ compact_stream.dn.tvalid [ sm.set_next Working ]
               ] )
           ; ( Working
             , [ maybe_shift_input
-              ; maybe_shift_output
               ; when_
-                  (fpga_to_host.tvalid.value
-                  &: fpga_to_host.tlast.value
+                  (msm_result_to_host.fpga_to_host.tvalid
+                  &: msm_result_to_host.fpga_to_host.tlast
                   &: fpga_to_host_dest.tready)
                   [ sm.set_next Idle ]
               ] )
           ]
       ];
-    { O.host_to_fpga_dest = Axi512.Stream.Dest.Of_always.value host_to_fpga_dest
-    ; fpga_to_host =
-        { (Axi512.Stream.Source.Of_always.value fpga_to_host) with
-          tdata = sel_bottom output_l.value axi_bits
-        }
+    { O.host_to_fpga_dest = compact_stream.up_dest
+    ; fpga_to_host = msm_result_to_host.fpga_to_host
     }
   ;;
 

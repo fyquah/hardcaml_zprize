@@ -87,7 +87,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     | Some p -> Ark_bls12_377_g1.create ~x:p.x ~y:p.y ~infinity:false
   ;;
 
-  let random_inputs ?(seed=0) num_inputs =
+  let random_inputs ?(seed = 0) num_inputs =
     Random.init seed;
     Array.init num_inputs ~f:(fun _ ->
       let affine_point =
@@ -154,8 +154,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       Ark_bls12_377_g1.(mul_wide ~part_width:61 point ~by:i.scalar |> add acc))
   ;;
 
-  let twisted_edwards_extended_to_affine extended =
-    Twisted_edwards.extended_to_affine extended
+  let twisted_edwards_extended_to_affine ?(has_t = true) extended =
+    Twisted_edwards.extended_to_affine extended ~has_t
     |> C.twisted_edwards_affine_to_weierstrass_affine bls12_377_twisted_edwards_params
   ;;
 end

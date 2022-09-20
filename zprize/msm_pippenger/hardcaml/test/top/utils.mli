@@ -53,6 +53,7 @@ module Make (Config : Msm_pippenger.Config.S) : sig
   val expected : Bits.t Msm_input.t array -> Ark_bls12_377_g1.affine
 
   val twisted_edwards_extended_to_affine
-    :  Twisted_edwards.extended
+    :  ?has_t:bool
+    -> Twisted_edwards.extended
     -> Weierstrass.affine option
 end

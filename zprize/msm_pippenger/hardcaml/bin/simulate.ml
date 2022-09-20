@@ -57,8 +57,22 @@ let command_vitis_kernel_back_to_back =
           (Msm_pippenger_test_top.Test_kernel_for_vitis.test_back_to_back ())]
 ;;
 
+let command_msm_result_to_host =
+  Command.basic
+    ~summary:"Simulate the msm_result_to_host block"
+    [%map_open.Command
+      let _ = return () in
+      fun () ->
+        Hardcaml_waveterm_interactive.run
+          (Msm_pippenger_test_components.Test_msm_result_to_host.waveform ())]
+;;
+
 let command_test_cases =
-  Command.group ~summary:"" [ "kernel-back-to-back", command_vitis_kernel_back_to_back ]
+  Command.group
+    ~summary:""
+    [ "kernel-back-to-back", command_vitis_kernel_back_to_back
+    ; "msm-result-to-host", command_msm_result_to_host
+    ]
 ;;
 
 let command_top =

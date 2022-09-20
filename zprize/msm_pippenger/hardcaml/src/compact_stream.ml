@@ -74,4 +74,9 @@ module Make (Config : Config.S) = struct
     ; up_dest = { tready = up_tready }
     }
   ;;
+
+  let hierarchical scope =
+    let module H = Hierarchy.In_scope (I) (O) in
+    H.hierarchical ~name:"compact_stream" ~scope create
+  ;;
 end
