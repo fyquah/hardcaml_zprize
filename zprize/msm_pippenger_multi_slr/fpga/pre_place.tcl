@@ -1,3 +1,5 @@
-#create_pblock pblock_SLR2
-#resize_pblock pblock_SLR2 -add SLR2
-#add_cells_to_pblock pblock_SLR2 [get_cells -hierarchical *krnl_msm_pippenger*SLR2*]
+add_cells_to_pblock pblock_dynamic_SLR1 [get_cells -hierarchical *krnl_controller*]
+
+add_cells_to_pblock pblock_dynamic_SLR0 [get_cells -hierarchical *krnl_msm_pippenger*/kernel/*SLR0]
+add_cells_to_pblock pblock_dynamic_SLR1 [get_cells -hierarchical *krnl_msm_pippenger*/kernel/*SLR1]
+add_cells_to_pblock pblock_dynamic_SLR2 [get_cells -hierarchical *krnl_msm_pippenger*/kernel/*SLR2]

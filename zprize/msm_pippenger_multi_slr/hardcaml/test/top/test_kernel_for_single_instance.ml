@@ -163,13 +163,19 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
                then (
                  Int.incr window;
                  let num_windows =
-                   Msm_pippenger_multi_slr.Config.num_windows_for_slr Config.t 0
+                   Msm_pippenger_multi_slr.Config.num_windows_for_core
+                     Config.t
+                     ~core_index:0
                  in
                  let last_window_size_bits =
-                   Msm_pippenger_multi_slr.Config.last_window_size_bits_for_slr Config.t 0
+                   Msm_pippenger_multi_slr.Config.last_window_size_bits_for_core
+                     Config.t
+                     ~core_index:0
                  in
                  let window_size_bits =
-                   Msm_pippenger_multi_slr.Config.window_size_bits_for_slr Config.t 0
+                   Msm_pippenger_multi_slr.Config.window_size_bits_for_core
+                     Config.t
+                     ~core_index:0
                  in
                  let next_window_size_bits =
                    if !window = num_windows - 1
@@ -212,7 +218,7 @@ let%expect_test "Test over small input size" =
   let module Config = struct
     let t =
       { Msm_pippenger_multi_slr.Config.field_bits = 377
-      ; scalar_bits_by_core = [| 12 |]
+      ; for_cores = [| { slr = SLR2; scalar_bits = 12 } |]
       ; controller_log_stall_fifo_depth = 2
       ; window_size_bits = 3
       ; ram_read_latency = 1
@@ -233,7 +239,7 @@ let test_back_to_back () =
   let module Config = struct
     let t =
       { Msm_pippenger_multi_slr.Config.field_bits = 377
-      ; scalar_bits_by_core = [| 13 |]
+      ; for_cores = [| { slr = SLR2; scalar_bits = 13 } |]
       ; controller_log_stall_fifo_depth = 2
       ; window_size_bits = 3
       ; ram_read_latency = 1
