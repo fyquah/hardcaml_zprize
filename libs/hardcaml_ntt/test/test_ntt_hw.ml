@@ -8,7 +8,9 @@ let%expect_test "addressing" =
   let module Controller =
     Hardcaml_ntt.Controller.Make (struct
       let logn = 3
-      let twiddle_4step_config = None
+      let support_4step_twiddle = false
+      let logcores = 0
+      let logblocks = 0
     end)
   in
   let module Sim = Cyclesim.With_interface (Controller.I) (Controller.O) in
@@ -69,29 +71,24 @@ let%expect_test "addressing" =
 
 let ( <-- ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
-let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim_result =
+let compare_results ~logn ~row ~support_4step_twiddle ~first_4step_pass coefs sim_result =
   let module Ntt = Hardcaml_ntt.Reference_model.Make (Gf) in
   Ntt.inverse_dit coefs;
   (* if twiddling is enabled (as used for the 4step implementation), model it. *)
-  if first_4step_pass
+  if first_4step_pass && support_4step_twiddle
   then (
-    match
-      (twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option)
-    with
-    | None -> ()
-    | Some { rows_per_iteration = _; log_num_iterations = _ } ->
-      let scl = ref Gf.one in
-      let step = ref Gf.one in
-      let n2 =
-        Hardcaml_ntt.Roots.inverse.(logn + logn) |> Hardcaml_ntt.Gf.Z.to_z |> Gf.of_z
-      in
-      for _ = 0 to row - 1 do
-        step := Gf.mul !step n2
-      done;
-      for col = 0 to (1 lsl logn) - 1 do
-        coefs.(col) <- Gf.mul coefs.(col) !scl;
-        scl := Gf.mul !scl !step
-      done);
+    let scl = ref Gf.one in
+    let step = ref Gf.one in
+    let n2 =
+      Hardcaml_ntt.Roots.inverse.(logn + logn) |> Hardcaml_ntt.Gf.Z.to_z |> Gf.of_z
+    in
+    for _ = 0 to row - 1 do
+      step := Gf.mul !step n2
+    done;
+    for col = 0 to (1 lsl logn) - 1 do
+      coefs.(col) <- Gf.mul coefs.(col) !scl;
+      scl := Gf.mul !scl !step
+    done);
   if not ([%equal: Gf.t array] coefs sim_result)
   then
     print_s
@@ -102,7 +99,7 @@ let compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass coefs sim
 ;;
 
 let inverse_ntt_test
-  ?twiddle_4step_config
+  ?(support_4step_twiddle = false)
   ?(row = 0)
   ?(first_4step_pass = false)
   ?(num_runs = 1)
@@ -114,7 +111,9 @@ let inverse_ntt_test
   let module Single_core =
     Hardcaml_ntt.Single_core.With_rams (struct
       let logn = logn
-      let twiddle_4step_config = twiddle_4step_config
+      let support_4step_twiddle = support_4step_twiddle
+      let logcores = 0
+      let logblocks = 0
     end)
   in
   let module Sim = Cyclesim.With_interface (Single_core.I) (Single_core.O) in
@@ -186,7 +185,7 @@ let inverse_ntt_test
     for _ = 0 to 11 do
       Cyclesim.cycle sim
     done;
-    compare_results ~logn ~row ~twiddle_4step_config ~first_4step_pass input_coefs result
+    compare_results ~logn ~row ~support_4step_twiddle ~first_4step_pass input_coefs result
   done;
   waves, result
 ;;
@@ -268,7 +267,7 @@ let%expect_test "8pt random" =
 let%expect_test "8pt random - multiple runs of first pass with twiddling" =
   let waves, result =
     inverse_ntt_test
-      ~twiddle_4step_config:{ rows_per_iteration = 1; log_num_iterations = 1 }
+      ~support_4step_twiddle:true
       ~first_4step_pass:true
       ~num_runs:4
       ~waves:false

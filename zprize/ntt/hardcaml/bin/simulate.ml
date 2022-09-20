@@ -9,6 +9,8 @@ let command_top =
       and logn = anon ("LOGN" %: int)
       and first_4step_pass =
         flag "-first-4step-pass" no_arg ~doc:" Run first pass (outputs are twiddled)"
+      and support_4step_twiddle =
+        flag "-support-4step-twiddle" no_arg ~doc:" Enable 4step twiddle logic"
       and logcores =
         flag
           "-log-cores"
@@ -27,18 +29,9 @@ let command_top =
         let module Test =
           Zprize_ntt_test.Test_top.Make (struct
             let logn = logn
-
-            let twiddle_4step_config
-              : Hardcaml_ntt.Core_config.twiddle_4step_config option
-              =
-              Some
-                { rows_per_iteration = 1 lsl logcores
-                ; log_num_iterations = logn - logcores
-                }
-            ;;
-
             let logcores = logcores
             let logblocks = logblocks
+            let support_4step_twiddle = support_4step_twiddle
           end)
         in
         let input_coefs =
@@ -80,18 +73,9 @@ let command_kernel_for_vitis =
         let module Test =
           Zprize_ntt_test.Test_kernel_for_vitis.Make (struct
             let logn = logn
-
-            let twiddle_4step_config
-              : Hardcaml_ntt.Core_config.twiddle_4step_config option
-              =
-              Some
-                { rows_per_iteration = 1 lsl logcores
-                ; log_num_iterations = logn - logcores
-                }
-            ;;
-
             let logcores = logcores
             let logblocks = 0
+            let support_4step_twiddle = true
           end)
         in
         let input_coefs =
@@ -114,13 +98,8 @@ let command_ntt =
       let logn = anon ("LOGN" %: int)
       and waves = flag "-waves" no_arg ~doc:" Display waveform"
       and row = flag "-row" (optional int) ~doc:" Row (for twiddle)"
-      and rows_per_iteration =
-        flag "-rows-per-iteration" (optional int) ~doc:" Rows per iteration (for twiddle)"
-      and log_num_iterations =
-        flag
-          "-log-num-iterations"
-          (optional int)
-          ~doc:" Log2 num iterations (for twiddle)"
+      and support_4step_twiddle =
+        flag "-support-4step-twiddle" no_arg ~doc:" Enable 4step twiddle logic"
       and first_4step_pass = flag "-first-4step-pass" no_arg ~doc:" Model first pass"
       and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed" in
       fun () ->
@@ -131,21 +110,10 @@ let command_ntt =
             let c = Hardcaml_ntt.Gf.Z.random () in
             Hardcaml_ntt.Gf.Z.to_z c |> Hardcaml_ntt_test.Test_ntt_hw.Gf.of_z)
         in
-        let twiddle_4step_config =
-          match rows_per_iteration, log_num_iterations with
-          | Some rows_per_iteration, Some log_num_iterations ->
-            Some
-              ({ rows_per_iteration; log_num_iterations }
-                : Hardcaml_ntt.Core_config.twiddle_4step_config)
-          | _ -> None
-        in
-        print_s
-          [%message
-            (twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option)];
         let waves, _result =
           Hardcaml_ntt_test.Test_ntt_hw.inverse_ntt_test
             ?row
-            ?twiddle_4step_config
+            ~support_4step_twiddle
             ~first_4step_pass
             ~waves
             input_coefs

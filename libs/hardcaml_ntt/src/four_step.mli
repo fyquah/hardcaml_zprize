@@ -3,7 +3,7 @@
 open! Base
 open Hardcaml
 
-module Make (Config : Four_step_config.S) : sig
+module Make (Config : Core_config.S) : sig
   val logcores : int
 
   module Gf = Gf.Signal

@@ -1,7 +1,7 @@
 open! Base
 open Hardcaml
 
-module Make (Config : Four_step_config.S) : sig
+module Make (Config : Core_config.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a
@@ -29,12 +29,14 @@ module Make (Config : Four_step_config.S) : sig
 
   val create
     :  ?single_controller:bool
+    -> start_row:int
     -> build_mode:Build_mode.t
     -> Scope.t
     -> Signal.t Interface.Create_fn(I)(O).t
 
   val hierarchy
     :  ?single_controller:bool
+    -> start_row:int
     -> build_mode:Build_mode.t
     -> Scope.t
     -> Signal.t Interface.Create_fn(I)(O).t

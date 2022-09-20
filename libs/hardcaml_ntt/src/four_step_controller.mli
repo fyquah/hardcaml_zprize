@@ -1,7 +1,7 @@
 open! Base
 open! Hardcaml
 
-module Make (Config : Four_step_config.S) : sig
+module Make (Config : Core_config.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a

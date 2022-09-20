@@ -4,7 +4,9 @@ open Hardcaml_waveterm
 
 module Store_sm = Zprize_ntt.Store_sm.Make (struct
   let logn = 4
-  let twiddle_4step_config = None
+  let support_4step_twiddle = false
+  let logcores = 0
+  let logblocks = 0
 end)
 
 module Sim = Cyclesim.With_interface (Store_sm.I) (Store_sm.O)

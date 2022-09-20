@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Four_step_config.S) = struct
+module Make (Config : Core_config.S) = struct
   open Config
 
   let cores = 1 lsl logcores
@@ -34,11 +34,11 @@ module Make (Config : Four_step_config.S) = struct
 
   module Single_core = Single_core.With_rams (Config)
 
-  let create_with_multiple_controllers ~build_mode scope (i : _ I.t) =
+  let create_with_multiple_controllers ~start_row ~build_mode scope (i : _ I.t) =
     let cores =
       Array.init cores ~f:(fun index ->
         Single_core.hierarchy
-          ~row:index
+          ~row:(start_row + index)
           ~build_mode
           ~instance:("ntt" ^ Int.to_string index)
           scope
@@ -61,7 +61,7 @@ module Make (Config : Four_step_config.S) = struct
   module Controller = Controller.Make (Config)
   module Datapath = Datapath.Make (Config)
 
-  let create_with_single_controller ~build_mode scope (i : _ I.t) =
+  let create_with_single_controller ~start_row ~build_mode scope (i : _ I.t) =
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let controller =
       Controller.hierarchy
@@ -123,7 +123,7 @@ module Make (Config : Four_step_config.S) = struct
         Datapath.O.Of_signal.assign
           datapath
           (Datapath.hierarchy
-             ~row:index
+             ~row:(start_row + index)
              scope
              { Datapath.I.clock = i.clock
              ; clear = i.clear
@@ -161,11 +161,11 @@ module Make (Config : Four_step_config.S) = struct
     else create_with_multiple_controllers
   ;;
 
-  let hierarchy ?single_controller ~build_mode scope =
+  let hierarchy ?single_controller ~start_row ~build_mode scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
     Hier.hierarchical
       ~name:"parallel_cores"
       ~scope
-      (create ?single_controller ~build_mode)
+      (create ?single_controller ~build_mode ~start_row)
   ;;
 end

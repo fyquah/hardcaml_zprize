@@ -10,13 +10,7 @@ let command_kernel =
         let module Kernel_for_vitis =
           Zprize_ntt.For_vitis.Make (struct
             let logn = logn
-
-            let twiddle_4step_config
-              : Hardcaml_ntt.Core_config.twiddle_4step_config option
-              =
-              Some { rows_per_iteration = 8; log_num_iterations = logn - 3 }
-            ;;
-
+            let support_4step_twiddle = true
             let logcores = 3
             let logblocks = 0
           end)
@@ -42,7 +36,9 @@ let command_ntt =
         let module Ntt =
           Hardcaml_ntt.Single_core.With_rams (struct
             let logn = logn
-            let twiddle_4step_config = None
+            let logcores = 0
+            let logblocks = 0
+            let support_4step_twiddle = false
           end)
         in
         let module Circuit = Circuit.With_interface (Ntt.I) (Ntt.O) in

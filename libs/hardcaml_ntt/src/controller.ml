@@ -6,7 +6,7 @@ module Make (Config : Core_config.S) = struct
 
   let logn = Config.logn
   let ram_output_pipelining = Core_config.ram_output_pipelining
-  let support_4step_twiddle = Option.is_some Config.twiddle_4step_config
+  let support_4step_twiddle = Config.support_4step_twiddle
 
   module I = struct
     type 'a t =
@@ -57,11 +57,6 @@ module Make (Config : Core_config.S) = struct
     let spec = Reg_spec.create ~clock:inputs.clock ~clear:inputs.clear () in
     let sm = Always.State_machine.create (module State) spec in
     ignore (sm.current -- "STATE" : Signal.t);
-    let block =
-      Option.map Config.twiddle_4step_config ~f:(fun { log_num_iterations; _ } ->
-        Var.reg spec ~width:log_num_iterations)
-    in
-    Option.iter block ~f:(fun block -> ignore (block.value -- "BLOCK"));
     let done_ = Var.reg (Reg_spec.override spec ~clear_to:vdd) ~width:1 in
     let i = Var.reg spec ~width:(Int.ceil_log2 (logn + 1)) in
     ignore (i.value -- "i" : Signal.t);
@@ -197,9 +192,6 @@ module Make (Config : Core_config.S) = struct
                       ; twiddle_update <--. 0
                       ; last_stage <-- gnd
                       ; done_ <--. 1
-                      ; (match block with
-                         | None -> proc []
-                         | Some block -> block <-- block.value +:. 1)
                       ; sm.set_next Idle
                       ]
                   ] )

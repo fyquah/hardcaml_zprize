@@ -2,7 +2,7 @@ open! Base
 open! Hardcaml
 open Signal
 
-module Make (Config : Four_step_config.S) = struct
+module Make (Config : Core_config.S) = struct
   open Config
   module Parallel_cores = Parallel_cores.Make (Config)
 
@@ -60,6 +60,7 @@ module Make (Config : Four_step_config.S) = struct
       Array.init blocks ~f:(fun block ->
         Parallel_cores.hierarchy
           ~single_controller:true
+          ~start_row:(block * (1 lsl Config.logcores))
           ~build_mode
           scope
           { Parallel_cores.I.clock = i.clock

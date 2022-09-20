@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Four_step_config.S) = struct
+module Make (Config : Core_config.S) = struct
   include Config
 
   let () =

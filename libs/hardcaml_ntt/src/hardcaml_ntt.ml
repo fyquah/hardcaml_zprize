@@ -2,7 +2,6 @@ module Bram = Bram
 module Controller = Controller
 module Core_config = Core_config
 module Four_step = Four_step
-module Four_step_config = Four_step_config
 module Gf = Gf
 module Multi_parallel_cores = Multi_parallel_cores
 module Parallel_cores = Parallel_cores

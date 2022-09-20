@@ -3,7 +3,7 @@ open Hardcaml
 open Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
+module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
   module Top = Zprize_ntt.Top.Make (Config)
   module Sim = Cyclesim.With_interface (Top.I) (Top.O)
@@ -179,22 +179,35 @@ end
 
 module Config = struct
   let logn = 5
-  let log_rows_per_iteration = 3
   let logcores = 3
   let logblocks = 0
-
-  let twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option =
-    Some
-      { rows_per_iteration = 1 lsl log_rows_per_iteration
-      ; log_num_iterations = (logn * 2) - log_rows_per_iteration
-      }
-  ;;
+  let support_4step_twiddle = true
 end
 
 module Test = Make (Config)
 
-let%expect_test "" =
-  let waves = Test.run ~first_4step_pass:false (Test.random_input_coef_matrix ()) in
+let run_test ~waves ~logn ~logcores ~logblocks ~support_4step_twiddle ~first_4step_pass =
+  let module Config = struct
+    let logn = logn
+    let logcores = logcores
+    let logblocks = logblocks
+    let support_4step_twiddle = support_4step_twiddle || first_4step_pass
+  end
+  in
+  let module Test = Make (Config) in
+  Test.run ~waves ~first_4step_pass (Test.random_input_coef_matrix ())
+;;
+
+let%expect_test "single core, no twiddles" =
+  let waves =
+    run_test
+      ~waves:false
+      ~logn:4
+      ~logcores:0
+      ~logblocks:0
+      ~support_4step_twiddle:false
+      ~first_4step_pass:false
+  in
   Option.iter
     waves
     ~f:
@@ -204,5 +217,111 @@ let%expect_test "" =
          ~display_height:80
          ~wave_width:(-1));
   [%expect {|
+    (!cycles 1146)
+    "Hardware and software reference results match!" |}]
+;;
+
+let%expect_test "8 cores, no twiddles" =
+  ignore
+    (run_test
+       ~waves:false
+       ~logn:4
+       ~logcores:3
+       ~logblocks:0
+       ~support_4step_twiddle:false
+       ~first_4step_pass:false
+      : Waveform.t option);
+  [%expect {|
+    (!cycles 180)
+    "Hardware and software reference results match!" |}]
+;;
+
+let%expect_test "2 cores, 2 blocks, no twiddles" =
+  ignore
+    (run_test
+       ~waves:false
+       ~logn:4
+       ~logcores:1
+       ~logblocks:1
+       ~support_4step_twiddle:false
+       ~first_4step_pass:false
+      : Waveform.t option);
+  [%expect {|
+    (!cycles 334)
+    "Hardware and software reference results match!" |}]
+;;
+
+let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
+  ignore
+    (run_test
+       ~waves:false
+       ~logn:5
+       ~logcores:2
+       ~logblocks:2
+       ~support_4step_twiddle:true
+       ~first_4step_pass:true
+      : Waveform.t option);
+  ignore
+    (run_test
+       ~waves:false
+       ~logn:5
+       ~logcores:2
+       ~logblocks:2
+       ~support_4step_twiddle:true
+       ~first_4step_pass:false
+      : Waveform.t option);
+  [%expect
+    {|
+    (!cycles 511)
+    "Hardware and software reference results match!"
+    (!cycles 428)
+    "Hardware and software reference results match!" |}]
+;;
+
+let%expect_test "other configurations with twiddles" =
+  ignore
+    (run_test
+       ~waves:false
+       ~logn:5
+       ~logcores:0
+       ~logblocks:2
+       ~support_4step_twiddle:true
+       ~first_4step_pass:true
+      : Waveform.t option);
+  ignore
+    (run_test
+       ~waves:false
+       ~logn:5
+       ~logcores:2
+       ~logblocks:0
+       ~support_4step_twiddle:true
+       ~first_4step_pass:true
+      : Waveform.t option);
+  ignore
+    (run_test
+       ~waves:false
+       ~logn:5
+       ~logcores:1
+       ~logblocks:3
+       ~support_4step_twiddle:true
+       ~first_4step_pass:true
+      : Waveform.t option);
+  ignore
+    (run_test
+       ~waves:false
+       ~logn:5
+       ~logcores:3
+       ~logblocks:1
+       ~support_4step_twiddle:true
+       ~first_4step_pass:true
+      : Waveform.t option);
+  [%expect {|
+    (!cycles 1555)
+    "Hardware and software reference results match!"
+    (!cycles 1459)
+    "Hardware and software reference results match!"
+    (!cycles 732)
+    "Hardware and software reference results match!"
+    (!cycles 447)
     "Hardware and software reference results match!" |}]
 ;;
