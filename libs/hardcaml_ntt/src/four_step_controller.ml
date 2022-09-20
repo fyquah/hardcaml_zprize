@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Four_step_config.S) = struct
+module Make (Config : Core_config.S) = struct
   open Config
 
   module I = struct
@@ -61,8 +61,8 @@ module Make (Config : Four_step_config.S) = struct
     let start_output = Var.wire ~default:gnd in
     let start_cores = Var.wire ~default:gnd in
     let first_iter = Var.wire ~default:gnd in
-    let log_num_iterations = logn - logcores in
-    let iteration = Var.reg spec ~width:log_num_iterations in
+    let log_num_iterations = logn - logcores - logblocks in
+    let iteration = Var.reg spec ~width:(max 1 log_num_iterations) in
     let iteration_next = iteration.value +:. 1 in
     ignore (sm.current -- "STATE");
     ignore (start_input.value -- "START_INPUT");
@@ -78,10 +78,12 @@ module Make (Config : Four_step_config.S) = struct
               , [ when_
                     all_done
                     [ iteration <--. 1
-                    ; start_input <-- vdd
+                    ; (start_input <-- if log_num_iterations <> 0 then vdd else gnd)
                     ; start_cores <-- vdd
                     ; first_iter <--. 1
-                    ; sm.set_next Main_iter
+                    ; (if log_num_iterations <> 0
+                      then sm.set_next Main_iter
+                      else sm.set_next Last_store)
                     ]
                 ] )
             ; ( Main_iter

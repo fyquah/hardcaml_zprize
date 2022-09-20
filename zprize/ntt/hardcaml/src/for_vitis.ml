@@ -2,12 +2,14 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
+module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   include Config
   module Four_step = Hardcaml_ntt.Four_step.Make (Config)
   module Axi_stream = Four_step.Axi_stream
   module Transposer = Hardcaml_ntt.Transposer
   module Top = Top.Make (Config)
+
+  let () = if Config.logblocks <> 0 then raise_s [%message "For_vitis needs an update!!!"]
 
   module I = struct
     type 'a t =
@@ -85,11 +87,12 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
              * and get away with the following simple pipelining logic
              * (rather than a full-fledged datapath register).
              *)
-            Axi_stream.Source.Of_signal.mux2
-              controller_to_compute_phase_1.tvalid
-              controller_to_compute_phase_1
-              transposer_out
-        ; data_out_dest = compute_to_controller_dest
+            [| Axi_stream.Source.Of_signal.mux2
+                 controller_to_compute_phase_1.tvalid
+                 controller_to_compute_phase_1
+                 transposer_out
+            |]
+        ; data_out_dest = [| compute_to_controller_dest |]
         ; start
         }
     in
@@ -98,12 +101,12 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
      * C++ krnl_controller will never stream both things simultaneously.
      *)
     Axi_stream.Dest.Of_signal.( <== ) transposer_out_dest data_in_dest;
-    Axi_stream.Dest.Of_signal.( <== ) data_in_dest data_in_dest';
+    Axi_stream.Dest.Of_signal.( <== ) data_in_dest data_in_dest'.(0);
     start
     <== (done_
         &: (controller_to_compute_phase_1.tvalid |: controller_to_compute_phase_2.tvalid)
         );
-    { O.compute_to_controller = data_out
+    { O.compute_to_controller = data_out.(0)
     ; controller_to_compute_phase_1_dest = data_in_dest
     ; controller_to_compute_phase_2_dest =
         { tready = transposer.transposer_in_dest.tready }

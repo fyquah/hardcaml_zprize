@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Four_step_config.S) = struct
+module Make (Config : Core_config.S) = struct
   include Config
 
   let () =
@@ -14,9 +14,10 @@ module Make (Config : Four_step_config.S) = struct
   ;;
 
   let cores = 1 lsl logcores
+  let blocks = 1 lsl logblocks
 
   module Gf = Gf.Signal
-  module Parallel_cores = Parallel_cores.Make (Config)
+  module Multi_parallel_cores = Multi_parallel_cores.Make (Config)
   module Controller = Four_step_controller.Make (Config)
 
   module Axi_stream = Hardcaml_axi.Stream.Make (struct
@@ -30,11 +31,11 @@ module Make (Config : Four_step_config.S) = struct
       ; clear : 'a
       ; start : 'a
       ; first_4step_pass : 'a
-      ; wr_d : 'a array [@bits Gf.num_bits] [@length cores]
-      ; wr_en : 'a [@bits cores]
-      ; wr_addr : 'a [@bits logn]
-      ; rd_en : 'a [@bits cores]
-      ; rd_addr : 'a [@bits logn]
+      ; wr_d : 'a Multi_parallel_cores.Q2d.t [@rtlprefix "wr_"]
+      ; wr_en : 'a [@bits blocks]
+      ; wr_addr : 'a array [@bits logn] [@length blocks]
+      ; rd_en : 'a [@bits blocks]
+      ; rd_addr : 'a array [@bits logn] [@length blocks]
       ; input_done : 'a
       ; output_done : 'a
       }
@@ -46,7 +47,7 @@ module Make (Config : Four_step_config.S) = struct
       { done_ : 'a
       ; start_input : 'a
       ; start_output : 'a
-      ; rd_q : 'a array [@bits Gf.num_bits] [@length cores]
+      ; rd_q : 'a Multi_parallel_cores.Q2d.t [@rtlprefix "rd_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -65,10 +66,10 @@ module Make (Config : Four_step_config.S) = struct
         }
     in
     let cores =
-      Parallel_cores.hierarchy
+      Multi_parallel_cores.hierarchy
         ~build_mode
         scope
-        { Parallel_cores.I.clock = i.clock
+        { Multi_parallel_cores.I.clock = i.clock
         ; clear = i.clear
         ; start = controller.start_cores
         ; first_iter = controller.first_iter

@@ -3,7 +3,7 @@ open Hardcaml
 open! Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
+module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
   module Kernel = Zprize_ntt.For_vitis.Make (Config)
   module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
@@ -173,7 +173,7 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
       while !num_results <> n * n / num_cores do
         cycle ()
       done;
-      get_results !results
+      get_results [| !results |]
     in
     (try
        let pass1 = run_pass ~which:`First (transpose input_coefs) in
@@ -190,10 +190,8 @@ let%expect_test "vitis kernel test" =
   let module Config = struct
     let logn = 5
     let logcores = 3
-
-    let twiddle_4step_config : Hardcaml_ntt.Core_config.twiddle_4step_config option =
-      Some { rows_per_iteration = 1 lsl logcores; log_num_iterations = logn - logcores }
-    ;;
+    let logblocks = 0
+    let support_4step_twiddle = true
   end
   in
   let module Test = Make (Config) in

@@ -7,3 +7,4 @@ fpga/*/*.rpt
 *.tar.gz
 
 **.swp
+local

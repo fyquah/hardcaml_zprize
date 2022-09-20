@@ -32,21 +32,14 @@ module Make (Config : Core_config.S) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let support_4step_twiddle = Option.is_some Config.twiddle_4step_config
+  let support_4step_twiddle = Config.support_4step_twiddle
   let ram_output_pipelining = Core_config.ram_output_pipelining
-
-  let twiddle_4step_config =
-    Option.value
-      ~default:{ rows_per_iteration = 0; log_num_iterations = 0 }
-      Config.twiddle_4step_config
-  ;;
-
   let gf_z_to_bits g = Gf.Z.to_z g |> Gf.Signal.of_z |> Gf.Signal.to_bits
   let twiddle_root row iter = Gf.Z.pow Roots.inverse.(logn * 2) (row * (iter + 1))
 
   let twiddle_scale_z =
     List.init Twiddle_factor_stream.pipe_length ~f:(fun col ->
-      twiddle_root twiddle_4step_config.rows_per_iteration col)
+      twiddle_root (1 lsl (Config.logcores + Config.logblocks)) col)
   ;;
 
   let twiddle_scale = twiddle_scale_z |> List.map ~f:gf_z_to_bits
