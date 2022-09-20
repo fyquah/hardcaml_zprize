@@ -13,6 +13,9 @@ struct biginteger256_t {
     std::cout << "getBit" << std::endl;
     return (data[i / 64] >> (i % 64)) & 1;
   }
+
+  inline void copy_to_fpga_buffer(uint32_t *b) { memcpy(b, data, sizeof(data)); }
+
   inline uint64_t getSlice(int start, int len) {
     if (len >= 64) {
       throw "Invalid";

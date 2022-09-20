@@ -156,6 +156,17 @@ class GFq {
     reduce();
   }
 
+  void copy_to_buffer(void *b) {
+    mpz_export(
+        /* rop */ b,
+        /* countp */ nullptr,
+        /* order */ WORDS_LEAST_SIGNIFICANT,
+        /* size */ sizeof(uint64_t),
+        /* endian */ BYTES_LEAST_SIGNIFICANT,
+        /* nails */ 0,
+        /* op */ v);
+  }
+
   void copy_to_rust_type(biginteger384_t &b) {
     uint64_t temp[NUM_64B_WORDS];
     memset(temp, 0, sizeof(temp));
@@ -195,13 +206,9 @@ class GFq {
     printf("};\n");
   }
 
-  bool operator==(const GFq& other) const {
-    return mpz_cmp(v, other.v) == 0;
-  }
+  bool operator==(const GFq &other) const { return mpz_cmp(v, other.v) == 0; }
 
-  bool operator!=(const GFq& other) const {
-    return mpz_cmp(v, other.v) != 0;
-  }
+  bool operator!=(const GFq &other) const { return mpz_cmp(v, other.v) != 0; }
 };
 
 // parameter constants
@@ -266,8 +273,6 @@ class Xyzt {
   Xyzt() : Xyzt(ZERO_WORDS, ONE_WORDS, ONE_WORDS, ZERO_WORDS) {}
   Xyzt(const Xyzt &other) : x(other.x), y(other.y), z(other.z), t(other.t) {}
 
-
-
   void set_32b(const uint32_t words_x[], const uint32_t words_y[], const uint32_t words_z[],
                const uint32_t words_t[]) {
     x.set_32b(words_x);
@@ -293,7 +298,7 @@ class Xyzt {
     x.set_32b(packed_repr + NUM_32B_WORDS * 0);
     w = mpz_sizeinbase(x.v, 2);
     for (size_t i = 377; i < w; i++) {
-	    mpz_clrbit(x.v, i);
+      mpz_clrbit(x.v, i);
     }
 
     /* tmp1 = first_384_bytes
@@ -310,7 +315,7 @@ class Xyzt {
     w = mpz_sizeinbase(y.v, 2);
 
     for (size_t i = 377; i < w; i++) {
-	    mpz_clrbit(y.v, i);
+      mpz_clrbit(y.v, i);
     }
 
     set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 1);
@@ -320,7 +325,7 @@ class Xyzt {
     mpz_ior(z.v, tmp3, tmp4);
     w = mpz_sizeinbase(z.v, 2);
     for (size_t i = 377; i < w; i++) {
-	    mpz_clrbit(z.v, i);
+      mpz_clrbit(z.v, i);
     }
 
     set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 2);
@@ -330,13 +335,11 @@ class Xyzt {
     mpz_ior(t.v, tmp3, tmp4);
     w = mpz_sizeinbase(t.v, 2);
     for (size_t i = 377; i < w; i++) {
-	    mpz_clrbit(t.v, i);
+      mpz_clrbit(t.v, i);
     }
   }
 
-  bool is_z_zero() const {
-    return mpz_cmp_si(z.v, 0) == 0;
-  }
+  bool is_z_zero() const { return mpz_cmp_si(z.v, 0) == 0; }
 
   void setToIdentity() {
     x.set(ZERO_WORDS);
@@ -486,6 +489,12 @@ class Xyzt {
     printf("\n\n--------------------------------------\n");
 
     affineWeierstrassToExtendedTwistedEdwards();
+  }
+
+  void copy_to_fpga_buffer(uint32_t *b) {
+    x.copy_to_buffer((void *)(b + 0 * NUM_32B_WORDS));
+    y.copy_to_buffer((void *)(b + 1 * NUM_32B_WORDS));
+    t.copy_to_buffer((void *)(b + 2 * NUM_32B_WORDS));
   }
 
   void copy_to_rust_type(g1_projective_t &projective) {
