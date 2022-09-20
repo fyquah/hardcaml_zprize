@@ -7,7 +7,7 @@ module Make (C : Config.S) = struct
   let config = C.t
 
   let { Config.field_bits
-      ; scalar_bits_by_core
+      ; for_cores
       ; controller_log_stall_fifo_depth
       ; window_size_bits
       ; ram_read_latency
@@ -60,9 +60,9 @@ module Make (C : Config.S) = struct
   let scalar_bit_positions ~core_index =
     let lo = ref 0 in
     for i = 0 to core_index - 1 do
-      lo := !lo + scalar_bits_by_core.(i)
+      lo := !lo + for_cores.(i).scalar_bits
     done;
-    let w = scalar_bits_by_core.(core_index) in
+    let w = for_cores.(core_index).scalar_bits in
     !lo + w - 1, !lo
   ;;
 
@@ -104,7 +104,7 @@ module Make (C : Config.S) = struct
         Pippenger_compute_unit.Make (struct
           let t =
             { Pippenger_compute_unit.Pippenger_compute_unit_config.field_bits
-            ; scalar_bits = scalar_bits_by_core.(core_index)
+            ; scalar_bits = for_cores.(core_index).scalar_bits
             ; controller_log_stall_fifo_depth
             ; window_size_bits
             ; ram_read_latency

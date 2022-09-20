@@ -5,7 +5,7 @@ open Signal
 
 module Make (C : Config.S) = struct
   let config = C.t
-  let num_cores = Array.length config.scalar_bits_by_core
+  let num_cores = Array.length config.for_cores
 
   module Kernel_for_single_instance = Kernel_for_single_instance.Make (C)
 

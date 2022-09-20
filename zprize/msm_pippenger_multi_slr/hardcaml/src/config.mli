@@ -1,8 +1,15 @@
 open Base
 
+module For_core : sig
+  type t =
+    { scalar_bits : int
+    ; slr : Slr.t
+    }
+end
+
 type t =
   { field_bits : int
-  ; scalar_bits_by_core : int array
+  ; for_cores : For_core.t array
   ; controller_log_stall_fifo_depth : int
   ; window_size_bits : int
   ; ram_read_latency : int

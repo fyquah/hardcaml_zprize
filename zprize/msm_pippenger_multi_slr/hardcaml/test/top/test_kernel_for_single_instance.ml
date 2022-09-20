@@ -218,7 +218,7 @@ let%expect_test "Test over small input size" =
   let module Config = struct
     let t =
       { Msm_pippenger_multi_slr.Config.field_bits = 377
-      ; scalar_bits_by_core = [| 12 |]
+      ; for_cores = [| { slr = SLR2; scalar_bits = 12 } |]
       ; controller_log_stall_fifo_depth = 2
       ; window_size_bits = 3
       ; ram_read_latency = 1
@@ -239,7 +239,7 @@ let test_back_to_back () =
   let module Config = struct
     let t =
       { Msm_pippenger_multi_slr.Config.field_bits = 377
-      ; scalar_bits_by_core = [| 13 |]
+      ; for_cores = [| { slr = SLR2; scalar_bits = 13 } |]
       ; controller_log_stall_fifo_depth = 2
       ; window_size_bits = 3
       ; ram_read_latency = 1

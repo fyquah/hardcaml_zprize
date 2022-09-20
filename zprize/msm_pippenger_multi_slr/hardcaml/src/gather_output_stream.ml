@@ -4,7 +4,7 @@ open Hardcaml_axi
 open Signal
 
 module Make (C : Config.S) = struct
-  let num_cores = Array.length C.t.scalar_bits_by_core
+  let num_cores = Array.length C.t.for_cores
 
   module I = struct
     type 'a t =
