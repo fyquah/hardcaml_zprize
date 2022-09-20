@@ -60,7 +60,7 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
     inputs.clear := Bits.vdd;
     cycle ();
     inputs.clear := Bits.gnd;
-    inputs.data_out_dest.tready := Bits.vdd;
+    inputs.data_out_dest.(0).tready := Bits.vdd;
     inputs.start := Bits.vdd;
     cycle ();
     inputs.start := Bits.gnd;
@@ -113,8 +113,8 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
     let results = ref [] in
     let cycle ?(n = 1) () =
       assert (n > 0);
-      if Bits.to_bool !(outputs.data_out.tvalid)
-      then results := !(outputs.data_out.tdata) :: !results;
+      if Bits.to_bool !(outputs.data_out.(0).tvalid)
+      then results := !(outputs.data_out.(0).tdata) :: !results;
       for _ = 1 to n do
         Cyclesim.cycle sim
       done
@@ -123,21 +123,21 @@ module Make (Config : Hardcaml_ntt.Four_step_config.S) = struct
     inputs.first_4step_pass := Bits.of_bool first_4step_pass;
     for pass = 0 to num_passes - 1 do
       (* wait for tready *)
-      while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
+      while not (Bits.to_bool !(outputs.data_in_dest.(0).tready)) do
         cycle ()
       done;
       for i = 0 to n - 1 do
-        inputs.data_in.tvalid := Bits.vdd;
-        inputs.data_in.tdata
+        inputs.data_in.(0).tvalid := Bits.vdd;
+        inputs.data_in.(0).tdata
           := List.init num_cores ~f:(fun core ->
                input_coefs.((pass * num_cores) + core).(i))
              |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
              |> Bits.concat_lsb;
         cycle ()
       done;
-      inputs.data_in.tvalid := Bits.gnd;
+      inputs.data_in.(0).tvalid := Bits.gnd;
       (* wait for tready to go low. *)
-      while Bits.to_bool !(outputs.data_in_dest.tready) do
+      while Bits.to_bool !(outputs.data_in_dest.(0).tready) do
         cycle ()
       done;
       (* A few cycles of flushing after each pass *)
