@@ -58,13 +58,21 @@ module Make (Config : Config.S) = struct
     in
     let spec = Reg_spec.create ~clock ~clear () in
     let open Always in
-    let input_l = Variable.reg spec ~width:input_bits in
+    (* Two input buffers so that we can keep the controller fed with points. *)
+    let buffer_w_select = Variable.reg spec ~width:1 in
+    let buffer_r_select = Variable.reg spec ~width:1 in
+    let input_l0 = Variable.reg spec ~width:input_bits in
+    let input_l1 = Variable.reg spec ~width:input_bits in
+    let tlast0 = Variable.reg spec ~width:1 in
+    let tlast1 = Variable.reg spec ~width:1 in
+    let scalar_valid0 = Variable.reg spec ~width:1 in
+    let scalar_valid1 = Variable.reg spec ~width:1 in
     let sm = State_machine.create (module State) spec in
-    let scalar_valid = Variable.reg spec ~width:1 in
-    let last_scalar = Variable.reg spec ~width:1 in
     let result_point_ready = wire 1 in
     let input_point_and_scalar =
-      sel_bottom input_l.value (Config.scalar_bits + Top.input_point_bits)
+      sel_bottom
+        (mux2 buffer_r_select.value input_l1.value input_l0.value)
+        (Config.scalar_bits + Top.input_point_bits)
     in
     let top =
       Top.hierarchical
@@ -77,8 +85,9 @@ module Make (Config : Config.S) = struct
         ; input_point =
             Top.Mixed_add.Xyt.Of_signal.unpack
               input_point_and_scalar.:+[0, Some Top.input_point_bits]
-        ; scalar_valid = scalar_valid.value
-        ; last_scalar = last_scalar.value
+        ; scalar_valid =
+            mux2 buffer_r_select.value scalar_valid1.value scalar_valid0.value
+        ; last_scalar = mux2 buffer_r_select.value tlast1.value tlast0.value
         ; result_point_ready
         }
     in
@@ -100,35 +109,71 @@ module Make (Config : Config.S) = struct
         }
     in
     result_point_ready <== msm_result_to_host.result_point_ready;
-    let valid_input_bits = Variable.reg spec ~width:(num_bits_to_represent input_bits) in
+    let valid_input_bits0 = Variable.reg spec ~width:(num_bits_to_represent input_bits) in
+    let valid_input_bits1 = Variable.reg spec ~width:(num_bits_to_represent input_bits) in
     let maybe_shift_input =
-      [ compact_dn_dest.tready <-- (valid_input_bits.value <:. input_bits)
+      [ compact_dn_dest.tready
+        <-- (mux2 buffer_w_select.value valid_input_bits1.value valid_input_bits0.value
+            <:. input_bits)
       ; when_
           (compact_stream.dn.tvalid &: compact_dn_dest.tready.value)
-          [ input_l <-- sel_top (compact_stream.dn.tdata @: input_l.value) input_bits
-          ; valid_input_bits <-- valid_input_bits.value +:. axi_bits
-          ; when_
-              (valid_input_bits.value +:. axi_bits >=:. input_bits)
-              [ scalar_valid <-- vdd
-              ; when_ compact_stream.dn.tlast [ last_scalar <-- vdd ]
+          [ if_
+              buffer_w_select.value
+              [ input_l1
+                <-- sel_top (compact_stream.dn.tdata @: input_l1.value) input_bits
+              ; valid_input_bits1 <-- valid_input_bits1.value +:. axi_bits
+              ; when_
+                  (valid_input_bits1.value +:. axi_bits >=:. input_bits)
+                  [ scalar_valid1 <-- vdd
+                  ; buffer_w_select <-- ~:(buffer_w_select.value)
+                  ; when_ compact_stream.dn.tlast [ tlast1 <-- vdd ]
+                  ]
+              ]
+              [ input_l0
+                <-- sel_top (compact_stream.dn.tdata @: input_l0.value) input_bits
+              ; valid_input_bits0 <-- valid_input_bits0.value +:. axi_bits
+              ; when_
+                  (valid_input_bits0.value +:. axi_bits >=:. input_bits)
+                  [ scalar_valid0 <-- vdd
+                  ; buffer_w_select <-- ~:(buffer_w_select.value)
+                  ; when_ compact_stream.dn.tlast [ tlast0 <-- vdd ]
+                  ]
               ]
           ]
       ; when_
-          (scalar_valid.value &: top.scalar_and_input_point_ready)
-          [ valid_input_bits <--. 0 ]
+          (scalar_valid1.value |: scalar_valid0.value &: top.scalar_and_input_point_ready)
+          [ buffer_r_select <-- ~:(buffer_r_select.value)
+          ; if_
+              buffer_r_select.value
+              [ valid_input_bits1 <--. 0 ]
+              [ valid_input_bits0 <--. 0 ]
+          ]
       ]
       |> proc
     in
-    ignore (input_l.value -- "input_l" : Signal.t);
-    ignore (valid_input_bits.value -- "valid_input_bits" : Signal.t);
+    ignore (input_l0.value -- "input_l" : Signal.t);
+    ignore (valid_input_bits0.value -- "valid_input_bits" : Signal.t);
+    ignore (buffer_r_select.value -- "buffer_r_select" : Signal.t);
+    ignore (buffer_w_select.value -- "buffer_w_select" : Signal.t);
+    ignore (scalar_valid0.value -- "scalar_valid0" : Signal.t);
+    ignore (scalar_valid1.value -- "scalar_valid1" : Signal.t);
     ignore (sm.current -- "state" : Signal.t);
     compile
       [ when_
           top.scalar_and_input_point_ready
-          [ scalar_valid <-- gnd; last_scalar <-- gnd ]
+          [ if_
+              buffer_r_select.value
+              [ scalar_valid1 <-- gnd; tlast1 <-- gnd ]
+              [ scalar_valid0 <-- gnd; tlast0 <-- gnd ]
+          ]
       ; sm.switch
           [ ( Idle
-            , [ valid_input_bits <--. 0
+            , [ valid_input_bits0 <--. 0
+              ; valid_input_bits1 <--. 0
+              ; buffer_w_select <--. 0
+              ; buffer_r_select <--. 0
+              ; scalar_valid0 <-- gnd
+              ; scalar_valid1 <-- gnd
               ; when_ compact_stream.dn.tvalid [ sm.set_next Working ]
               ] )
           ; ( Working

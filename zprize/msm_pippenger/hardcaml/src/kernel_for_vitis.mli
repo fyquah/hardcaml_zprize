@@ -2,9 +2,9 @@
     can be driven by the AWS shell when compiled with Vitis.
 
     The 512 bit stream is first converted into a 256 bit stream so that it can
-    efficently be crossed into all SLRs, and then is unpacked and inputted into
+    efficiently be crossed into all SLRs, and then is unpacked and inputted into
     the controller. Input to the controller is double buffered so that we
-    maximise performance.
+    maximize performance.
 *)
 
 open Hardcaml
