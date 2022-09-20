@@ -7,5 +7,6 @@
 
 (rule
  (target stub.sv)
+ (mode promote)
  (action
   (write-file %{target} "")))
