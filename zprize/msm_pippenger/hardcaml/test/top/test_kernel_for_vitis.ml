@@ -29,16 +29,6 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     List.concat [ I_rules.default (); O_rules.default (); [ Display_rule.default ] ]
   ;;
 
-  let num_clocks_per_input =
-    Int.round_up (Config.scalar_bits + (3 * Config.field_bits)) ~to_multiple_of:512 / 512
-  ;;
-
-  let drop_t = false
-
-  let num_clocks_per_output =
-    Int.round_up ((if drop_t then 3 else 4) * Config.field_bits) ~to_multiple_of:512 / 512
-  ;;
-
   type result =
     { waves : Waveform.t option
     ; points : Utils.window_bucket_point list
@@ -67,6 +57,29 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     else { waves = None; sim }
   ;;
 
+  let aligned_to = 64
+  let aligned_field_bits = Int.round_up Config.field_bits ~to_multiple_of:aligned_to
+
+  let num_clocks_per_input =
+    Int.round_up (Config.scalar_bits + (3 * aligned_field_bits)) ~to_multiple_of:512 / 512
+  ;;
+
+  let drop_t = false
+
+  let num_clocks_per_output =
+    Int.round_up ((if drop_t then 3 else 4) * aligned_field_bits) ~to_multiple_of:512
+    / 512
+  ;;
+
+  module Input_aligned = struct
+    type 'a t =
+      { x : 'a [@bits aligned_field_bits]
+      ; y : 'a [@bits aligned_field_bits]
+      ; t : 'a [@bits aligned_field_bits]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
   let run ?sim ?(waves = true) ~seed ~timeout ~verilator num_inputs () =
     let cycle_cnt = ref 0 in
     let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
@@ -77,12 +90,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     i.fpga_to_host_dest.tready := Bits.vdd;
     for idx = 0 to num_inputs - 1 do
       let input = inputs.(idx) in
-      let to_send =
-        ref
-          Bits.(
-            input.scalar
-            @: Utils.Affine_point_with_t.Of_bits.pack input.affine_point_with_t)
+      let aligned_point =
+        { Input_aligned.x = Bits.uresize input.affine_point_with_t.x aligned_field_bits
+        ; Input_aligned.y = Bits.uresize input.affine_point_with_t.y aligned_field_bits
+        ; Input_aligned.t = Bits.uresize input.affine_point_with_t.t aligned_field_bits
+        }
       in
+      let to_send = ref Bits.(input.scalar @: Input_aligned.Of_bits.pack aligned_point) in
       for beat = 0 to num_clocks_per_input - 1 do
         i.host_to_fpga.tdata := Bits.sel_bottom !to_send 512;
         i.host_to_fpga.tvalid := Bits.random ~width:1;
