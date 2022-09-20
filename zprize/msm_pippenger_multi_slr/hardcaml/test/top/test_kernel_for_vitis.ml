@@ -47,7 +47,11 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
     then
       let module V = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O) in
       V.create ~clock_names:[ "ap_clk" ] ~cache_dir:"/tmp/kernel/" ~verbose:true create
-    else Sim.create ~config:Cyclesim.Config.trace_all create
+    else
+      (* Simulation failed with deduplicate_signals = true *)
+      Sim.create
+        ~config:{ Cyclesim.Config.trace_all with deduplicate_signals = false }
+        create
   ;;
 
   let create ~verilator ~waves =
