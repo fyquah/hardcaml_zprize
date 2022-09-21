@@ -250,6 +250,7 @@ module Make (C : Config.S) = struct
     let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical
       ?instance
+      ~attributes:[ Rtl_attribute.Vivado.keep_hierarchy true ]
       ~name:(sprintf "pippenger_core_%d" core_index)
       ~scope
       (create ~core_index ~build_mode)
