@@ -1,3 +1,6 @@
+cmake_minimum_required(VERSION 3.13.1)
+project(msm_host_cxx)
+set(CMAKE_CXX_STANDARD 17)
 # This cmake file is based on this guide to call C++ from rust
 # https://flames-of-code.netlify.app/blog/rust-and-cmake-cplusplus/
 
