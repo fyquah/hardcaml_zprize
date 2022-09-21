@@ -68,7 +68,7 @@ struct g1_projective_t {
 };
 
 namespace {
-std::ostream &operator<<(std::ostream &os, const biginteger256_t &point) {
+std::ostream __attribute__((unused)) &operator<<(std::ostream &os, const biginteger256_t &point) {
   os << "(";
   for (int i = 0; i < 4; i++) {
     if (i != 0) {
