@@ -15,7 +15,6 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", dst.display());
     // Phase `foo` here stands for the library name (without lib prefix and without .a suffix)
     //
-    println!("cargo:rustc-link-lib=static=zprize_msm_fpga");
     println!("cargo:rustc-link-lib=static=gmp");
 
     // C++ is bit more complicated, since platform specifics come to play
