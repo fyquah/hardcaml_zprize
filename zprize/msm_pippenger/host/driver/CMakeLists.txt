@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 set(CMAKE_CXX_STANDARD 17)
 
-set(COMMON_DIR ${CMAKE_SOURCE_DIR}/../../../libs/vitis_infrastructure/common)
+set(COMMON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../libs/vitis_infrastructure/common)
 
 message(STATUS "In driver/")
 # program to perform precomputation + stream points in
