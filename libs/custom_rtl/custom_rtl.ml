@@ -400,6 +400,7 @@ module type Rtl_internal = sig
     -> o:(string * int * Rtl_attribute.t list) list
     -> unit
 
+  val reg_initial_value : io -> string -> Signal.t -> unit
   val signal_decl : io -> string -> Signal.t -> unit
   val alias_decl : io -> string -> Signal.t -> unit
   val mem_decl : io -> name -> Names.mem_names -> Signal.t -> unit
@@ -473,6 +474,12 @@ module VerilogCore : Rtl_internal = struct
     write_strings io (decl_port Input) i;
     write_strings io (decl_port Output) o;
     io "\n"
+  ;;
+
+  let reg_initial_value io name s =
+    let w = Signal.width s in
+    let zero = Int.to_string w ^ "'" ^ String.init w ~f:(fun _ -> '0') in
+    io (sprintf "initial %s = %s;\n" name zero)
   ;;
 
   let signal_decl io name s =
@@ -870,6 +877,8 @@ module VhdlCore : Rtl_internal = struct
     io "\n"
   ;;
 
+  let reg_initial_value _ _ _ = ()
+
   let signal_decl io name s =
     match s with
     | Empty -> raise_unexpected ~while_:"declaring signals" ~got_signal:s
@@ -1175,10 +1184,13 @@ module Make (R : Rtl_internal) = struct
         (* aliases *)
         List.iter (secondary_names s) ~f:(fun name -> R.alias_decl io name s);
         (* special declarations *)
+        (match s with
+         | Mem _ | Multiport_mem _ ->
+           let mem_names = R.Names.mem_names nm s in
+           R.mem_decl io primary_name mem_names s
+         | _ -> ());
         match s with
-        | Mem _ | Multiport_mem _ ->
-          let mem_names = R.Names.mem_names nm s in
-          R.mem_decl io primary_name mem_names s
+        | Reg _ -> R.reg_initial_value io (primary_name s) s
         | _ -> ());
       io "\n";
       R.start_logic io;
