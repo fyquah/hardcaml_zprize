@@ -77,11 +77,13 @@ let command_test_vectors =
           ~data:
             (Array.map input_points ~f:(fun data ->
                let bits =
-                 Bits.(
-                   data.scalar
-                   @: Utils.Affine_point_with_t.Of_bits.pack data.affine_point_with_t)
+                 let x = Bits.uresize data.affine_point_with_t.x 384 in
+                 let y = Bits.uresize data.affine_point_with_t.y 384 in
+                 let t = Bits.uresize data.affine_point_with_t.t 384 in
+                 Bits.(data.scalar @: t @: y @: x)
                in
-               Bits.uresize bits (512 * Test_kernel.num_clocks_per_input)
+               assert (Bits.width bits <= 512 * 3);
+               Bits.uresize bits (512 * 3)
                |> Bits.to_constant
                |> Constant.to_hex_string ~signedness:Unsigned)
             |> Array.to_list
@@ -130,18 +132,15 @@ let command_test_vectors =
                  (Array.length bucket - 1)
                  ~f:(fun i ->
                    let v = bucket.(Array.length bucket - 1 - i) in
-                   let b =
-                     { Utils.Extended.t = of_z v.t
-                     ; x = of_z v.x
-                     ; y = of_z v.y
-                     ; z = of_z v.z
+                   let { Utils.Extended.x; y; z; t } =
+                     let u384_of_z x = Bits.uresize (of_z x) 384 in
+                     { Utils.Extended.t = u384_of_z v.t
+                     ; x = u384_of_z v.x
+                     ; y = u384_of_z v.y
+                     ; z = u384_of_z v.z
                      }
                    in
-                   let b_packed =
-                     Bits.uresize
-                       (Utils.Extended.Of_bits.pack b)
-                       (Test_kernel.num_clocks_per_output * 512)
-                   in
+                   let b_packed = Bits.(uresize (t @: z @: y @: x) (512 * 3)) in
                    Constant.to_hex_string ~signedness:Unsigned (Bits.to_constant b_packed))
                |> String.concat ~sep:"\n")
             |> Array.to_list
