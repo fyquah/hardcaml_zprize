@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
 set(CMAKE_CXX_STANDARD 17)
 
+message(STATUS "In driver/: current_source_dir: ${CMAKE_CURRENT_SOURCE_DIR}, source_dir: ${CMAKE_SOURCE_DIR}")
 set(COMMON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../libs/vitis_infrastructure/common)
 
-message(STATUS "In driver/")
 # program to perform precomputation + stream points in
 add_executable(host_msm host_msm.cpp ${COMMON_DIR}/includes/xcl2/xcl2.cpp)
 
