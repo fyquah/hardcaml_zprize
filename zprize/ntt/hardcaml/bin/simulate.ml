@@ -59,6 +59,11 @@ let command_kernel_for_vitis =
           "-log-cores"
           (optional_with_default 3 int)
           ~doc:" Log number of parallel cores"
+      and logblocks =
+        flag
+          "-log-blocks"
+          (optional_with_default 0 int)
+          ~doc:" Log number of parallel blocks"
       and waves = flag "-waves" no_arg ~doc:" Display interactive waveform"
       and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed"
       and verilator =
@@ -74,7 +79,7 @@ let command_kernel_for_vitis =
           Zprize_ntt_test.Test_kernel_for_vitis.Make (struct
             let logn = logn
             let logcores = logcores
-            let logblocks = 0
+            let logblocks = logblocks
             let support_4step_twiddle = true
           end)
         in
