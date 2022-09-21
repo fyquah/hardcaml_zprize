@@ -478,8 +478,8 @@ module VerilogCore : Rtl_internal = struct
 
   let reg_initial_value io name s =
     let w = Signal.width s in
-    let zero = Int.to_string w ^ "'" ^ String.init w ~f:(fun _ -> '0') in
-    io (sprintf "initial %s = %s;\n" name zero)
+    let zero = Int.to_string w ^ "'b" ^ String.init w ~f:(fun _ -> '0') in
+    io (sprintf "%sinitial %s = %s;\n" t4 name zero)
   ;;
 
   let signal_decl io name s =
