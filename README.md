@@ -82,7 +82,7 @@ After running the compile\_afi.sh script, there should be a folder 'afi/'. Get
 the afi id from the file afi/\...\_afi_id.txt this to get the afi id and run:
 
 ```
-aws ec2 describe-fpga-images --fpga-image-ids afi-04f8603ed1582001a
+aws ec2 describe-fpga-images --fpga-image-ids afi-06740c40be3315e44
 ```
 Which will show up as "available" when the image is ready to use.
 
