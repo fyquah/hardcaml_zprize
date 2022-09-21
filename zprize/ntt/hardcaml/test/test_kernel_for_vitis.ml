@@ -173,7 +173,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
       while !num_results <> n * n / num_cores do
         cycle ()
       done;
-      get_results [| !results |]
+      get_results !results
     in
     (try
        let pass1 = run_pass ~which:`First (transpose input_coefs) in
@@ -191,6 +191,23 @@ let%expect_test "vitis kernel test" =
     let logn = 5
     let logcores = 3
     let logblocks = 0
+    let support_4step_twiddle = true
+  end
+  in
+  let module Test = Make (Config) in
+  let input_coefs = Test.random_input_coef_matrix () in
+  ignore
+    (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
+      : Waveform.t option);
+  [%expect {|
+    "Hardware and software reference results match!" |}]
+;;
+
+let%expect_test "2 blocks" =
+  let module Config = struct
+    let logn = 5
+    let logcores = 3
+    let logblocks = 1
     let support_4step_twiddle = true
   end
   in
