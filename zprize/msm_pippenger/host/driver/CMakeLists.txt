@@ -3,6 +3,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(COMMON_DIR ${CMAKE_SOURCE_DIR}/../../../libs/vitis_infrastructure/common)
 
+message(STATUS "In driver/")
 # program to perform precomputation + stream points in
 add_executable(host_msm host_msm.cpp ${COMMON_DIR}/includes/xcl2/xcl2.cpp)
 
@@ -28,3 +29,5 @@ target_include_directories(host_buckets
 # add libraries to link against
 target_link_directories(host_buckets PUBLIC /opt/xilinx/xrt/lib)
 target_link_libraries(host_buckets PUBLIC OpenCL rt uuid xrt_coreutil xilinxopencl msm_compute gmp) # stdc++ 
+
+message(STATUS "Finished driver/")
