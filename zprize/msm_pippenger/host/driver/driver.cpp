@@ -70,6 +70,9 @@ class Driver {
       bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset);
       bit_offset += CUR_WINDOW_LEN;
     }
+    if (point_idx != NUM_OUTPUT_POINTS) {
+      printf("ERROR IN point_idx\n");
+    }
 
     final_result.extendedTwistedEdwardsToWeierstrass();
     return final_result;
@@ -78,7 +81,8 @@ class Driver {
   inline void feed_msm(g1_projective_t *out, biginteger256_t *scalars) {
     auto input_size = INPUT_SIZE();
     auto output_size = OUTPUT_SIZE;
-    printf("Running MSM with [%i] input points and [%i] output points\n", numPoints(), NUM_OUTPUT_POINTS);
+    printf("Running MSM with [%i] input points and [%i] output points\n", numPoints(),
+           NUM_OUTPUT_POINTS);
     printf("input_size = [%i], output_size = [%i] n", input_size, output_size);
 
     // Allocate Memory in Host Memory
@@ -196,9 +200,9 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
   bls12_377_g1::init();
   std::vector<bls12_377_g1::Xyzt> points(npoints);
   for (ssize_t i = 0; i < npoints; i++) {
-    //std::cout << rust_points[i] << std::endl;
+    // std::cout << rust_points[i] << std::endl;
     points[i].copy_from_rust_type(rust_points[i]);
-    //points[i].println();
+    // points[i].println();
   }
   auto *driver = new Driver(points, binaryFile);
   return driver;
@@ -207,8 +211,7 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
 extern "C" void msm_mult(Driver *driver, g1_projective_t *out, uint64_t batch_size,
                          biginteger256_t *scalars) {
   for (uint64_t i = 0; i < batch_size; i++) {
-    printf("Running MSM (Batch %lu) with [%lu] input points\n", i,
-           driver->numPoints());
+    printf("Running MSM (Batch %lu) with [%lu] input points\n", i, driver->numPoints());
 
     driver->feed_msm(out + i, scalars + (i * driver->numPoints()));
   }
