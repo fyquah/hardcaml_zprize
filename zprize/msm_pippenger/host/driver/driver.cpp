@@ -24,9 +24,11 @@
 class Driver {
  private:
   std::vector<bls12_377_g1::Xyzt> points;
+  const std::string binaryFile;
 
  public:
-  Driver(const std::vector<bls12_377_g1::Xyzt> &points) : points(points) {}
+  Driver(const std::vector<bls12_377_g1::Xyzt> &points, const std::string &binaryFile)
+      : points(points), binaryFile(binaryFile) {}
 
   const int NUM_OUTPUT_POINTS = 90091;
   const size_t OUTPUT_SIZE = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
@@ -73,7 +75,6 @@ class Driver {
   }
 
   inline void feed_msm(g1_projective_t *out, biginteger256_t *scalars) {
-    const std::string binaryFile = "";
     auto input_size = INPUT_SIZE();
     auto output_size = OUTPUT_SIZE;
 
@@ -185,7 +186,8 @@ class Driver {
   }
 };
 
-extern "C" Driver *msm_init(g1_affine_t *rust_points, ssize_t npoints) {
+extern "C" Driver *msm_init(g1_affine_t *rust_points, ssize_t npoints,
+                            const std::string &binaryFile) {
   bls12_377_g1::init();
   std::vector<bls12_377_g1::Xyzt> points(npoints);
   for (ssize_t i = 0; i < npoints; i++) {
@@ -193,7 +195,7 @@ extern "C" Driver *msm_init(g1_affine_t *rust_points, ssize_t npoints) {
     points[i].copy_from_rust_type(rust_points[i]);
     points[i].println();
   }
-  auto *driver = new Driver(points);
+  auto *driver = new Driver(points, binaryFile);
   return driver;
 }
 

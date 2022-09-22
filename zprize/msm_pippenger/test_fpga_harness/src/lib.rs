@@ -34,6 +34,7 @@ pub struct MultiScalarMultContext {
 }
 
 pub fn multi_scalar_mult_init<G: AffineCurve>(
+    xclbin: &[u8],
     points: &[G],
 ) -> MultiScalarMultContext {
     let ret = unsafe {
