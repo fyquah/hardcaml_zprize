@@ -116,7 +116,6 @@ AFI-id | AFI-gid | Notes
 ------- | ------- | -----
  afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned.
  afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering 
- msm-controller-optimizations-d0e30e71a8c77aabfbe42693d77e986e42fe7e81 Some controller optimizations, inputs and outputs 64b aligned, double buffering, pblocked to SLR1 and only 7 windows
  
 # Running `host_buckets.exe`
 
