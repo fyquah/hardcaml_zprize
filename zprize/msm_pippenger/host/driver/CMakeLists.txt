@@ -31,7 +31,7 @@ target_link_directories(host_buckets PUBLIC /opt/xilinx/xrt/lib)
 target_link_libraries(host_buckets PUBLIC OpenCL rt uuid xrt_coreutil xilinxopencl msm_compute gmp) # stdc++ 
 
 # main driver program
-add_library(driver STATIC host_buckets.cpp ${COMMON_DIR}/includes/xcl2/xcl2.cpp)
+add_library(driver SHARED driver.cpp ${COMMON_DIR}/includes/xcl2/xcl2.cpp)
 
 # add include directories
 target_include_directories(driver
@@ -41,7 +41,7 @@ target_include_directories(driver
 
 # add libraries to link against
 target_link_directories(driver PUBLIC /opt/xilinx/xrt/lib)
-target_link_libraries(driver PUBLIC OpenCL rt uuid xrt_coreutil xilinxopencl msm_compute gmp) # stdc++ 
+target_link_libraries(driver PUBLIC OpenCL rt uuid xrt_coreutil xilinxopencl gmp PRIVATE msm_compute) # stdc++
 
 
 message(STATUS "Finished driver/")

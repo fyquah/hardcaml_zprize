@@ -15,6 +15,6 @@ install(TARGETS driver DESTINATION .)
 
 # install(TARGETS gmp DESTINATION .)
 install(
-  FILES ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmp.a
-  ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmpxx.a
+  FILES ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmp.so
+  ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmpxx.so
   DESTINATION .)

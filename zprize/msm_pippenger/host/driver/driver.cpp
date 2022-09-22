@@ -1,6 +1,7 @@
 #include "xcl2.hpp"
 
 #include "bls12_377_g1/bls12_377_g1.h"
+#include "bls12_377_g1/pippenger.h"
 #include "bls12_377_g1/rust_types.h"
 #include "bls12_377_g1/log_time.h"
 
@@ -88,12 +89,12 @@ class Driver {
     memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
 
     // Load points from library representation
-    for (int i = 0; i < numPoints(); i++) {
+    for (uint64_t i = 0; i < numPoints(); i++) {
       const int NUM_32B_WORDS_PER_SCALAR = 256 / 32;
       uint32_t *base_ptr = &source_kernel_input[i];
 
       // load the scalar
-      scalar[i].copy_to_fpga_buffer(base_ptr);
+      scalars[i].copy_to_fpga_buffer(base_ptr);
       // load the point
       points[i].copy_to_fpga_buffer(base_ptr + NUM_32B_WORDS_PER_SCALAR);
     }
@@ -192,9 +193,9 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
   bls12_377_g1::init();
   std::vector<bls12_377_g1::Xyzt> points(npoints);
   for (ssize_t i = 0; i < npoints; i++) {
-    std::cout << rust_points[i] << std::endl;
+    //std::cout << rust_points[i] << std::endl;
     points[i].copy_from_rust_type(rust_points[i]);
-    points[i].println();
+    //points[i].println();
   }
   auto *driver = new Driver(points, binaryFile);
   return driver;
@@ -203,9 +204,9 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
 extern "C" void msm_mult(Driver *driver, g1_projective_t *out, uint64_t batch_size,
                          biginteger256_t *scalars) {
   for (uint64_t i = 0; i < batch_size; i++) {
-    printf("Running MSM (Batch %i) with [%i] input points and [%i] output points\n", i,
-           driver->numPoints(), NUM_OUTPUT_POINTS);
+    printf("Running MSM (Batch %lu) with [%lu] input points\n", i,
+           driver->numPoints());
 
-    driver->feed_msm(out + i, scalars + (i * context->numPoints()));
+    driver->feed_msm(out + i, scalars + (i * driver->numPoints()));
   }
 }
