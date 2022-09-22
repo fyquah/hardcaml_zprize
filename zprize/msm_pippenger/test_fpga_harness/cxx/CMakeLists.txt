@@ -1,3 +1,6 @@
+cmake_minimum_required(VERSION 3.13.1)
+project(msm_host_cxx)
+set(CMAKE_CXX_STANDARD 17)
 # This cmake file is based on this guide to call C++ from rust
 # https://flames-of-code.netlify.app/blog/rust-and-cmake-cplusplus/
 
@@ -12,6 +15,6 @@ install(TARGETS driver DESTINATION .)
 
 # install(TARGETS gmp DESTINATION .)
 install(
-  FILES ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmp.a
-  FILES ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmpxx.a
+  FILES ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmp.so
+  ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmpxx.so
   DESTINATION .)

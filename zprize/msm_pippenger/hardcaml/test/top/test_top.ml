@@ -143,7 +143,6 @@ let%expect_test "Test over small input size and small number of scalars" =
     let scalar_bits = 5
     let controller_log_stall_fifo_depth = 2
     let window_size_bits = 2
-    let ram_read_latency = 1
   end
   in
   let module Test = Make (Config) in

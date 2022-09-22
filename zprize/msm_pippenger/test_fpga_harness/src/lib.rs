@@ -7,6 +7,7 @@ use ark_ec::AffineCurve;
 use ark_ff::PrimeField;
 use ark_std::Zero;
 use std::os::raw::c_void;
+use std::os::raw::c_char;
 
 #[allow(unused_imports)]
 use blst::*;
@@ -16,6 +17,8 @@ pub mod util;
 #[cfg_attr(feature = "quiet", allow(improper_ctypes))]
 extern "C" {
     fn msm_init(
+        xclbin: *const u8,
+        xclbin_len: usize,
         points: *const G1Affine,
         npoints: usize,
     ) -> *mut c_void;
@@ -34,10 +37,13 @@ pub struct MultiScalarMultContext {
 }
 
 pub fn multi_scalar_mult_init<G: AffineCurve>(
+    xclbin: String,
     points: &[G],
 ) -> MultiScalarMultContext {
     let ret = unsafe {
         let context = msm_init(
+            xclbin.as_ptr() as *const u8,
+            xclbin.len(),
             points as *const _ as *const G1Affine,
             points.len(),
         );
