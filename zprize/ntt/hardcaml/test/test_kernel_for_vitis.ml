@@ -3,6 +3,8 @@ open Hardcaml
 open! Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
+let random_bool ~p_true = Float.(Random.float 1.0 < p_true)
+
 module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
   module Kernel = Zprize_ntt.For_vitis.Make (Config)
@@ -100,10 +102,12 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let cycle ?(n = 1) () =
       assert (n > 0);
       for _ = 1 to n do
-        if Bits.to_bool !(outputs.compute_to_controller.tvalid)
+        let tready = random_bool ~p_true:0.7 in
+        if Bits.to_bool !(outputs.compute_to_controller.tvalid) && tready
         then (
           results := !(outputs.compute_to_controller.tdata) :: !results;
           Int.incr num_results);
+        inputs.compute_to_controller_dest.tready := Bits.of_bool tready;
         Cyclesim.cycle sim
       done
     in
@@ -130,6 +134,10 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
          assert (Bits.to_bool !(controller_to_compute_dest.tready));
          for pass = 0 to num_passes - 1 do
            for i = 0 to n - 1 do
+             controller_to_compute.tvalid := Bits.gnd;
+             while not (random_bool ~p_true:0.7) do
+               cycle ()
+             done;
              controller_to_compute.tvalid := Bits.vdd;
              controller_to_compute.tdata
                := List.init num_cores ~f:(fun core ->
@@ -141,10 +149,9 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
              done;
              cycle ()
            done;
-           controller_to_compute.tvalid := Bits.gnd;
+           controller_to_compute.tvalid := Bits.gnd
            (* assert (not (Bits.to_bool !(controller_to_compute_dest.tready))) *)
            (* A few cycles of flushing after each pass *)
-           cycle ~n:4 ()
          done
        | `Second ->
          while not (Bits.to_bool !(controller_to_compute_dest.tready)) do
@@ -154,6 +161,10 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
            for j = 0 to (n / 8) - 1 do
              for k = 0 to 8 - 1 do
                let indices = List.init 8 ~f:(fun l -> (8 * i) + k, (8 * j) + l) in
+               while not (random_bool ~p_true:0.7) do
+                 controller_to_compute.tvalid := Bits.gnd;
+                 cycle ()
+               done;
                controller_to_compute.tvalid := Bits.vdd;
                controller_to_compute.tdata
                  := List.map indices ~f:(fun (r, c) -> coefs.(r).(c))

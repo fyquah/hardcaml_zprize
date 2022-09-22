@@ -18,6 +18,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) : sig
       ; rd_addr : 'a
       ; rd_en : 'a
       ; block : 'a
+      ; first_preroll : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

@@ -33,6 +33,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
       ; rd_addr : 'a [@bits logn]
       ; rd_en : 'a [@bits blocks]
       ; block : 'a [@bits max 1 Config.logblocks]
+      ; first_preroll : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -46,18 +47,28 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let addr_next = addr.value +:. 1 in
     let block = Var.reg spec ~width:(max 1 logblocks) in
     let sync = Var.reg spec ~width:logsync in
+    let first_preroll = Var.reg spec ~width:1 in
     let rd_en = Var.wire ~default:gnd in
     let tvalid = Var.reg spec ~width:1 in
     let tready = i.tready in
     Always.(
       compile
         [ sm.switch
-            [ Start, [ block <--. 0; addr <--. 0; when_ i.start [ sm.set_next Preroll ] ]
+            [ ( Start
+              , [ block <--. 0
+                ; addr <--. 0
+                ; when_ i.start [ first_preroll <--. 1; sm.set_next Preroll ]
+                ] )
             ; ( Preroll
-              , [ rd_en <-- vdd
-                ; addr <-- addr_next
-                ; sync <-- sync.value +:. 1
-                ; when_ (sync.value ==:. -1) [ tvalid <-- vdd; sm.set_next Stream ]
+              , [ when_
+                    (tready |: first_preroll.value)
+                    [ rd_en <-- vdd
+                    ; addr <-- addr_next
+                    ; sync <-- sync.value +:. 1
+                    ; when_
+                        (sync.value ==:. -1)
+                        [ tvalid <-- vdd; first_preroll <--. 0; sm.set_next Stream ]
+                    ]
                 ] )
             ; ( Stream
               , [ when_
@@ -91,6 +102,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     ; rd_addr = addr.value.:[logn - 1, 0]
     ; rd_en = mask_by_block rd_en.value
     ; block = block.value
+    ; first_preroll = first_preroll.value
     }
   ;;
 

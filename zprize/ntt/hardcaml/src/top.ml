@@ -92,10 +92,14 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
             (* We're assuming vivado will do some rejigging here.  We could/should
                instantiate a pipelined mux. *)
             pipe
+              ~enable:(store_sm.first_preroll |: i.data_out_dest.tready)
               ~n:2
               (let qs =
                  List.init blocks ~f:(fun index ->
-                   cores.rd_q.(index) |> Array.to_list |> concat_lsb |> pipe ~n:1)
+                   cores.rd_q.(index)
+                   |> Array.to_list
+                   |> concat_lsb
+                   |> pipe ~n:1 ~enable:(store_sm.first_preroll |: i.data_out_dest.tready))
                in
                if Config.logblocks = 0 then List.nth_exn qs 0 else mux store_sm.block qs)
         ; tlast = gnd
