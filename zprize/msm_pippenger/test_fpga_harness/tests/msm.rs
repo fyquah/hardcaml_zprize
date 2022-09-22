@@ -21,7 +21,7 @@ fn msm_correctness() {
     let (points, scalars) =
         util::generate_points_scalars::<G1Affine>(1usize << npoints_npow, batches);
 
-    let mut context = multi_scalar_mult_init(points.as_slice(), test_xclbin.as_slice());
+    let mut context = multi_scalar_mult_init(test_xclbin, points.as_slice());
     let msm_results = multi_scalar_mult(&mut context, points.as_slice(), unsafe {
         std::mem::transmute::<&[_], &[BigInteger256]>(scalars.as_slice())
     });

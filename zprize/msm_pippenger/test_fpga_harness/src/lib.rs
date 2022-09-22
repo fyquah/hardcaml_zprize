@@ -16,6 +16,8 @@ pub mod util;
 #[cfg_attr(feature = "quiet", allow(improper_ctypes))]
 extern "C" {
     fn msm_init(
+        xclbin: *const c_char,
+        xclbin_len: usize,
         points: *const G1Affine,
         npoints: usize,
     ) -> *mut c_void;
@@ -34,11 +36,13 @@ pub struct MultiScalarMultContext {
 }
 
 pub fn multi_scalar_mult_init<G: AffineCurve>(
-    xclbin: &[u8],
+    xclbin: String,
     points: &[G],
 ) -> MultiScalarMultContext {
     let ret = unsafe {
         let context = msm_init(
+            xclbin.as_ptr(),
+            xclbin.len(),
             points as *const _ as *const G1Affine,
             points.len(),
         );

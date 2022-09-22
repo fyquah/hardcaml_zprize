@@ -186,8 +186,9 @@ class Driver {
   }
 };
 
-extern "C" Driver *msm_init(g1_affine_t *rust_points, ssize_t npoints,
-                            const std::string &binaryFile) {
+extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t *rust_points,
+                            ssize_t npoints) {
+  std::string binaryFile(xclbin, xclbin_len);
   bls12_377_g1::init();
   std::vector<bls12_377_g1::Xyzt> points(npoints);
   for (ssize_t i = 0; i < npoints; i++) {
