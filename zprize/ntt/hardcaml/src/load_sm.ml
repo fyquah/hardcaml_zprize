@@ -6,11 +6,13 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
+  let logsync = 1
 
   module State = struct
     type t =
       | Start
       | Stream
+      | Sync
     [@@deriving sexp_of, compare, enumerate]
   end
 
@@ -36,12 +38,13 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
 
   module Var = Always.Variable
 
-  let create (i : _ I.t) =
+  let create _scope (i : _ I.t) =
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
     let addr = Var.reg spec ~width:logn in
     let addr_next = addr.value +:. 1 in
     let block = Var.reg spec ~width:(max 1 logblocks) in
+    let sync = Var.reg spec ~width:logsync in
     let tvalid = i.tvalid in
     Always.(
       compile
@@ -55,10 +58,14 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                         (addr_next ==:. 0)
                         [ block <-- block.value +:. 1
                         ; (if Config.logblocks = 0
-                          then sm.set_next Start
-                          else when_ (block.value ==:. blocks - 1) [ sm.set_next Start ])
+                          then sm.set_next Sync
+                          else when_ (block.value ==:. blocks - 1) [ sm.set_next Sync ])
                         ]
                     ]
+                ] )
+            ; ( Sync
+              , [ sync <-- sync.value +:. 1
+                ; when_ (sync.value ==:. -1) [ sm.set_next Start ]
                 ] )
             ]
         ]);
@@ -67,11 +74,16 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
       if Config.logblocks = 0 then x else repeat x blocks &: block1h
     in
     let done_ = sm.is Start in
-    let processing = ~:done_ in
+    let processing = sm.is Stream in
     { O.done_
     ; tready = processing
     ; wr_en = mask_by_block (processing &: tvalid)
     ; wr_addr = addr.value
     }
+  ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"load_sm" ~scope create
   ;;
 end

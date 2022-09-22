@@ -12,7 +12,7 @@ end)
 module Sim = Cyclesim.With_interface (Store_sm.I) (Store_sm.O)
 
 let test_store_sm () =
-  let sim = Sim.create Store_sm.create in
+  let sim = Sim.create (Store_sm.create (Scope.create ())) in
   let i = Cyclesim.inputs sim in
   let waves, sim = Waveform.create sim in
   let cycle () = Cyclesim.cycle sim in

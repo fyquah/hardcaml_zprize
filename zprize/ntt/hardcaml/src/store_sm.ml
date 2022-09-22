@@ -6,6 +6,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
+  let logsync = 2
 
   module State = struct
     type t =
@@ -38,12 +39,13 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
 
   module Var = Always.Variable
 
-  let create (i : _ I.t) =
+  let create _scope (i : _ I.t) =
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
     let addr = Var.reg spec ~width:(logn + 1) in
     let addr_next = addr.value +:. 1 in
     let block = Var.reg spec ~width:(max 1 logblocks) in
+    let sync = Var.reg spec ~width:logsync in
     let rd_en = Var.wire ~default:gnd in
     let tvalid = Var.reg spec ~width:1 in
     let tready = i.tready in
@@ -51,14 +53,19 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
       compile
         [ sm.switch
             [ Start, [ block <--. 0; addr <--. 0; when_ i.start [ sm.set_next Preroll ] ]
-            ; Preroll, [ rd_en <-- vdd; addr <--. 1; tvalid <-- vdd; sm.set_next Stream ]
+            ; ( Preroll
+              , [ rd_en <-- vdd
+                ; addr <-- addr_next
+                ; sync <-- sync.value +:. 1
+                ; when_ (sync.value ==:. -1) [ tvalid <-- vdd; sm.set_next Stream ]
+                ] )
             ; ( Stream
               , [ when_
                     tready
                     [ addr <-- addr_next
                     ; rd_en <-- vdd
                     ; when_
-                        (addr.value ==:. 1 lsl logn)
+                        (addr.value ==:. (1 lsl logn) + ((1 lsl logsync) - 1))
                         [ tvalid <-- gnd
                         ; addr <--. 0
                         ; block <-- block.value +:. 1
@@ -85,5 +92,10 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     ; rd_en = mask_by_block rd_en.value
     ; block = block.value
     }
+  ;;
+
+  let hierarchy scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~name:"store_sm" ~scope create
   ;;
 end

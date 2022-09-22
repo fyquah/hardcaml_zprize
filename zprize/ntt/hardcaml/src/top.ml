@@ -42,7 +42,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let start_input = wire 1 in
     let start_output = wire 1 in
     let load_sm =
-      Load_sm.create
+      Load_sm.hierarchy
+        scope
         { Load_sm.I.clock = i.clock
         ; clear = i.clear
         ; tvalid = i.data_in.tvalid
@@ -50,13 +51,15 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         }
     in
     let store_sm =
-      Store_sm.create
+      Store_sm.hierarchy
+        scope
         { Store_sm.I.clock = i.clock
         ; clear = i.clear
         ; tready = i.data_out_dest.tready
         ; start = start_output
         }
     in
+    let pipe = pipeline (Reg_spec.create ~clock:i.clock ()) in
     let cores =
       Four_step.create
         ~build_mode
@@ -67,11 +70,14 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         ; first_4step_pass = i.first_4step_pass
         ; wr_d =
             (let d =
-               i.data_in.tdata |> split_lsb ~part_width:Gf.num_bits |> Array.of_list
+               i.data_in.tdata
+               |> pipe ~n:2
+               |> split_lsb ~part_width:Gf.num_bits
+               |> Array.of_list
              in
              Array.init blocks ~f:(Fn.const d))
-        ; wr_en = load_sm.wr_en
-        ; wr_addr = Array.init blocks ~f:(Fn.const load_sm.wr_addr)
+        ; wr_en = pipe ~n:2 load_sm.wr_en
+        ; wr_addr = Array.init blocks ~f:(Fn.const (pipe ~n:2 load_sm.wr_addr))
         ; rd_en = store_sm.rd_en
         ; rd_addr = Array.init blocks ~f:(Fn.const store_sm.rd_addr)
         ; input_done = load_sm.done_
@@ -83,11 +89,15 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     { O.data_out =
         { Axi_stream.Source.tvalid = store_sm.tvalid
         ; tdata =
-            (let qs =
-               List.init blocks ~f:(fun index ->
-                 cores.rd_q.(index) |> Array.to_list |> concat_lsb)
-             in
-             if Config.logblocks = 0 then List.nth_exn qs 0 else mux store_sm.block qs)
+            (* We're assuming vivado will do some rejigging here.  We could/should
+               instantiate a pipelined mux. *)
+            pipe
+              ~n:2
+              (let qs =
+                 List.init blocks ~f:(fun index ->
+                   cores.rd_q.(index) |> Array.to_list |> concat_lsb |> pipe ~n:1)
+               in
+               if Config.logblocks = 0 then List.nth_exn qs 0 else mux store_sm.block qs)
         ; tlast = gnd
         ; tkeep = ones (num_cores * Gf.num_bits / 8)
         ; tstrb = ones (num_cores * Gf.num_bits / 8)
