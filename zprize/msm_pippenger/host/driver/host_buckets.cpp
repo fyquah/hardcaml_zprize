@@ -155,6 +155,7 @@ int test_streaming(const std::string& binaryFile, std::string& input_points, std
     // Set the "Kernel 0" Arguments
     OCL_CHECK(err, err = krnl_mm2s.setArg(0, buffer_input));
     OCL_CHECK(err, err = krnl_mm2s.setArg(2, input_size));
+    OCL_CHECK(err, err = krnl_mm2s.setArg(3, (uint8_t) 1));
 
     // Set the "Kernel 1" Arguments
     OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
