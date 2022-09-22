@@ -74,6 +74,7 @@ class Driver {
       printf("ERROR IN point_idx\n");
     }
 
+    // final_result.println();
     final_result.extendedTwistedEdwardsToWeierstrass();
     return final_result;
   }
@@ -95,14 +96,18 @@ class Driver {
     memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
 
     // Load points from library representation
+    uint32_t *base_ptr = source_kernel_input.data();
+    printf("%i", (int)(BYTES_PER_INPUT / 4));
     for (uint64_t i = 0; i < numPoints(); i++) {
       const int NUM_32B_WORDS_PER_SCALAR = 256 / 32;
-      uint32_t *base_ptr = &source_kernel_input[i];
+      const int NUM_32B_WORDS_PER_POINT = (256 * 5) / 32;
+      // uint32_t *base_ptr = &source_kernel_input[i * (BYTES_PER_INPUT / 4)];
 
-      // load the scalar
-      scalars[i].copy_to_fpga_buffer(base_ptr);
       // load the point
-      points[i].copy_to_fpga_buffer(base_ptr + NUM_32B_WORDS_PER_SCALAR);
+      points[i].copy_to_fpga_buffer(base_ptr);
+      // load the scalar
+      scalars[i].copy_to_fpga_buffer(base_ptr + (1152 / 32));
+      base_ptr += (BYTES_PER_INPUT) / 4;
     }
 
     cl_int err;
