@@ -110,6 +110,13 @@ Now you can run the host.exe test program:
 ./host.exe  msm_pippenger.link.awsxclbin input.points output.points
 ```
 
+## AFI-ids
+A place to record AFI image ids and keep track of what point in the code they were made.
+AFI-id | AFI-gid | Notes
+------- | ------- | -----
+ afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned.
+ afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering 
+ 
 # Running `host_buckets.exe`
 
 `host_buckets.exe` is a debug application that pumps test vectors into the
