@@ -32,10 +32,10 @@ class Driver {
       : points(points), binaryFile(binaryFile) {}
 
   const int NUM_OUTPUT_POINTS = 90091;
-  const size_t OUTPUT_SIZE = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
+  const int OUTPUT_SIZE = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
 
   inline uint64_t numPoints() { return points.size(); }
-  inline auto INPUT_SIZE() { return (BYTES_PER_INPUT * numPoints()) / 4; }
+  inline int INPUT_SIZE() { return (BYTES_PER_INPUT * numPoints()) / 4; }
 
   bls12_377_g1::Xyzt postProcess(const uint32_t *source_kernel_output) {
     const size_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
@@ -78,6 +78,8 @@ class Driver {
   inline void feed_msm(g1_projective_t *out, biginteger256_t *scalars) {
     auto input_size = INPUT_SIZE();
     auto output_size = OUTPUT_SIZE;
+    printf("Running MSM with [%i] input points and [%i] output points\n", numPoints(), NUM_OUTPUT_POINTS);
+    printf("input_size = [%i], output_size = [%i] n", input_size, output_size);
 
     // Allocate Memory in Host Memory
     size_t vector_input_size_bytes = sizeof(int) * input_size;
@@ -190,6 +192,7 @@ class Driver {
 extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t *rust_points,
                             ssize_t npoints) {
   std::string binaryFile(xclbin, xclbin_len);
+  printf("Initializing with XCLBIN=%s\n", binaryFile.c_str());
   bls12_377_g1::init();
   std::vector<bls12_377_g1::Xyzt> points(npoints);
   for (ssize_t i = 0; i < npoints; i++) {

@@ -435,10 +435,10 @@ class Xyzt {
     y.set((uint64_t *)affine.y.data);
     y.set_div(y, COFACTOR);
 
-    printf("\n\nINITIAL POINT IN C++ -----------------\n");
-    dump();
-    println_hex();
-    printf("\n\n--------------------------------------\n");
+    //printf("\n\nINITIAL POINT IN C++ -----------------\n");
+    //dump();
+    //println_hex();
+    //printf("\n\n--------------------------------------\n");
 
     affineWeierstrassToExtendedTwistedEdwards();
   }
