@@ -7,6 +7,7 @@ use ark_ec::AffineCurve;
 use ark_ff::PrimeField;
 use ark_std::Zero;
 use std::os::raw::c_void;
+use std::os::raw::c_char;
 
 #[allow(unused_imports)]
 use blst::*;
