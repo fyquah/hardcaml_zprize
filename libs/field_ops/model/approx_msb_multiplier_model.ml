@@ -18,42 +18,52 @@ let calc_k radix w =
   | Radix.Radix_3 -> Float.to_int (Float.( * ) (Float.of_int w) 0.33)
 ;;
 
-let rec estimated_upper_bound_error ~radices ~w =
+let rec estimated_upper_bound_error ~radices ~hi ~lo =
+  let w = hi - lo + 1 in
+  assert (w > 0);
   match radices with
   | [] -> Z.zero
   | hd :: tl ->
     let k = calc_k hd w in
     let k2 = k * 2 in
     (match hd with
-    | Radix_2 ->
-      let child = estimated_upper_bound_error ~radices:tl ~w:(w - k) in
-      Z.((one lsl k2) + ((one lsl k) * (child + child)))
-    | Radix_3 ->
-      (*
-       *  = x2y2 * 2^4k
-       *    + (x2y1 + x1y2) * 2^3k
-       *    + (x2y0 + x1y1 + x0y2) * 2^2k
-       *    + (x1y0 + x0y1) * 2^k
-       *    + x0y0
-       *
-       * Approximated by
-       *
-       *  = x2y2 * 2^4k
-       *    + (x2y1 + x1y2) * 2^3k
-       *    + (x2y0 + x1y1 + x0y2) * 2^2k  <-- use approximation recursively here.
-       *
-       *  The error terms are:
-       *  -    1 * 2^(2k)                        (due to x0y0)
-       *  -  2^k * (2^(2k) + 2^(2k))             (due to (x1y0 + x0y1) * 2^k)
-       *  - 2^2k * (recur() + recur() + recur())
-       *)
-      let t0 = Z.((one lsl k2) lsl 0) in
-      let t1 = Z.(((one lsl k2) + (one lsl k2)) lsl k) in
-      let t2 =
-        let child = estimated_upper_bound_error ~radices:tl ~w:(w - k2) in
-        Z.((child + child + child) lsl k2)
-      in
-      Z.(t0 + t1 + t2))
+     | Radix_2 ->
+       (* x1y1 * 2^2k
+        * + (x1y0 + x0y1) * 2^k  <-- partial sum here
+        * + x0y0
+        *)
+       let w0 = k in
+       let w1 = w - k in
+       let child =
+         estimated_upper_bound_error ~radices:tl ~hi:((w1 * w0) + k - 1) ~lo:k
+       in
+       Z.((one lsl k2) + ((one lsl k) * (child + child)))
+     | Radix_3 ->
+       (*
+        *  = x2y2 * 2^4k
+        *    + (x2y1 + x1y2) * 2^3k
+        *    + (x2y0 + x1y1 + x0y2) * 2^2k
+        *    + (x1y0 + x0y1) * 2^k
+        *    + x0y0
+        *
+        * Approximated by
+        *
+        *  = x2y2 * 2^4k
+        *    + (x2y1 + x1y2) * 2^3k
+        *    + (x2y0 + x1y1 + x0y2) * 2^2k  <-- use approximation recursively here.
+        *
+        *  The error terms are:
+        *  -    1 * 2^(2k)                        (due to x0y0)
+        *  -  2^k * (2^(2k) + 2^(2k))             (due to (x1y0 + x0y1) * 2^k)
+        *  - 2^2k * (recur() + recur() + recur())
+        *)
+       let t0 = Z.((one lsl k2) lsl 0) in
+       let t1 = Z.(((one lsl k2) + (one lsl k2)) lsl k) in
+       let t2 =
+         let child = estimated_upper_bound_error ~radices:tl ~w:(w - k2) in
+         Z.((child + child + child) lsl k2)
+       in
+       Z.(t0 + t1 + t2))
 ;;
 
 let ceil_div x b =
@@ -92,44 +102,44 @@ let rec approx_msb_multiply ~radices:arg_radices ~w a b =
   | hd :: tl ->
     let k = calc_k hd w in
     (match hd with
-    | Radix.Radix_2 ->
-      let k2 = k * 2 in
-      let ua, la = split_top_and_btm ~k a in
-      let ub, lb = split_top_and_btm ~k b in
-      let ua_mult_lb = Z.(approx_msb_multiply ~radices:tl ~w:Int.(w - k) ua lb lsl k) in
-      let ub_mult_la = Z.(approx_msb_multiply ~radices:tl ~w:Int.(w - k) ub la lsl k) in
-      let ua_mult_ub = Z.((ua * ub) lsl k2) in
-      Z.(ua_mult_ub + ub_mult_la + ua_mult_lb)
-    | Radix_3 ->
-      let k2 = k * 2 in
-      let k3 = k * 3 in
-      let k4 = k * 4 in
-      let x2, x1, x0 = split3 ~k a in
-      let y2, y1, y0 = split3 ~k b in
-      (*
-       *  = x2y2 * 2^4k
-       *    + (x2y1 + x1y2) * 2^3k
-       *    + (x2y0 + x1y1 + x0y2) * 2^2k
-       *    + (x1y0 + x0y1) * 2^k
-       *    + x0y0
-       *
-       * Approximated by
-       *
-       *  = x2y2 * 2^4k
-       *    + (x2y1 + x1y2) * 2^3k
-       *    + (x2y0 + x1y1 + x0y2) * 2^2k  <-- use approximation recursively here.
-       *)
-      let x2y2 = Z.(x2 * y2) in
-      let x2y1 = Z.(x2 * y1) in
-      let x1y2 = Z.(x1 * y2) in
-      let x2y0 = approx_msb_multiply ~radices:tl ~w:(w - (2 * k)) x2 y0 in
-      let x1y1 = approx_msb_multiply ~radices:tl ~w:(w - (2 * k)) x1 y1 in
-      let x0y2 = approx_msb_multiply ~radices:tl ~w:(w - (2 * k)) x0 y2 in
-      let result =
-        Z.((x2y2 lsl k4) + ((x2y1 + x1y2) lsl k3) + ((x2y0 + x1y1 + x0y2) lsl k2))
-      in
-      assert (Z.equal result Z.zero || Z.log2up result <= 2 * w);
-      result)
+     | Radix.Radix_2 ->
+       let k2 = k * 2 in
+       let ua, la = split_top_and_btm ~k a in
+       let ub, lb = split_top_and_btm ~k b in
+       let ua_mult_lb = Z.(approx_msb_multiply ~radices:tl ~w:Int.(w - k) ua lb lsl k) in
+       let ub_mult_la = Z.(approx_msb_multiply ~radices:tl ~w:Int.(w - k) ub la lsl k) in
+       let ua_mult_ub = Z.((ua * ub) lsl k2) in
+       Z.(ua_mult_ub + ub_mult_la + ua_mult_lb)
+     | Radix_3 ->
+       let k2 = k * 2 in
+       let k3 = k * 3 in
+       let k4 = k * 4 in
+       let x2, x1, x0 = split3 ~k a in
+       let y2, y1, y0 = split3 ~k b in
+       (*
+        *  = x2y2 * 2^4k
+        *    + (x2y1 + x1y2) * 2^3k
+        *    + (x2y0 + x1y1 + x0y2) * 2^2k
+        *    + (x1y0 + x0y1) * 2^k
+        *    + x0y0
+        *
+        * Approximated by
+        *
+        *  = x2y2 * 2^4k
+        *    + (x2y1 + x1y2) * 2^3k
+        *    + (x2y0 + x1y1 + x0y2) * 2^2k  <-- use approximation recursively here.
+        *)
+       let x2y2 = Z.(x2 * y2) in
+       let x2y1 = Z.(x2 * y1) in
+       let x1y2 = Z.(x1 * y2) in
+       let x2y0 = approx_msb_multiply ~radices:tl ~w:(w - (2 * k)) x2 y0 in
+       let x1y1 = approx_msb_multiply ~radices:tl ~w:(w - (2 * k)) x1 y1 in
+       let x0y2 = approx_msb_multiply ~radices:tl ~w:(w - (2 * k)) x0 y2 in
+       let result =
+         Z.((x2y2 lsl k4) + ((x2y1 + x1y2) lsl k3) + ((x2y0 + x1y1 + x0y2) lsl k2))
+       in
+       assert (Z.equal result Z.zero || Z.log2up result <= 2 * w);
+       result)
 ;;
 
 let%expect_test "" =
