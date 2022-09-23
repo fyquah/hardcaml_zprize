@@ -1,6 +1,7 @@
 #include "xcl2.hpp"
 
 #include "bls12_377_g1/bls12_377_g1.h"
+#include "bls12_377_g1/pippenger.h"
 #include "bls12_377_g1/rust_types.h"
 #include "bls12_377_g1/log_time.h"
 
@@ -24,15 +25,17 @@
 class Driver {
  private:
   std::vector<bls12_377_g1::Xyzt> points;
+  const std::string binaryFile;
 
  public:
-  Driver(const std::vector<bls12_377_g1::Xyzt> &points) : points(points) {}
+  Driver(const std::vector<bls12_377_g1::Xyzt> &points, const std::string &binaryFile)
+      : points(points), binaryFile(binaryFile) {}
 
   const int NUM_OUTPUT_POINTS = 90091;
-  const size_t OUTPUT_SIZE = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
+  const int OUTPUT_SIZE = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
 
   inline uint64_t numPoints() { return points.size(); }
-  inline auto INPUT_SIZE() { return (BYTES_PER_INPUT * numPoints()) / 4; }
+  inline int INPUT_SIZE() { return (BYTES_PER_INPUT * numPoints()) / 4; }
 
   bls12_377_g1::Xyzt postProcess(const uint32_t *source_kernel_output) {
     const size_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
@@ -67,15 +70,21 @@ class Driver {
       bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset);
       bit_offset += CUR_WINDOW_LEN;
     }
+    if (point_idx != NUM_OUTPUT_POINTS) {
+      printf("ERROR IN point_idx\n");
+    }
 
+    // final_result.println();
     final_result.extendedTwistedEdwardsToWeierstrass();
     return final_result;
   }
 
   inline void feed_msm(g1_projective_t *out, biginteger256_t *scalars) {
-    const std::string binaryFile = "";
     auto input_size = INPUT_SIZE();
     auto output_size = OUTPUT_SIZE;
+    printf("Running MSM with [%i] input points and [%i] output points\n", numPoints(),
+           NUM_OUTPUT_POINTS);
+    printf("input_size = [%i], output_size = [%i] n", input_size, output_size);
 
     // Allocate Memory in Host Memory
     size_t vector_input_size_bytes = sizeof(int) * input_size;
@@ -87,14 +96,18 @@ class Driver {
     memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
 
     // Load points from library representation
-    for (int i = 0; i < numPoints(); i++) {
+    uint32_t *base_ptr = source_kernel_input.data();
+    printf("%i", (int)(BYTES_PER_INPUT / 4));
+    for (uint64_t i = 0; i < numPoints(); i++) {
       const int NUM_32B_WORDS_PER_SCALAR = 256 / 32;
-      uint32_t *base_ptr = &source_kernel_input[i];
+      const int NUM_32B_WORDS_PER_POINT = (256 * 5) / 32;
+      // uint32_t *base_ptr = &source_kernel_input[i * (BYTES_PER_INPUT / 4)];
 
-      // load the scalar
-      scalar[i].copy_to_fpga_buffer(base_ptr);
       // load the point
-      points[i].copy_to_fpga_buffer(base_ptr + NUM_32B_WORDS_PER_SCALAR);
+      points[i].copy_to_fpga_buffer(base_ptr);
+      // load the scalar
+      scalars[i].copy_to_fpga_buffer(base_ptr + (1152 / 32));
+      base_ptr += (BYTES_PER_INPUT) / 4;
     }
 
     cl_int err;
@@ -185,24 +198,26 @@ class Driver {
   }
 };
 
-extern "C" Driver *msm_init(g1_affine_t *rust_points, ssize_t npoints) {
+extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t *rust_points,
+                            ssize_t npoints) {
+  std::string binaryFile(xclbin, xclbin_len);
+  printf("Initializing with XCLBIN=%s\n", binaryFile.c_str());
   bls12_377_g1::init();
   std::vector<bls12_377_g1::Xyzt> points(npoints);
   for (ssize_t i = 0; i < npoints; i++) {
-    std::cout << rust_points[i] << std::endl;
+    // std::cout << rust_points[i] << std::endl;
     points[i].copy_from_rust_type(rust_points[i]);
-    points[i].println();
+    // points[i].println();
   }
-  auto *driver = new Driver(points);
+  auto *driver = new Driver(points, binaryFile);
   return driver;
 }
 
 extern "C" void msm_mult(Driver *driver, g1_projective_t *out, uint64_t batch_size,
                          biginteger256_t *scalars) {
   for (uint64_t i = 0; i < batch_size; i++) {
-    printf("Running MSM (Batch %i) with [%i] input points and [%i] output points\n", i,
-           driver->numPoints(), NUM_OUTPUT_POINTS);
+    printf("Running MSM (Batch %lu) with [%lu] input points\n", i, driver->numPoints());
 
-    driver->feed_msm(out + i, scalars + (i * context->numPoints()));
+    driver->feed_msm(out + i, scalars + (i * driver->numPoints()));
   }
 }

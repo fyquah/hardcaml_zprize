@@ -62,8 +62,8 @@ class ZprizeMsmFpgaDriver {
       std::vector<bls12_377_g1::Xyzt> bucket_sums(CUR_NUM_BUCKETS);
       for (auto &pt : bucket_sums) pt.setToIdentity();
       for (size_t pt_idx = 0; pt_idx < numPoints(); pt_idx++) {
-        const auto bucket = scalars[pt_idx].getSlice(bit_offset, CUR_WINDOW_LEN);
-        assert(bucket >= 0 && bucket < CUR_NUM_BUCKETS);
+        const uint64_t bucket = scalars[pt_idx].getSlice(bit_offset, CUR_WINDOW_LEN);
+        assert(bucket < (uint64_t)CUR_NUM_BUCKETS);
         bucket_sums[bucket].generalUnifiedAddInto(points[pt_idx]);
       }
 

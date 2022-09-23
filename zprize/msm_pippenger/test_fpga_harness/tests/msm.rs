@@ -14,13 +14,14 @@ use blst_msm::*;
 #[test]
 fn msm_correctness() {
     let test_npow = std::env::var("TEST_NPOW").unwrap_or("15".to_string());
+    let test_xclbin = std::env::var("XCLBIN").expect("Need an XCLBIN file");
     let npoints_npow = i32::from_str(&test_npow).unwrap();
 
     let batches = 4;
     let (points, scalars) =
         util::generate_points_scalars::<G1Affine>(1usize << npoints_npow, batches);
 
-    let mut context = multi_scalar_mult_init(points.as_slice());
+    let mut context = multi_scalar_mult_init(test_xclbin, points.as_slice());
     let msm_results = multi_scalar_mult(&mut context, points.as_slice(), unsafe {
         std::mem::transmute::<&[_], &[BigInteger256]>(scalars.as_slice())
     });
