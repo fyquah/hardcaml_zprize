@@ -35,7 +35,6 @@ module State = struct
   type t =
     | Word_1
     | Word_2
-    | Word_3_wait_for_data
     | Word_3
   [@@deriving sexp_of, compare, enumerate]
 end
@@ -80,12 +79,17 @@ let create
                 sel_bottom ddr_points_to_fpga.tdata (64 * num_point_64b_words_remaining)
               in
               let scalar_data =
-                sel_bottom host_scalars_to_fpga.tdata (64 * num_scalar_64b_words)
+                assert (64 * num_scalar_64b_words == 256);
+                mux2
+                  (scalar_beat.value ==:. 1)
+                  (drop_bottom host_scalars_to_fpga.tdata (64 * num_scalar_64b_words))
+                  (sel_bottom host_scalars_to_fpga.tdata (64 * num_scalar_64b_words))
               in
               uresize (scalar_data @: point_data) 512
             in
             let tvalid = host_scalars_to_fpga.tvalid &: ddr_points_to_fpga.tvalid in
-            let tlast = gnd (* TODO(rahuly): tlast semantics! *) in
+            (* it's fine to just take tlast from the point stream because they should be in lock-step *)
+            let tlast = ddr_points_to_fpga.tvalid in
             [ Axi512.Stream.Source.Of_always.(
                 assign
                   host_to_fpga

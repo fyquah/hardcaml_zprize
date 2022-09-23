@@ -60,6 +60,10 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   let aligned_to = 64
   let aligned_field_bits = Int.round_up Config.field_bits ~to_multiple_of:aligned_to
 
+  let num_clocks_per_input_point =
+    Int.round_up (3 * aligned_field_bits) ~to_multiple_of:512 / 512
+  ;;
+
   let num_clocks_per_input =
     Int.round_up (Config.scalar_bits + (3 * aligned_field_bits)) ~to_multiple_of:512 / 512
   ;;
@@ -89,36 +93,118 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     Cyclesim.cycle sim;
     i.fpga_to_host_dest.tready := Bits.vdd;
     for idx = 0 to num_inputs - 1 do
-      let input = inputs.(idx) in
       let aligned_point =
+        let input = inputs.(idx) in
         { Input_aligned.x = Bits.uresize input.affine_point_with_t.x aligned_field_bits
         ; Input_aligned.y = Bits.uresize input.affine_point_with_t.y aligned_field_bits
         ; Input_aligned.t = Bits.uresize input.affine_point_with_t.t aligned_field_bits
         }
       in
-      let to_send = ref Bits.(input.scalar @: Input_aligned.Of_bits.pack aligned_point) in
-      for beat = 0 to num_clocks_per_input - 1 do
-        i.host_to_fpga.tdata := Bits.sel_bottom !to_send 512;
-        i.host_to_fpga.tvalid := Bits.random ~width:1;
-        if beat = num_clocks_per_input - 1 && idx = num_inputs - 1
-        then i.host_to_fpga.tlast := Bits.vdd;
-        if Bits.is_gnd !(i.host_to_fpga.tvalid) then Cyclesim.cycle sim;
-        i.host_to_fpga.tvalid := Bits.vdd;
-        cycle_cnt := 0;
-        while Bits.is_gnd !(o.host_to_fpga_dest.tready) && !cycle_cnt < timeout do
-          Int.incr cycle_cnt;
-          Cyclesim.cycle sim
-        done;
-        Cyclesim.cycle sim;
-        to_send := Bits.(srl !to_send 512)
-      done;
-      i.host_to_fpga.tvalid := Bits.gnd;
+      let point_words_to_send =
+        Bits.uresize
+          (Input_aligned.Of_bits.pack aligned_point)
+          (512 * num_clocks_per_input_point)
+        |> Bits.split_lsb ~exact:true ~part_width:512
+      in
+      assert(List.length point_words_to_send = 3);
+      let scalar_to_send =
+        let even_scalar = Bits.uresize inputs.(2 * (idx / 2)).scalar 256 in
+        let odd_scalar = Bits.uresize inputs.((2 * (idx / 2)) + 1).scalar 256 in
+        Bits.(odd_scalar @: even_scalar)
+      in
+      assert (Bits.width scalar_to_send = 512);
+      let scalar_beat = idx mod 2 = 1 in
+      let module Scalar_state = struct
+        type t =
+          | Initial
+          | Started_sending
+          | Done_sending
+
+        let is_done t =
+          match t with
+          | Done_sending -> true
+          | _ -> false
+        ;;
+
+        let is_started t =
+          match t with
+          | Started_sending -> true
+          | _ -> false
+        ;;
+      end
+      in
+      let module Point_state = struct
+        type state =
+          | Initial
+          | Sending
+
+        type t =
+          { words : Bits.t list
+          ; state : state
+          }
+      end
+      in
+      (* bad hack of a step testbench, not really exactly what we want *)
+      let rec loop cycle_cnt (scalar_state : Scalar_state.t) (point_state : Point_state.t)
+        =
+        let last_input_pair = idx = num_inputs - 1 in
+        (* exit condition - done or timeout *)
+        let scalar_done =
+          ((not scalar_beat) && Scalar_state.is_started scalar_state)
+          || (scalar_beat && Scalar_state.is_done scalar_state)
+        in
+        let point_done = List.length point_state.words = 0 in
+        if cycle_cnt >= timeout
+        then print_s [%message "Timed out while sending scalars!"]
+        else if not (scalar_done && point_done)
+        then (
+          (* scalar step *)
+          let next_scalar_state =
+            let send_scalar () : Scalar_state.t =
+              i.host_scalars_to_fpga.tdata := scalar_to_send;
+              i.host_scalars_to_fpga.tvalid := Bits.vdd;
+              if last_input_pair
+              then i.host_scalars_to_fpga.tlast := Bits.vdd;
+              if Bits.is_vdd !(o.host_scalars_to_fpga_dest.tready)
+              then Done_sending
+              else Started_sending
+            in
+            match scalar_state with
+            | Initial ->
+              if Bits.(is_vdd (random ~width:1)) then send_scalar () else Initial
+            | Started_sending -> send_scalar ()
+            | Done_sending -> Done_sending
+          in
+          (* point step *)
+          let next_point_state =
+            let send_point () =
+              i.ddr_points_to_fpga.tdata := List.hd_exn point_state.words;
+              i.ddr_points_to_fpga.tvalid := Bits.vdd;
+              if List.length point_state.words = 1 && last_input_pair
+              then i.ddr_points_to_fpga.tlast := Bits.vdd;
+              if Bits.is_vdd !(o.ddr_points_to_fpga_dest.tready)
+              then { Point_state.words = List.tl_exn point_state.words; state = Initial }
+              else { point_state with state = Sending }
+            in
+            match point_state.state with
+            | Initial ->
+              if Bits.((is_vdd (random ~width:1)) && (List.length point_state.words > 0)) then send_point () else point_state
+            | Sending -> send_point ()
+          in
+          Cyclesim.cycle sim;
+          loop (cycle_cnt + 1) next_scalar_state next_point_state)
+      in
+      loop 0 (if (scalar_beat) then Started_sending else Initial) { words = point_words_to_send; state = Initial };
+      i.host_scalars_to_fpga.tvalid := Bits.gnd;
+      i.ddr_points_to_fpga.tvalid := Bits.gnd;
       for _ = 0 to Random.int 5 do
         Cyclesim.cycle sim
       done
     done;
-    i.host_to_fpga.tlast := Bits.gnd;
-    i.host_to_fpga.tvalid := Bits.gnd;
+    i.host_scalars_to_fpga.tlast := Bits.gnd;
+    i.ddr_points_to_fpga.tlast := Bits.gnd;
+    i.host_scalars_to_fpga.tvalid := Bits.gnd;
+    i.ddr_points_to_fpga.tvalid := Bits.gnd;
     Cyclesim.cycle sim;
     cycle_cnt := 0;
     while Bits.is_gnd !(o.fpga_to_host.tvalid) && !cycle_cnt < timeout do
