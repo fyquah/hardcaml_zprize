@@ -107,6 +107,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     Array.init n ~f:(fun row -> Array.init n ~f:(fun col -> coefs.((row * n) + col)))
   ;;
 
+  (* Check the results of the 1st pass against sw.  raise if bad. *)
   let expected_first_pass ~verbose input_coefs hw_results =
     let module Model = Hardcaml_ntt.Reference_model.Make (Gf.Z) in
     let coefs = Model.transpose (copy_matrix input_coefs) in
@@ -123,6 +124,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     then raise_s [%message "intermediate results dont match"]
   ;;
 
+  (* Check the final results using a standard full size ntt. *)
   let expected ~verbose input_coefs hw_results =
     let sw_results = reference_intt input_coefs in
     if verbose
@@ -141,12 +143,23 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     List.init (1 lsl logcores) ~f:(fun c -> inputs.(row).(col + c))
   ;;
 
+  (* Read a square block of [2^logtotal].  Used to read data in the first pass. *)
   let read_block ~block_row ~block_col (inputs : 'a array array) =
     Array.init (1 lsl logtotal) ~f:(fun row ->
       Array.init (1 lsl logblocks) ~f:(fun col ->
         read_words
           inputs
           ~row:((block_row lsl logtotal) + row)
+          ~col:((block_col lsl logtotal) + (col lsl logcores))))
+  ;;
+
+  (* Read a rectangle of [2^locores by 2^logtotal] used in the 2nd pass. *)
+  let read_block_cores ~block_row ~block_col (inputs : 'a array array) =
+    Array.init (1 lsl logcores) ~f:(fun row ->
+      Array.init (1 lsl logblocks) ~f:(fun col ->
+        read_words
+          inputs
+          ~row:((block_row lsl logcores) + row)
           ~col:((block_col lsl logtotal) + (col lsl logcores))))
   ;;
 
@@ -214,9 +227,9 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
            cycle ~n:4 ()
          done
        | `Second ->
-         for block_row = 0 to (n lsr logtotal) - 1 do
+         for block_row = 0 to (n lsr logcores) - 1 do
            for block_col = 0 to (n lsr logtotal) - 1 do
-             let block = read_block ~block_row ~block_col coefs in
+             let block = read_block_cores ~block_row ~block_col coefs in
              Array.iter
                block
                ~f:
@@ -245,11 +258,6 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     (try
        let pass1 = run_pass ~which:`First input_coefs in
        expected_first_pass ~verbose input_coefs pass1;
-       let pass1 =
-         Array.init n ~f:(fun row ->
-           Array.init n ~f:(fun col ->
-             Gf.Z.of_z (Z.of_int (((row lsl 16) + col) lsl (64 - 32)))))
-       in
        let pass2 = run_pass ~which:`Second pass1 in
        cycle ~n:4 ();
        expected ~verbose input_coefs pass2
