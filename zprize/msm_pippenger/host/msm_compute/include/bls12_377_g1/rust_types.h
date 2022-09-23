@@ -14,7 +14,13 @@ struct biginteger256_t {
     return (data[i / 64] >> (i % 64)) & 1;
   }
 
-  inline void copy_to_fpga_buffer(uint32_t *b) { memcpy(b, data, sizeof(data)); }
+  inline void copy_to_fpga_buffer(void *b) {
+    // memcpy(b, data, sizeof(data));
+    uint64_t *b64 = (uint64_t *)b;
+    for (int i = 0; i < 4; i++) {
+      b64[i] = data[i];
+    }
+  }
 
   inline uint64_t getSlice(int start, int len) {
     if (len >= 64) {
@@ -68,7 +74,7 @@ struct g1_projective_t {
 };
 
 namespace {
-std::ostream &operator<<(std::ostream &os, const biginteger256_t &point) {
+std::ostream __attribute__((unused)) &operator<<(std::ostream &os, const biginteger256_t &point) {
   os << "(";
   for (int i = 0; i < 4; i++) {
     if (i != 0) {

@@ -12,6 +12,6 @@ install(TARGETS zprize_msm_fpga DESTINATION .)
 
 # install(TARGETS gmp DESTINATION .)
 install(
-  FILES ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmp.a
-  FILES ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmpxx.a
+  FILES ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmp.so
+  ${CMAKE_BINARY_DIR}/host/external/gmp-6.2.1/lib/libgmpxx.so
   DESTINATION .)
