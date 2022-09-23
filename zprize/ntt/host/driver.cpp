@@ -116,7 +116,7 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
     });
 
     bench("Doing phase 1 work (including twiddling)", [&]() {
-      OCL_CHECK(err, err = krnl_controller.setArg(6, (uint8_t) 0b01));
+      OCL_CHECK(err, err = krnl_controller.setArg(8, (uint8_t) 0b01));
       // The reverse core uses the C++ HLS ap_ctrl_handshake mechanism, hence it needs to be
       // explicitly enqueued. The NTT core operates solely based on axi streams without any
       // control signals., so we don't need to enqueue it.
@@ -128,7 +128,7 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
     });
 
     bench("Doing phase 2 work", [&]() {
-      OCL_CHECK(err, err = krnl_controller.setArg(6, (uint8_t) 0b10));
+      OCL_CHECK(err, err = krnl_controller.setArg(8, (uint8_t) 0b10));
       // See comment in "Doing phase 1 work"
       if (core_type == CoreType::REVERSE) {
         OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
@@ -208,7 +208,9 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   // Set the controller arguments
   OCL_CHECK(err, err = krnl_controller.setArg(3, cl_buffer_points));
   OCL_CHECK(err, err = krnl_controller.setArg(4, cl_buffer_intermediate));
-  OCL_CHECK(err, err = krnl_controller.setArg(5, (uint16_t) row_size));
+  OCL_CHECK(err, err = krnl_controller.setArg(5, cl_buffer_points));
+  OCL_CHECK(err, err = krnl_controller.setArg(6, cl_buffer_intermediate));
+  OCL_CHECK(err, err = krnl_controller.setArg(7, (uint16_t) row_size));
 
   // Set the reverse arguments
   if (core_type == CoreType::REVERSE) {
