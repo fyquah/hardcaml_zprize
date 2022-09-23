@@ -107,6 +107,22 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     Array.init n ~f:(fun row -> Array.init n ~f:(fun col -> coefs.((row * n) + col)))
   ;;
 
+  let expected_first_pass ~verbose input_coefs hw_results =
+    let module Model = Hardcaml_ntt.Reference_model.Make (Gf.Z) in
+    let coefs = Model.transpose (copy_matrix input_coefs) in
+    Array.iter coefs ~f:Model.inverse_dif;
+    Test_top.twiddle coefs;
+    let coefs = Model.transpose coefs in
+    if verbose
+    then (
+      printf "\ninter sw\n\n";
+      print_matrix coefs;
+      printf "\ninter hw\n\n";
+      print_matrix hw_results);
+    if not ([%equal: Gf.Z.t array array] hw_results coefs)
+    then raise_s [%message "intermediate results dont match"]
+  ;;
+
   let expected ~verbose input_coefs hw_results =
     let sw_results = reference_intt input_coefs in
     if verbose
@@ -228,6 +244,12 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     in
     (try
        let pass1 = run_pass ~which:`First input_coefs in
+       expected_first_pass ~verbose input_coefs pass1;
+       let pass1 =
+         Array.init n ~f:(fun row ->
+           Array.init n ~f:(fun col ->
+             Gf.Z.of_z (Z.of_int (((row lsl 16) + col) lsl (64 - 32)))))
+       in
        let pass2 = run_pass ~which:`Second pass1 in
        cycle ~n:4 ();
        expected ~verbose input_coefs pass2

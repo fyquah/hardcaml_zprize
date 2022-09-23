@@ -20,6 +20,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
+      ; first_4step_pass : 'a
       ; tvalid : 'a
       ; start : 'a
       }
@@ -41,9 +42,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   let create _scope (i : _ I.t) =
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
-    let addr = Var.reg spec ~width:logn in
+    let addr = Var.reg spec ~width:(logn + logblocks) in
     let addr_next = addr.value +:. 1 in
-    let block = Var.reg spec ~width:(max 1 logblocks) in
     let sync = Var.reg spec ~width:logsync in
     let tvalid = i.tvalid in
     Always.(
@@ -53,15 +53,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
             ; ( Stream
               , [ when_
                     tvalid
-                    [ addr <-- addr_next
-                    ; when_
-                        (addr_next ==:. 0)
-                        [ block <-- block.value +:. 1
-                        ; (if Config.logblocks = 0
-                          then sm.set_next Sync
-                          else when_ (block.value ==:. blocks - 1) [ sm.set_next Sync ])
-                        ]
-                    ]
+                    [ addr <-- addr_next; when_ (addr_next ==:. 0) [ sm.set_next Sync ] ]
                 ] )
             ; ( Sync
               , [ sync <-- sync.value +:. 1
@@ -69,7 +61,22 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                 ] )
             ]
         ]);
-    let block1h = binary_to_onehot block.value in
+    let block =
+      if logblocks = 0
+      then gnd
+      else
+        mux2
+          i.first_4step_pass
+          (sel_bottom addr.value logblocks)
+          (drop_bottom addr.value logn)
+    in
+    let addr =
+      mux2
+        i.first_4step_pass
+        (drop_bottom addr.value logblocks)
+        (sel_bottom addr.value logn)
+    in
+    let block1h = binary_to_onehot block in
     let mask_by_block x =
       if Config.logblocks = 0 then x else repeat x blocks &: block1h
     in
@@ -78,7 +85,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     { O.done_
     ; tready = processing
     ; wr_en = mask_by_block (processing &: tvalid)
-    ; wr_addr = addr.value
+    ; wr_addr = addr
     }
   ;;
 

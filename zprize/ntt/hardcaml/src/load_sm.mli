@@ -5,6 +5,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) : sig
     type 'a t =
       { clock : 'a
       ; clear : 'a
+      ; first_4step_pass : 'a
       ; tvalid : 'a
       ; start : 'a
       }

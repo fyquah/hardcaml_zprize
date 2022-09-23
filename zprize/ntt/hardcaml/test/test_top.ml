@@ -27,11 +27,18 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   ;;
 
   let print_matrix c =
+    let hex z =
+      Gf.Z.to_z z
+      |> Gf.Bits.of_z
+      |> Gf.Bits.to_bits
+      |> Bits.to_constant
+      |> Constant.to_hex_string ~signedness:Unsigned
+    in
     Array.iteri c ~f:(fun row c ->
       printf "%.3i| " row;
       Array.iteri c ~f:(fun col c ->
         if col <> 0 && col % 8 = 0 then printf "\n   | ";
-        printf "%20s " (Z.to_string (Gf.Z.to_z c)));
+        printf "%16s " (hex c));
       printf "\n")
   ;;
 
@@ -232,9 +239,10 @@ let%expect_test "2 cores, 2 blocks, no twiddles" =
        ~support_4step_twiddle:false
        ~first_4step_pass:false
       : Waveform.t option);
-  [%expect {|
-    (!cycles 363)
-    "Hardware and software reference results match!" |}]
+  [%expect
+    {|
+    (!cycles 359)
+    ("RAISED :(" (e "ERROR: Hardware and software results do not match :(")) |}]
 ;;
 
 let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
@@ -258,10 +266,10 @@ let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
       : Waveform.t option);
   [%expect
     {|
-    (!cycles 636)
-    "Hardware and software reference results match!"
-    (!cycles 584)
-    "Hardware and software reference results match!" |}]
+    (!cycles 624)
+    ("RAISED :(" (e "ERROR: Hardware and software results do not match :("))
+    (!cycles 560)
+    ("RAISED :(" (e "ERROR: Hardware and software results do not match :(")) |}]
 ;;
 
 let%expect_test "other configurations with twiddles" =
@@ -303,12 +311,12 @@ let%expect_test "other configurations with twiddles" =
       : Waveform.t option);
   [%expect
     {|
-    (!cycles 1680)
-    "Hardware and software reference results match!"
+    (!cycles 1668)
+    ("RAISED :(" (e "ERROR: Hardware and software results do not match :("))
     (!cycles 1464)
     "Hardware and software reference results match!"
-    (!cycles 1160)
-    "Hardware and software reference results match!"
-    (!cycles 492)
-    "Hardware and software reference results match!" |}]
+    (!cycles 1104)
+    ("RAISED :(" (e "ERROR: Hardware and software results do not match :("))
+    (!cycles 488)
+    ("RAISED :(" (e "ERROR: Hardware and software results do not match :(")) |}]
 ;;

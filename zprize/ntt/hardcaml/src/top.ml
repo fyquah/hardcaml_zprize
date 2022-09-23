@@ -46,6 +46,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         scope
         { Load_sm.I.clock = i.clock
         ; clear = i.clear
+        ; first_4step_pass = i.first_4step_pass
         ; tvalid = i.data_in.tvalid
         ; start = start_input
         }
@@ -89,15 +90,19 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     { O.data_out =
         { Axi_stream.Source.tvalid = store_sm.tvalid
         ; tdata =
-            (* We're assuming vivado will do some rejigging here.  We could/should
+            (let rd_en = store_sm.rd_en <>:. 0 in
+             (* We're assuming vivado will do some rejigging here.  We could/should
                instantiate a pipelined mux. *)
-            pipe
-              ~n:2
-              (let qs =
-                 List.init blocks ~f:(fun index ->
-                   cores.rd_q.(index) |> Array.to_list |> concat_lsb |> pipe ~n:1)
-               in
-               if Config.logblocks = 0 then List.nth_exn qs 0 else mux store_sm.block qs)
+             pipe
+               ~n:3
+               ~enable:rd_en
+               (let qs =
+                  List.init blocks ~f:(fun index ->
+                    cores.rd_q.(index) |> Array.to_list |> concat_lsb)
+                in
+                if Config.logblocks = 0
+                then List.nth_exn qs 0
+                else mux (pipe ~n:1 ~enable:rd_en store_sm.block) qs))
         ; tlast = gnd
         ; tkeep = ones (num_cores * Gf.num_bits / 8)
         ; tstrb = ones (num_cores * Gf.num_bits / 8)
