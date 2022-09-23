@@ -299,5 +299,5 @@ let%expect_test "2 blocks" =
       : Waveform.t option);
   [%expect
     {|
-    ("RAISED :(" (e "ERROR: Hardware and software results do not match :(")) |}]
+    "Hardware and software reference results match!" |}]
 ;;
