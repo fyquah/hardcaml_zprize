@@ -109,6 +109,8 @@ private:
 public:
   NttFpgaDriver(NttFpgaDriverArg driver_arg);
 
+  uint64_t input_vector_size() { return matrix_size; }
+
   /**
    * Loads the xclbin into the FPGA. This needs to be called before any
    * evaluation.
