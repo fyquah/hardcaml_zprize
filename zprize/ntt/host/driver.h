@@ -154,14 +154,27 @@ public:
                        const uint64_t *input,
                        uint64_t data_length);
 
+  /**
+   * Similar to simple_evaluate, but prints to stdout the time taken for various
+   * stages of evaluation
+   */
   void simple_evaluate_slow_with_profilling(uint64_t *output,
                                             const uint64_t *input,
                                             uint64_t data_length);
 
+  /**
+   * Special function for benchmarking. Do not use!
+   */
   void expert__transfer_data_to_fpga_blocking(UserBuffer*);
 
+  /**
+   * Special function for benchmarking. Do not use!
+   */
   void expert__evaluate_on_fpga_blocking(UserBuffer*);
 
+  /**
+   * Special function for benchmarking. Do not use!
+   */
   void expert__transfer_data_from_fpga_blocking(UserBuffer*);
 };
 
