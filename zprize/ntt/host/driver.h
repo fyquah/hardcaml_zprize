@@ -48,14 +48,17 @@ class NttFpgaDriver;
 
 class NttFpgaBuffer {
 private:
-  uint64_t       *m_data;
+  uint64_t       *m_input_data;
+  uint64_t       *m_output_data;
   bool            m_in_use;
   const uint16_t  m_index;
 
   friend class NttFpgaDriver;
 
 public:
-  NttFpgaBuffer(uint64_t *arg_data, uint32_t arg_index) : m_data(arg_data), m_index(arg_index) {};
+  NttFpgaBuffer(uint64_t *arg_input_data, uint64_t *arg_output_data, uint32_t arg_index)
+    : m_input_data(arg_input_data), m_output_data(arg_output_data), m_index(arg_index)
+  {};
 
   NttFpgaBuffer() = delete;
   NttFpgaBuffer(const NttFpgaBuffer &) = delete;
@@ -64,7 +67,9 @@ public:
   /**
    * Return the internal data pointer.
    */
-  uint64_t* data() { return m_data; }
+  uint64_t* input_data() { return m_input_data; }
+
+  uint64_t* output_data() { return m_output_data; }
 };
 
 class NttFpgaDriver {
@@ -88,12 +93,22 @@ private:
   cl::Context context;
   cl::Kernel krnl_ntt;
   cl::Kernel krnl_controller;
-  cl::Buffer cl_buffer_points;
-  cl::Buffer cl_buffer_intermediate;
-  vec64 host_buffer_points;
-  vec64 host_buffer_intermediate;
+  std::vector<cl::Buffer> cl_buffer_inputs;
+  std::vector<cl::Buffer> cl_buffer_intermediate;
+  std::vector<cl::Buffer> cl_buffer_outputs;
+  std::vector<vec64> host_buffer_inputs;
+  std::vector<vec64> host_buffer_outputs;
   std::vector<NttFpgaBuffer> user_buffers;
   std::vector<Events> internal_cl_events;
+  cl::Event outstanding_execution;
+
+  void enqueue_for_phase_1(NttFpgaBuffer*);
+
+  void enqueue_for_phase_2(NttFpgaBuffer*);
+
+  Events& events_for_buffer(NttFpgaBuffer* buffer) {
+    return internal_cl_events.at(buffer->m_index);
+  }
 
 public:
   NttFpgaDriver(NttFpgaDriverArg driver_arg);
@@ -131,16 +146,20 @@ public:
    */
   void transfer_data_to_fpga(NttFpgaBuffer*);
 
-  void enqueue_for_evaluation(NttFpgaBuffer*);
+  void enqueue_for_evaluation_async(NttFpgaBuffer*);
 
   /**
    * Poll the buffer for completion. This blocks until a result is available
    * from the FPGA for this. If NttFpgaBuffer* is not enqueued for any
    * evaluation, this raises an exception.
    */
-  void poll_for_completion(NttFpgaBuffer*);
+  void poll_for_completion_blocking(NttFpgaBuffer*);
 
-  void transfer_data_from_fpga(NttFpgaBuffer*);
+  /**
+   * Wait for the NTT evaluation to complete and copy data from the FPGA back
+   * to the host. This blocks until the copy is done.
+   */
+  void transfer_data_from_fpga_blocking(NttFpgaBuffer*);
 
   /**
    * Returns the buffer to the driver. This buffer will be free for future
