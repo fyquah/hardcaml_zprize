@@ -86,7 +86,7 @@ NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) :
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
     loaded_xclbin(false),
-    m_max_num_buffers_in_flight(1),
+    m_max_num_buffers_in_flight(8),
     outstanding_execution_is_set(false)
 {
   // We only have at most 2 events pending at a time
