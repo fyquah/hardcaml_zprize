@@ -78,8 +78,8 @@ NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) :
     log_row_size(driver_arg.log_row_size),
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
-	  host_buffer_points(matrix_size),
-    host_buffer_intermediate(matrix_size)
+	  host_buffer_input(matrix_size),
+	  host_buffer_output(matrix_size)
 {
 }
 
@@ -106,17 +106,17 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
   bench("Evaluate NTT", [&]() {
 
     bench("Copy to internal page-aligned buffer", [&](){
-        memcpy(host_buffer_points.data()              , in, sizeof(uint64_t) * data_length);
-        memset(host_buffer_points.data() + data_length, 0 , sizeof(uint64_t) * (matrix_size - data_length));
+        memcpy(host_buffer_input.data()              , in, sizeof(uint64_t) * data_length);
+        memset(host_buffer_input.data() + data_length, 0 , sizeof(uint64_t) * (matrix_size - data_length));
     });
 
     bench("Copying input points to device", [&]() {
-        OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, 0 /* 0 means from host*/, nullptr, nullptr));
+        OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_input}, 0 /* 0 means from host*/, nullptr, nullptr));
         OCL_CHECK(err, err = q.finish());
     });
 
     bench("Doing phase 1 work (including twiddling)", [&]() {
-      OCL_CHECK(err, err = krnl_controller.setArg(6, (uint8_t) 0b01));
+      OCL_CHECK(err, err = krnl_controller.setArg(7, (uint8_t) 0b01));
       // The reverse core uses the C++ HLS ap_ctrl_handshake mechanism, hence it needs to be
       // explicitly enqueued. The NTT core operates solely based on axi streams without any
       // control signals., so we don't need to enqueue it.
@@ -128,7 +128,7 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
     });
 
     bench("Doing phase 2 work", [&]() {
-      OCL_CHECK(err, err = krnl_controller.setArg(6, (uint8_t) 0b10));
+      OCL_CHECK(err, err = krnl_controller.setArg(7, (uint8_t) 0b10));
       // See comment in "Doing phase 1 work"
       if (core_type == CoreType::REVERSE) {
         OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
@@ -138,12 +138,12 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
     });
 
     bench("Copying final result to host", [&]() {
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, CL_MIGRATE_MEM_OBJECT_HOST));
+      OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_output}, CL_MIGRATE_MEM_OBJECT_HOST));
       OCL_CHECK(err, err = q.finish());
     });
 
     bench("Copy from internal page-aligned buffer", [&]() {
-      memcpy(out, host_buffer_points.data(), sizeof(uint64_t) * data_length);
+      memcpy(out, host_buffer_output.data(), sizeof(uint64_t) * data_length);
     });
   });
 }
@@ -153,7 +153,8 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   // Allocate Memory in Host Memory
   size_t size = row_size * row_size;
   size_t vector_size_bytes = sizeof(uint64_t) * size;
-  host_buffer_points = vec64(size);
+  host_buffer_input = vec64(size);
+  host_buffer_output = vec64(size);
 
   // OPENCL HOST CODE AREA START
   // Create Program and Kernel
@@ -191,24 +192,31 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   }
 
   // Allocate Buffer in Global Memory
-  OCL_CHECK(err, cl_buffer_points = cl::Buffer(
+  OCL_CHECK(err, cl_buffer_input = cl::Buffer(
                           context,
                           CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,
                           vector_size_bytes,
-                          host_buffer_points.data(),
+                          host_buffer_input.data(),
                           &err)
                   );
   OCL_CHECK(err, cl_buffer_intermediate = cl::Buffer(
                           context,
+                          CL_MEM_READ_WRITE,
+                          vector_size_bytes,
+                          nullptr,
+                          &err));
+  OCL_CHECK(err, cl_buffer_output = cl::Buffer(
+                          context,
                           CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,
                           vector_size_bytes,
-                          host_buffer_intermediate.data(),
+                          host_buffer_output.data(),
                           &err));
 
   // Set the controller arguments
-  OCL_CHECK(err, err = krnl_controller.setArg(3, cl_buffer_points));
+  OCL_CHECK(err, err = krnl_controller.setArg(3, cl_buffer_input));
   OCL_CHECK(err, err = krnl_controller.setArg(4, cl_buffer_intermediate));
-  OCL_CHECK(err, err = krnl_controller.setArg(5, (uint16_t) row_size));
+  OCL_CHECK(err, err = krnl_controller.setArg(5, cl_buffer_output));
+  OCL_CHECK(err, err = krnl_controller.setArg(6, (uint16_t) row_size));
 
   // Set the reverse arguments
   if (core_type == CoreType::REVERSE) {

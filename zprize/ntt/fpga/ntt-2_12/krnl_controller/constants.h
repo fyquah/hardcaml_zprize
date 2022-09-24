@@ -1,0 +1,1 @@
+#define LOGBLOCKS 2
