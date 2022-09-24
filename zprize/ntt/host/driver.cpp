@@ -89,6 +89,8 @@ NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) :
     m_max_num_buffers_in_flight(1),
     outstanding_execution_is_set(false)
 {
+  // We only have at most 2 events pending at a time
+  tmp_events_to_wait_for.resize(2);
 }
 
 
@@ -134,13 +136,13 @@ void NttFpgaDriver::transfer_data_to_fpga(NttFpgaBuffer *buffer)
 
 void NttFpgaDriver::transfer_data_from_fpga_blocking(NttFpgaBuffer *buffer)
 {
-  /* TODO(fyquah): This shouldn't cause any allocation, right? */
-  std::vector<cl::Event> events_to_wait_for = { buffer->ev_phase2_work };
+  tmp_events_to_wait_for.clear();
+  tmp_events_to_wait_for.push_back(buffer->ev_phase2_work);
 
   OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
         {buffer->cl_buffer_output},
         CL_MIGRATE_MEM_OBJECT_HOST,
-        &events_to_wait_for,
+        &tmp_events_to_wait_for,
         &buffer->ev_transfer_data_from_fpga
         ));
   OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
@@ -148,10 +150,10 @@ void NttFpgaDriver::transfer_data_from_fpga_blocking(NttFpgaBuffer *buffer)
 
 void NttFpgaDriver::enqueue_for_phase_1(NttFpgaBuffer *buffer)
 {
-  /* TODO(fyquah): This shouldn't cause any allocation, right? */
-  std::vector<cl::Event> events_to_wait_for = { buffer->ev_transfer_data_to_fpga };
+  tmp_events_to_wait_for.clear();
+  tmp_events_to_wait_for.push_back(buffer->ev_transfer_data_to_fpga);
   if (outstanding_execution_is_set) {
-    events_to_wait_for.push_back(outstanding_execution);
+    tmp_events_to_wait_for.push_back(outstanding_execution);
   }
 
   OCL_CHECK(err, err = krnl_controller.setArg(argpos::PHASE, (uint8_t) 0b01));
@@ -161,20 +163,20 @@ void NttFpgaDriver::enqueue_for_phase_1(NttFpgaBuffer *buffer)
   if (core_type == CoreType::REVERSE) {
     OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
   }
-  OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &events_to_wait_for, &buffer->ev_phase1_work));
+  OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &tmp_events_to_wait_for, &buffer->ev_phase1_work));
 }
 
 void NttFpgaDriver::enqueue_for_phase_2(NttFpgaBuffer *buffer)
 {
-  /* TODO(fyquah): This shouldn't cause any allocation, right? */
-  std::vector<cl::Event> events_to_wait_for = { buffer->ev_phase1_work };
+  tmp_events_to_wait_for.clear();
+  tmp_events_to_wait_for.push_back(buffer->ev_phase1_work);
 
   OCL_CHECK(err, err = krnl_controller.setArg(argpos::PHASE, (uint8_t) 0b10));
   // See comment in "Doing phase 1 work"
   if (core_type == CoreType::REVERSE) {
     OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
   }
-  OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &events_to_wait_for, &buffer->ev_phase2_work));
+  OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &tmp_events_to_wait_for, &buffer->ev_phase2_work));
   outstanding_execution = buffer->ev_phase2_work;
   outstanding_execution_is_set = true;
 }

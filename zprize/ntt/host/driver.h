@@ -90,6 +90,11 @@ private:
   std::vector<UserBuffer> user_buffers;
   cl::Event outstanding_execution;
   bool outstanding_execution_is_set;
+  
+  // A preallocated vector of cl::Event that can be used at runtime.
+  std::vector<cl::Event> tmp_events_to_wait_for;
+
+  /* Internal helper functions follows */
 
   void enqueue_for_phase_1(UserBuffer*);
 
