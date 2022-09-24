@@ -135,12 +135,24 @@ public:
    */
   UserBuffer* request_buffer();
 
+  /**
+   * Asynchronously enqueue the buffer for NTT evaluation.
+   *
+   * Upong calling enqueue_evaluate_async:
+   * - the user must not modify the contents of buffer->data_input() as it
+   *   is being copied down to the FPGA
+   * - the contents of buffer->data_output() can change as the NTT result is
+   *   received from the FPGA
+   *
+   * Calling [enqueue_evaluation_async] in succession without calling
+   * [wait_for_result] is not allowed, and can produce undefined behaviour.
+   */
   void enqueue_evaluation_async(UserBuffer*);
 
   /**
-   * Poll the buffer for completion. This blocks until a result is available
-   * from the FPGA for this. If UserBuffer* is not enqueued for any
-   * evaluation, this raises an exception.
+   * Poll FPGA for completion of outstanding request on the buffer. This blocks
+   * until a result is available from the FPGA for this. If UserBuffer* is not
+   * enqueued for any evaluation, behavious is undefined.
    */
   void wait_for_result(UserBuffer*);
 
@@ -150,6 +162,12 @@ public:
    */
   void free_buffer(UserBuffer*);
 
+  /**
+   * A simple synchronous evaluation API.
+   *
+   * This calls the asynchronous APIs under the hood. This blocks until the
+   * NTT is completed.
+   */
   void simple_evaluate(uint64_t *output,
                        const uint64_t *input,
                        uint64_t data_length);
