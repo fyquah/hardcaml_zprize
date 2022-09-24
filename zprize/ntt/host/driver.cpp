@@ -92,8 +92,8 @@ bench(const char *descr, F f) {
 NttFpgaBuffer* NttFpgaDriver::request_buffer()
 {
   for (auto & p : user_buffers) {
-    if (!p.m_in_use) {
-      p.m_in_use = true;
+    if (!p.in_use) {
+      p.in_use = true;
       return &p;
     }
   }
@@ -104,42 +104,36 @@ NttFpgaBuffer* NttFpgaDriver::request_buffer()
 void NttFpgaDriver::free_buffer(NttFpgaBuffer *buffer)
 {
   /* TODO(fyquah): Check no outstanding events? */
-  buffer->m_in_use = false;
+  buffer->in_use = false;
 }
 
 void NttFpgaDriver::transfer_data_to_fpga(NttFpgaBuffer *buffer)
 {
-  auto &events = events_for_buffer(buffer);
   OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
-        {cl_buffer_inputs.at(buffer->m_index)},
+        {buffer->cl_buffer_input},
         0 /* 0 means from host*/,
         nullptr,
-        &events.transfer_data_to_fpga));
+        &buffer->ev_transfer_data_to_fpga));
 }
 
 void NttFpgaDriver::transfer_data_from_fpga_blocking(NttFpgaBuffer *buffer)
 {
-  assert (buffer->m_index == 0);
-  auto &events = events_for_buffer(buffer);
-
   /* TODO(fyquah): This shouldn't cause any allocation, right? */
-  std::vector<cl::Event> events_to_wait_for = { events.phase2_work };
+  std::vector<cl::Event> events_to_wait_for = { buffer->ev_phase2_work };
 
   OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
-        {cl_buffer_outputs.at(buffer->m_index)},
+        {buffer->cl_buffer_output},
         CL_MIGRATE_MEM_OBJECT_HOST,
         &events_to_wait_for,
-        &events.transfer_data_from_fpga
+        &buffer->ev_transfer_data_from_fpga
         ));
-  OCL_CHECK(err, err = events.transfer_data_from_fpga.wait());
+  OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
 }
 
 void NttFpgaDriver::enqueue_for_phase_1(NttFpgaBuffer *buffer)
 {
-  auto &events = events_for_buffer(buffer);
-
   /* TODO(fyquah): This shouldn't cause any allocation, right? */
-  std::vector<cl::Event> events_to_wait_for = { events.transfer_data_to_fpga, outstanding_execution };
+  std::vector<cl::Event> events_to_wait_for = { buffer->ev_transfer_data_to_fpga, outstanding_execution };
 
   OCL_CHECK(err, err = krnl_controller.setArg(6, (uint8_t) 0b01));
   // The reverse core uses the C++ HLS ap_ctrl_handshake mechanism, hence it needs to be
@@ -148,31 +142,29 @@ void NttFpgaDriver::enqueue_for_phase_1(NttFpgaBuffer *buffer)
   if (core_type == CoreType::REVERSE) {
     OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
   }
-  OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &events_to_wait_for, &events.phase1_work));
+  OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &events_to_wait_for, &buffer->ev_phase1_work));
 }
 
 void NttFpgaDriver::enqueue_for_phase_2(NttFpgaBuffer *buffer)
 {
-  auto &events = events_for_buffer(buffer);
-
   /* TODO(fyquah): This shouldn't cause any allocation, right? */
-  std::vector<cl::Event> events_to_wait_for = { events.phase1_work };
+  std::vector<cl::Event> events_to_wait_for = { buffer->ev_phase1_work };
 
   OCL_CHECK(err, err = krnl_controller.setArg(6, (uint8_t) 0b10));
   // See comment in "Doing phase 1 work"
   if (core_type == CoreType::REVERSE) {
     OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
   }
-  OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &events_to_wait_for, &events.phase2_work));
-  outstanding_execution = events.phase2_work;
+  OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &events_to_wait_for, &buffer->ev_phase2_work));
+  outstanding_execution = buffer->ev_phase2_work;
 }
 
 void NttFpgaDriver::enqueue_for_evaluation_async(NttFpgaBuffer *buffer)
 {
   // Set the controller arguments
-  OCL_CHECK(err, err = krnl_controller.setArg(3, cl_buffer_inputs[buffer->m_index]));
-  OCL_CHECK(err, err = krnl_controller.setArg(4, cl_buffer_intermediate[buffer->m_index]));
-  OCL_CHECK(err, err = krnl_controller.setArg(5, cl_buffer_outputs[buffer->m_index]));
+  OCL_CHECK(err, err = krnl_controller.setArg(3, buffer->cl_buffer_input));
+  OCL_CHECK(err, err = krnl_controller.setArg(4, buffer->cl_buffer_intermediate));
+  OCL_CHECK(err, err = krnl_controller.setArg(5, buffer->cl_buffer_output));
   OCL_CHECK(err, err = krnl_controller.setArg(6, (uint16_t) row_size));
 
   // Set the reverse arguments
@@ -186,8 +178,7 @@ void NttFpgaDriver::enqueue_for_evaluation_async(NttFpgaBuffer *buffer)
 
 void NttFpgaDriver::poll_for_completion_blocking(NttFpgaBuffer *buffer)
 {
-  auto &events = events_for_buffer(buffer);
-  OCL_CHECK(err, err = events.phase2_work.wait());
+  OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
 }
 
 void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const uint64_t *in, uint64_t data_length) {
@@ -212,7 +203,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
 
     bench("Copying input points to device", [&]() {
         transfer_data_to_fpga(buffer);
-        OCL_CHECK(err, err = events_for_buffer(buffer).transfer_data_to_fpga.wait());
+        OCL_CHECK(err, err = buffer->ev_transfer_data_to_fpga.wait());
     });
 
     bench("Doing NTT (phase1 + twiddling + phase2)", [&]() {
@@ -242,9 +233,6 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   // Allocate Memory in Host Memory
   size_t size = row_size * row_size;
   size_t vector_size_bytes = sizeof(uint64_t) * size;
-  for (uint64_t i = 0; i < max_num_buffers_in_flight(); i++) {
-    host_buffer_inputs.emplace_back(size);
-  }
 
   // OPENCL HOST CODE AREA START
   // Create Program and Kernel
@@ -281,28 +269,35 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
       exit(EXIT_FAILURE);
   }
 
-  // Allocate Buffer in Global Memory
+  // Allocate user Buffers
   for (uint64_t i = 0; i < max_num_buffers_in_flight(); i++) {
-    OCL_CHECK(err, cl_buffer_inputs.emplace_back(
+    user_buffers.emplace_back();
+    auto &user_buffer = user_buffers.back();
+
+    user_buffer.in_use = false;
+
+    user_buffer.host_buffer_input = vec64(matrix_size);
+    user_buffer.host_buffer_output = vec64(matrix_size);
+
+    OCL_CHECK(err, user_buffer.cl_buffer_input = cl::Buffer(
                             context,
                             CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,
                             vector_size_bytes,
-                            host_buffer_inputs[i].data(),
+                            user_buffer.host_buffer_input.data(),
                             &err)
                     );
-    OCL_CHECK(err, cl_buffer_outputs.emplace_back(
+    OCL_CHECK(err, user_buffer.cl_buffer_intermediate = cl::Buffer(
+                            context,
+                            CL_MEM_READ_WRITE,
+                            vector_size_bytes,
+                            nullptr,
+                            &err)
+                    );
+    OCL_CHECK(err, user_buffer.cl_buffer_output = cl::Buffer(
                             context,
                             CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,
                             vector_size_bytes,
-                            host_buffer_outputs[i].data(),
+                            user_buffer.host_buffer_output.data(),
                             &err));
-  }
-
-  // Populate user_buffers with the pointers allocated to use from openCL
-  for (size_t i = 0; i < m_max_num_buffers_in_flight; i++) {
-    user_buffers.emplace_back(
-        host_buffer_inputs[i].data(),
-        host_buffer_outputs[i].data(),
-        i);
   }
 }
