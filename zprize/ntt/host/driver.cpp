@@ -87,7 +87,7 @@ NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) :
 	  matrix_size(row_size * row_size),
     loaded_xclbin(false),
     m_max_num_buffers_in_flight(8),
-    outstanding_execution_is_set(false)
+    last_enqueued_buffer(nullptr)
 {
   // We only have at most 2 events pending at a time
   tmp_events_to_wait_for.resize(2);
@@ -115,16 +115,29 @@ NttFpgaBuffer* NttFpgaDriver::request_buffer()
 
 void NttFpgaDriver::free_buffer(NttFpgaBuffer *buffer)
 {
+  if (!buffer->in_use) {
+    std::string error_message;
+    error_message
+        .append("Cannot free a buffer that has already been freed (or not in use)! ");
+    throw std::runtime_error(error_message);
+  }
   /* TODO(fyquah): Check no outstanding events? */
   buffer->in_use = false;
 }
 
 void NttFpgaDriver::enqueue_transfer_data_to_fpga(NttFpgaBuffer *buffer)
 {
+  tmp_events_to_wait_for.clear();
+  // The following doesn't help:
+  //
+  // if (last_enqueued_buffer != nullptr) {
+  //   tmp_events_to_wait_for.push_back(last_enqueued_buffer->ev_transfer_data_to_fpga);
+  // }
+
   OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
         {buffer->cl_buffer_input},
         0 /* 0 means from host*/,
-        nullptr,
+        &tmp_events_to_wait_for,
         &buffer->ev_transfer_data_to_fpga));
 }
 
@@ -145,8 +158,8 @@ void NttFpgaDriver::enqueue_phase1_work(NttFpgaBuffer *buffer)
 {
   tmp_events_to_wait_for.clear();
   tmp_events_to_wait_for.push_back(buffer->ev_transfer_data_to_fpga);
-  if (outstanding_execution_is_set) {
-    tmp_events_to_wait_for.push_back(outstanding_execution);
+  if (last_enqueued_buffer != nullptr) {
+    tmp_events_to_wait_for.push_back(last_enqueued_buffer->ev_phase2_work);
   }
 
   OCL_CHECK(err, err = krnl_controller.setArg(argpos::PHASE, (uint8_t) 0b01));
@@ -170,8 +183,7 @@ void NttFpgaDriver::enqueue_phase2_work(NttFpgaBuffer *buffer)
     OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
   }
   OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &tmp_events_to_wait_for, &buffer->ev_phase2_work));
-  outstanding_execution = buffer->ev_phase2_work;
-  outstanding_execution_is_set = true;
+  last_enqueued_buffer = buffer;
 }
 
 void NttFpgaDriver::set_args(NttFpgaBuffer *buffer)
@@ -305,9 +317,13 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   }
 
   // Allocate user Buffers
+  // TODO(fyquah): Is the awkward p jumping around actually useful?
+
+  user_buffers.resize(max_num_buffers_in_flight());
+  uint64_t p = 0;
   for (uint64_t i = 0; i < max_num_buffers_in_flight(); i++) {
-    user_buffers.emplace_back();
-    auto &user_buffer = user_buffers.back();
+    auto &user_buffer = user_buffers[i];
+    (void) p;
     size_t vector_size_bytes = sizeof(uint64_t) * matrix_size;
 
     user_buffer.in_use = false;
@@ -315,25 +331,35 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
     user_buffer.host_buffer_input = vec64(matrix_size);
     user_buffer.host_buffer_output = vec64(matrix_size);
 
+    /* CL_MEM_HOST_WRITE_ONLY is important! See notes about write-combining buffer in
+       https://man.opencl.org/clCreateBuffer.html . This flag alone yield around a 1.6x
+       improvement in throughput, and some improvement in latency.
+    */
     OCL_CHECK(err, user_buffer.cl_buffer_input = cl::Buffer(
                             context,
-                            CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,
+                            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
                             vector_size_bytes,
                             user_buffer.host_buffer_input.data(),
                             &err)
                     );
     OCL_CHECK(err, user_buffer.cl_buffer_intermediate = cl::Buffer(
                             context,
-                            CL_MEM_READ_WRITE,
+                            CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS,
                             vector_size_bytes,
-                            nullptr,
+                            nullptr,  /* nullptr because the host never access this */
                             &err)
                     );
     OCL_CHECK(err, user_buffer.cl_buffer_output = cl::Buffer(
                             context,
-                            CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,
+                            CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY,
                             vector_size_bytes,
                             user_buffer.host_buffer_output.data(),
                             &err));
+
+    p += 4;
+    if (p >= max_num_buffers_in_flight()) {
+      p = p % 4;
+      p += 1;
+    }
   }
 }

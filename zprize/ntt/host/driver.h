@@ -88,8 +88,7 @@ private:
   cl::Kernel krnl_ntt;
   cl::Kernel krnl_controller;
   std::vector<UserBuffer> user_buffers;
-  cl::Event outstanding_execution;
-  bool outstanding_execution_is_set;
+  UserBuffer *last_enqueued_buffer;
   
   // A preallocated vector of cl::Event that can be used at runtime.
   std::vector<cl::Event> tmp_events_to_wait_for;
