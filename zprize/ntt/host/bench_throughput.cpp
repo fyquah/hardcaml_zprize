@@ -29,7 +29,6 @@ run_ntt_test(host_args_t host_args)
   driver.load_xclbin(host_args.binaryFile);
 
   uint64_t num_user_buffers = driver.max_num_buffers_in_flight();
-  // uint64_t num_user_buffers = 1;
 
   std::mt19937_64 rng;
   std::vector<NttFpgaBuffer*> user_buffers(num_user_buffers);
