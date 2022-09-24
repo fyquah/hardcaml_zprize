@@ -2,6 +2,7 @@
 emconfig.json
 test_random.exe
 evaluate_given.exe
+bench_throughput.exe
 
 # This file will be generated from a template
 xrt.ini
