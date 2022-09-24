@@ -234,20 +234,15 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
     });
 
     bench("Copying input points to device", [&]() {
-        set_args(buffer);
-        enqueue_transfer_data_to_fpga(buffer);
-        OCL_CHECK(err, err = buffer->ev_transfer_data_to_fpga.wait());
+        expert__transfer_data_to_fpga_blocking(buffer);
     });
 
     bench("Doing NTT (phase1 + twiddling + phase2)", [&]() {
-        enqueue_phase1_work(buffer);
-        enqueue_phase2_work(buffer);
-        OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
+        expert__evaluate_on_fpga_blocking(buffer);
     });
 
     bench("Copying final result to host", [&]() {
-        enqueue_transfer_data_from_fpga(buffer);
-        OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
+        expert__transfer_data_from_fpga_blocking(buffer);
     });
 
     bench("Copy from internal page-aligned buffer", [&]() {
@@ -270,6 +265,23 @@ void NttFpgaDriver::simple_evaluate(uint64_t *out, const uint64_t *in, uint64_t 
   memcpy(out, buffer->output_data(), sizeof(uint64_t) * data_length);
 
   free_buffer(buffer);
+}
+
+void NttFpgaDriver::expert__evaluate_on_fpga_blocking(UserBuffer* buffer) {
+  enqueue_phase1_work(buffer);
+  enqueue_phase2_work(buffer);
+  OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
+}
+
+void NttFpgaDriver::expert__transfer_data_to_fpga_blocking(UserBuffer* buffer) {
+  set_args(buffer);
+  enqueue_transfer_data_to_fpga(buffer);
+  OCL_CHECK(err, err = buffer->ev_transfer_data_to_fpga.wait());
+}
+
+void NttFpgaDriver::expert__transfer_data_from_fpga_blocking(UserBuffer* buffer) {
+  enqueue_transfer_data_from_fpga(buffer);
+  OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
 }
 
 void NttFpgaDriver::load_xclbin(const std::string& binaryFile)

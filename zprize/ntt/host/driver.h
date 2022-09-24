@@ -157,6 +157,12 @@ public:
   void simple_evaluate_slow_with_profilling(uint64_t *output,
                                             const uint64_t *input,
                                             uint64_t data_length);
+
+  void expert__transfer_data_to_fpga_blocking(UserBuffer*);
+
+  void expert__evaluate_on_fpga_blocking(UserBuffer*);
+
+  void expert__transfer_data_from_fpga_blocking(UserBuffer*);
 };
 
 typedef NttFpgaDriver::UserBuffer NttFpgaBuffer;

@@ -7,10 +7,17 @@
 #include "driver.h"
 #include "reference.h"
 
+enum class WhatToMeasure {
+  MEMCPY_AND_PCIE_AND_FPGA_LATENCY,
+  PCIE_AND_FPGA_LATENCY,
+  FPGA_LATENCY
+};
+
 struct host_args_t {
   std::string binaryFile;
   NttFpgaDriverArg driver_arg;
   uint64_t num_evaluations;
+  WhatToMeasure what_to_measure;
 };
 
 static int
@@ -29,34 +36,59 @@ run_ntt_test(host_args_t host_args)
   driver.load_xclbin(host_args.binaryFile);
 
   auto *user_buffer = driver.request_buffer();
+  std::vector<uint64_t> test_input(driver.input_vector_size());
   std::vector<uint64_t> expected_output(driver.input_vector_size());
 
   std::cout << "Setting up input data... " << std::flush;
   {
     std::mt19937_64 rng;
-    uint64_t *input_data = user_buffer->input_data();
 
     // if we have more than 1 test cases, we make the very first test case a special
     // vector full of ones.
     for (size_t i = 0; i < num_elements; i++) {
-      input_data[i] = rng() % MODULUS;
+      test_input[i] = rng() % MODULUS;
     }
 
-    ntt_reference(expected_output.data(), input_data, driver_arg);
+    ntt_reference(expected_output.data(), test_input.data(), driver_arg);
 
     std::cout << "Done!" << std::endl;
   }
   std::vector<double> time_takens(host_args.num_evaluations);
 
+  memcpy(user_buffer->input_data(), test_input.data(), sizeof(uint64_t) * driver.input_vector_size());
+
+  if (host_args.what_to_measure == WhatToMeasure::FPGA_LATENCY) {
+    driver.expert__transfer_data_to_fpga_blocking(user_buffer);
+  }
+
   bool failed = false;
   for (size_t r = 0; r < host_args.num_evaluations; r++) {
+    /* The main benchmarking bits follows. */
     std::chrono::time_point<std::chrono::steady_clock> t_start(std::chrono::steady_clock::now());
-    driver.enqueue_evaluation_async(user_buffer);
-    driver.wait_for_result(user_buffer);
+    switch (host_args.what_to_measure) {
+      case WhatToMeasure::MEMCPY_AND_PCIE_AND_FPGA_LATENCY:
+        memcpy(user_buffer->input_data(), test_input.data(), sizeof(uint64_t) * driver.input_vector_size());
+        driver.enqueue_evaluation_async(user_buffer);
+        driver.wait_for_result(user_buffer);
+        break;
+
+      case WhatToMeasure::PCIE_AND_FPGA_LATENCY:
+        driver.enqueue_evaluation_async(user_buffer);
+        driver.wait_for_result(user_buffer);
+        break;
+
+      case WhatToMeasure::FPGA_LATENCY:
+        driver.expert__evaluate_on_fpga_blocking(user_buffer);
+        break;
+    }
     std::chrono::time_point<std::chrono::steady_clock> t_end(std::chrono::steady_clock::now());
 
     double elapsed_seconds = (std::chrono::duration<double>(t_end - t_start)).count();
     time_takens[r] = elapsed_seconds;
+
+    if (host_args.what_to_measure == WhatToMeasure::FPGA_LATENCY) {
+      driver.expert__transfer_data_from_fpga_blocking(user_buffer);
+    }
 
     auto *output_data = user_buffer->output_data();
 
@@ -64,7 +96,6 @@ run_ntt_test(host_args_t host_args)
       std::cout << "Incorrect result in run  " << r << std::endl;
       failed = 1;
     }
-
   }
 
   std::sort(time_takens.begin(), time_takens.end());
@@ -87,6 +118,7 @@ static const char *flag_xcl_bin_file    = "--xclbin";
 static const char *flag_log_row_size    = "--log-row-size";
 static const char *flag_core_type       = "--core-type";
 static const char *flag_num_evaluations = "--num-evaluations";
+static const char *flag_what_to_measure = "--how-to-evaluate";
 
 static host_args_t
 parse_args(int argc, char **argv)
@@ -96,6 +128,7 @@ parse_args(int argc, char **argv)
   std::string error_message;
   char *core_type = nullptr;
   uint64_t num_evaluations = 1;
+  WhatToMeasure what_to_measure = WhatToMeasure::PCIE_AND_FPGA_LATENCY;
   
   auto print_usage = [=]() {
     std::cout
@@ -104,6 +137,7 @@ parse_args(int argc, char **argv)
       << flag_core_type    << " <REVERSE|NTT> "
       << "[" << flag_log_row_size << " <LOG-ROW-SIZE>] "
       << "[" << flag_num_evaluations << " <NUM-ROUNDS>] "
+      << "[" << flag_what_to_measure << " <memcpy-and-pcie-and-fpga-latency|pcie-and-fpga-latency|fpga-latency>] "
       << std::endl;
   };
 
@@ -143,6 +177,26 @@ parse_args(int argc, char **argv)
 
     if (strcmp(*argv, flag_core_type) == 0) {
       core_type = capture_next_arg(flag_core_type);
+      continue;
+    }
+
+    if (strcmp(*argv, flag_what_to_measure) == 0) {
+      char *s = capture_next_arg(flag_core_type);
+      if (strcmp(s, "memcpy-and-pcie-and-fpga-latency") == 0) {
+        what_to_measure = WhatToMeasure::MEMCPY_AND_PCIE_AND_FPGA_LATENCY;
+
+      } else if (strcmp(s, "pcie-and-fpga-latency") == 0) {
+        what_to_measure = WhatToMeasure::PCIE_AND_FPGA_LATENCY;
+
+      } else if (strcmp(s, "fpga-latency") == 0) {
+        what_to_measure = WhatToMeasure::FPGA_LATENCY;
+
+      } else {
+        error_message.append(flag_what_to_measure);
+        error_message.append(" expects one of 'memcpy-and-pcie-and-fpga-latency', 'pcie-and-fpga-latency' or 'fpga-latency'");
+        throw std::runtime_error(error_message);
+
+      }
       continue;
     }
 
@@ -200,7 +254,8 @@ parse_args(int argc, char **argv)
   host_args_t args = {
       .binaryFile = binaryFile,
       .driver_arg = driver_arg,
-      .num_evaluations = num_evaluations 
+      .num_evaluations = num_evaluations,
+      .what_to_measure = what_to_measure
       };
   return args;
 };
