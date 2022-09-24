@@ -2,6 +2,14 @@
 
 #include "driver.h"
 
+namespace argpos {
+  const uint64_t GMEM_INPUT = 3;
+  const uint64_t GMEM_INTERMEDIATE = 4;
+  const uint64_t GMEM_OUTPUT = 5;
+  const uint64_t ROW_SIZE = 6;
+  const uint64_t PHASE = 7;
+};  // argpos
+
 std::ostream& operator<<(std::ostream &os, CoreType core_type)
 {
   switch (core_type) {
@@ -77,7 +85,9 @@ NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) :
     log_row_size(driver_arg.log_row_size),
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
-    m_max_num_buffers_in_flight(1)
+    loaded_xclbin(false),
+    m_max_num_buffers_in_flight(1),
+    outstanding_execution_is_set(false)
 {
 }
 
@@ -109,6 +119,12 @@ void NttFpgaDriver::free_buffer(NttFpgaBuffer *buffer)
 
 void NttFpgaDriver::transfer_data_to_fpga(NttFpgaBuffer *buffer)
 {
+  // Set the controller arguments
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_INPUT, buffer->cl_buffer_input));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_INTERMEDIATE, buffer->cl_buffer_intermediate));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_OUTPUT, buffer->cl_buffer_output));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::ROW_SIZE, (uint16_t) row_size));
+
   OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
         {buffer->cl_buffer_input},
         0 /* 0 means from host*/,
@@ -133,9 +149,12 @@ void NttFpgaDriver::transfer_data_from_fpga_blocking(NttFpgaBuffer *buffer)
 void NttFpgaDriver::enqueue_for_phase_1(NttFpgaBuffer *buffer)
 {
   /* TODO(fyquah): This shouldn't cause any allocation, right? */
-  std::vector<cl::Event> events_to_wait_for = { buffer->ev_transfer_data_to_fpga, outstanding_execution };
+  std::vector<cl::Event> events_to_wait_for = { buffer->ev_transfer_data_to_fpga };
+  if (outstanding_execution_is_set) {
+    events_to_wait_for.push_back(outstanding_execution);
+  }
 
-  OCL_CHECK(err, err = krnl_controller.setArg(6, (uint8_t) 0b01));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::PHASE, (uint8_t) 0b01));
   // The reverse core uses the C++ HLS ap_ctrl_handshake mechanism, hence it needs to be
   // explicitly enqueued. The NTT core operates solely based on axi streams without any
   // control signals., so we don't need to enqueue it.
@@ -150,22 +169,23 @@ void NttFpgaDriver::enqueue_for_phase_2(NttFpgaBuffer *buffer)
   /* TODO(fyquah): This shouldn't cause any allocation, right? */
   std::vector<cl::Event> events_to_wait_for = { buffer->ev_phase1_work };
 
-  OCL_CHECK(err, err = krnl_controller.setArg(6, (uint8_t) 0b10));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::PHASE, (uint8_t) 0b10));
   // See comment in "Doing phase 1 work"
   if (core_type == CoreType::REVERSE) {
     OCL_CHECK(err, err = q.enqueueTask(krnl_ntt));
   }
   OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &events_to_wait_for, &buffer->ev_phase2_work));
   outstanding_execution = buffer->ev_phase2_work;
+  outstanding_execution_is_set = true;
 }
 
 void NttFpgaDriver::enqueue_for_evaluation_async(NttFpgaBuffer *buffer)
 {
   // Set the controller arguments
-  OCL_CHECK(err, err = krnl_controller.setArg(3, buffer->cl_buffer_input));
-  OCL_CHECK(err, err = krnl_controller.setArg(4, buffer->cl_buffer_intermediate));
-  OCL_CHECK(err, err = krnl_controller.setArg(5, buffer->cl_buffer_output));
-  OCL_CHECK(err, err = krnl_controller.setArg(6, (uint16_t) row_size));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_INPUT, buffer->cl_buffer_input));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_INTERMEDIATE, buffer->cl_buffer_intermediate));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_OUTPUT, buffer->cl_buffer_output));
+  OCL_CHECK(err, err = krnl_controller.setArg(argpos::ROW_SIZE, (uint16_t) row_size));
 
   // Set the reverse arguments
   if (core_type == CoreType::REVERSE) {
@@ -219,6 +239,8 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
       memcpy(out, buffer->output_data(), sizeof(uint64_t) * data_length);
     });
   });
+
+  free_buffer(buffer);
 }
 
 void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
@@ -229,12 +251,6 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   }
 
   loaded_xclbin = true;
-
-  // Allocate Memory in Host Memory
-  size_t size = row_size * row_size;
-  size_t vector_size_bytes = sizeof(uint64_t) * size;
-  host_buffer_input = vec64(size);
-  host_buffer_output = vec64(size);
 
   // OPENCL HOST CODE AREA START
   // Create Program and Kernel
@@ -275,6 +291,7 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   for (uint64_t i = 0; i < max_num_buffers_in_flight(); i++) {
     user_buffers.emplace_back();
     auto &user_buffer = user_buffers.back();
+    size_t vector_size_bytes = sizeof(uint64_t) * matrix_size;
 
     user_buffer.in_use = false;
 

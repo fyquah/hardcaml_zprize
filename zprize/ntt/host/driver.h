@@ -89,6 +89,7 @@ private:
   cl::Kernel krnl_controller;
   std::vector<UserBuffer> user_buffers;
   cl::Event outstanding_execution;
+  bool outstanding_execution_is_set;
 
   void enqueue_for_phase_1(UserBuffer*);
 
