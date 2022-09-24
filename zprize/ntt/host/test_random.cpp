@@ -32,7 +32,7 @@ run_ntt_test(host_args_t host_args)
   vec64 input(num_elements);
   vec64 expected_output(num_elements);
   vec64 obtained_output(num_elements);
-  std::vector<bool> test_cases_okay(host_args.num_test_cases);
+  std::vector<bool> test_cases_okay(host_args.num_test_cases, true);
 
   for (size_t t = 0; t < host_args.num_test_cases; t++) {
 
@@ -81,7 +81,7 @@ run_ntt_test(host_args_t host_args)
       if (found_mismatch) {
         test_cases_okay[t] = false;
       } else {
-       std::cout << "Ok!";
+        std::cout << "Ok!";
       }
 
       std::cout << "\n";
