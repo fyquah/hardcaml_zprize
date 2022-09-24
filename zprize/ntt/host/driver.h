@@ -55,10 +55,11 @@ private:
   cl::Context context;
   cl::Kernel krnl_ntt;
   cl::Kernel krnl_controller;
-  cl::Buffer cl_buffer_points;
+  cl::Buffer cl_buffer_input;
   cl::Buffer cl_buffer_intermediate;
-  vec64 host_buffer_points;
-  vec64 host_buffer_intermediate;
+  cl::Buffer cl_buffer_output;
+  vec64 host_buffer_input;
+  vec64 host_buffer_output;
 
 public:
   NttFpgaDriver(NttFpgaDriverArg driver_arg);
