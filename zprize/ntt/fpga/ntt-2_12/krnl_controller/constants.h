@@ -1,0 +1,3 @@
+#define MEMORY_DWIDTH 512
+#define LOGBLOCKS 2
+#define NUM_BLOCKS (1 << LOGBLOCKS)

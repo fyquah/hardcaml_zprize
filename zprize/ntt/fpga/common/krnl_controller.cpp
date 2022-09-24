@@ -1,12 +1,9 @@
 #include <stdint.h>
 
+#include "constants.h"
 #include "ap_axi_sdata.h"
 #include "ap_int.h"
 #include "hls_stream.h"
-
-#define MEMORY_DWIDTH 512
-#define LOGBLOCKS 2
-#define NUM_BLOCKS (1 << LOGBLOCKS)
 
 typedef ap_axiu<MEMORY_DWIDTH, 1, 0, 0> chunk_t;
 
@@ -124,3 +121,4 @@ void krnl_controller(
     phase2(compute_to_controller, controller_to_compute_phase_2, gmem_b, gmem_a, row_size);
   }
 }
+
