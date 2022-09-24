@@ -7,69 +7,86 @@
 #include "driver.h"
 #include "reference.h"
 
+enum class WhatToMeasure {
+  MEMCPY_AND_EVALUATE_AND_CHECK,
+  EVALUATE_ONLY
+};
+
 struct host_args_t {
   std::string binaryFile;
   NttFpgaDriverArg driver_arg;
-  uint64_t num_rounds;
+  uint64_t num_evaluations;
+  WhatToMeasure what_to_measure;
 };
 
-static int
-run_ntt_test(host_args_t host_args)
+std::ostream& operator<<(std::ostream& os, WhatToMeasure x) {
+  switch (x) {
+    case WhatToMeasure::MEMCPY_AND_EVALUATE_AND_CHECK:
+      return os << "memcpy-and-evaluate-and-check";
+    case WhatToMeasure::EVALUATE_ONLY:
+      return os << "evaluate-only";
+  }
+  return os;
+}
+
+static std::vector<std::vector<uint64_t>>
+generate_input_vectors(NttFpgaDriver &driver, uint64_t num_examples)
 {
-  auto driver_arg = host_args.driver_arg;
-  uint64_t num_elements = driver_arg.num_elements();
-
-  std::cout
-    << "Running ntt-fpga throughput benchmark with\n"
-    << "  binaryFile =  "  << host_args.binaryFile << "\n"
-    << "  core_type "      << driver_arg.core_type << "\n"
-    << "  log_row_size = " << driver_arg.log_row_size << "\n";
-
-  NttFpgaDriver driver(driver_arg);
-  driver.load_xclbin(host_args.binaryFile);
-
-  uint64_t num_user_buffers = driver.max_num_buffers_in_flight();
-
   std::mt19937_64 rng;
-  std::vector<NttFpgaBuffer*> user_buffers(num_user_buffers);
-  std::vector<std::vector<uint64_t>> expected_outputs(num_user_buffers);
-  for (uint64_t t = 0; t < user_buffers.size(); t++) {
-    user_buffers[t] = driver.request_buffer();
-    assert(user_buffers[t] != nullptr);
+  std::vector<std::vector<uint64_t>> input_vectors(num_examples);
+
+  for (auto &input_vector : input_vectors)  {
+    input_vector.resize(driver.input_vector_size());
+    for (size_t j = 0; j < driver.input_vector_size(); j++) {
+      input_vector[j] = rng() % MODULUS;
+    }
   }
 
-  std::cout << "Setting up input data... " << std::flush;
-  for (uint64_t t = 0; t < user_buffers.size(); t++) {
-    auto *user_buffer = user_buffers[t];
+  return input_vectors;
+}
+
+static std::vector<std::vector<uint64_t>>
+generate_expected_outputs(std::vector<std::vector<uint64_t>>& test_inputs, NttFpgaDriverArg driver_arg)
+{
+  std::vector<std::vector<uint64_t>> expected_outputs(test_inputs.size());
+  for (size_t t = 0; t < expected_outputs.size(); t++) {
     auto &expected_output = expected_outputs[t];
-    expected_output.resize(driver.input_vector_size());
+    expected_output.resize(test_inputs[t].size());
+    ntt_reference(expected_output.data(), test_inputs[t].data(), driver_arg);
+  }
+  return expected_outputs;
+}
 
-    uint64_t *input_data = user_buffer->input_data();
+static int
+run_ntt_bench_throughput_evaluate_only(NttFpgaDriver &driver,
+                                       host_args_t host_args,
+                                       std::vector<NttFpgaBuffer*>& user_buffers)
+{
+  uint64_t num_user_buffers = driver.max_num_buffers_in_flight();
 
-    // if we have more than 1 test cases, we make the very first test case a special
-    // vector full of ones.
-    for (size_t i = 0; i < num_elements; i++) {
-      input_data[i] = rng() % MODULUS;
-    }
-
-    ntt_reference(expected_output.data(), input_data, driver_arg);
+  std::cout << "Generating test data ... " << std::flush;
+  auto test_inputs = generate_input_vectors(driver, num_user_buffers);
+  auto expected_outputs = generate_expected_outputs(test_inputs, host_args.driver_arg);
+  for (uint64_t t = 0; t < num_user_buffers; t++) {
+    memcpy(user_buffers[t]->input_data(), test_inputs[t].data(), driver.input_vector_size() * sizeof(uint64_t));
   }
   std::cout << "Done!" << std::endl;
 
   std::chrono::time_point<std::chrono::steady_clock> t_start(std::chrono::steady_clock::now());
-  for (size_t r = 0; r < host_args.num_rounds; r++) {
-    for (size_t t = 0; t < num_user_buffers; t++) {
-      driver.enqueue_evaluation_async(user_buffers[t]);
-    }
+  size_t t = 0;
+  for (uint64_t i = 0; i < host_args.num_evaluations; i++) {
+    driver.enqueue_evaluation_async(user_buffers[t]);
+    t = (t + 1) % num_user_buffers;
   }
-  for (size_t r = 0; r < host_args.num_rounds; r++) {
-    for (size_t t = 0; t < num_user_buffers; t++) {
-      driver.wait_for_result(user_buffers[t]);
-    }
+  t = 0;
+  for (uint64_t i = 0; i < host_args.num_evaluations; i++) {
+    driver.wait_for_result(user_buffers[t]);
+    t = (t + 1) % num_user_buffers;
   }
+  std::chrono::time_point<std::chrono::steady_clock> t_end(std::chrono::steady_clock::now());
 
-  bool failed = 0;
-  for (size_t t = 0; t < user_buffers.size(); t++) {
+  int failed = 0;
+  for (uint64_t t = 0; t < user_buffers.size(); t++) {
     auto *user_buffer = user_buffers[t];
     auto *expected_output = expected_outputs[t].data();
     auto *output_data = user_buffer->output_data();
@@ -80,26 +97,118 @@ run_ntt_test(host_args_t host_args)
     }
   }
 
+  double elapsed_seconds = (std::chrono::duration<double>(t_end - t_start)).count();
+  std::cout << "Time taken for " << host_args.num_evaluations << "NTTs" << ": " << elapsed_seconds << "s" << std::endl;
+  std::cout << "Amortized time taken per NTT " << (elapsed_seconds / host_args.num_evaluations) << "s" << std::endl;
+  std::cout << "Throughput: " << (host_args.num_evaluations / elapsed_seconds) << "NTTs/second" << std::endl;
+
+  return failed;
+}
+
+static int
+run_ntt_bench_throughput_memcpy_evaluate_and_check(NttFpgaDriver &driver,
+                                                   host_args_t host_args,
+                                                   std::vector<NttFpgaBuffer*>& user_buffers)
+{
+  uint64_t num_user_buffers = driver.max_num_buffers_in_flight();
+
+  std::cout << "Generating test data ... " << std::flush;
+  auto test_inputs = generate_input_vectors(driver, 16);
+  auto expected_outputs = generate_expected_outputs(test_inputs, host_args.driver_arg);
+  std::vector<uint64_t> test_vector_indices(num_user_buffers, 0);
+  std::cout << "Done!" << std::endl;
+
+  int failed = 0;
+  auto poll_and_validate = [&](uint64_t t) {
+    auto *user_buffer = user_buffers[t];
+    auto *expected_output = expected_outputs[test_vector_indices[t]].data();
+    auto *output_data = user_buffer->output_data();
+
+    driver.wait_for_result(user_buffer);
+
+    if (memcmp(expected_output, output_data, driver.input_vector_size() * sizeof(uint64_t)) != 0) {
+      std::cout << "Incorrect result in buffer " << t << std::endl;
+      failed = 1;
+    }
+    test_vector_indices[t] = (test_vector_indices[t] + 1) % 16;
+  };
+
+  std::chrono::time_point<std::chrono::steady_clock> t_start(std::chrono::steady_clock::now());
+  {
+    size_t t = 0;
+    for (uint64_t i = 0; i < host_args.num_evaluations; i++) {
+      if (i >= num_user_buffers) {
+        poll_and_validate(t);
+      }
+      memcpy(
+          user_buffers[t]->input_data(),
+          test_inputs[test_vector_indices[t]].data(),
+          driver.input_vector_size() * sizeof(uint64_t));
+      driver.enqueue_evaluation_async(user_buffers[t]);
+      t = (t + 1) % num_user_buffers;
+    }
+    if (host_args.num_evaluations < user_buffers.size()) {
+      t = 0;
+    }
+    for (uint64_t i = 0; i < user_buffers.size(); i++) {
+      poll_and_validate(t);
+      t = (t + 1) % num_user_buffers;
+    }
+  }
   std::chrono::time_point<std::chrono::steady_clock> t_end(std::chrono::steady_clock::now());
 
   double elapsed_seconds = (std::chrono::duration<double>(t_end - t_start)).count();
-  uint64_t num_ntts = num_user_buffers * host_args.num_rounds;
-
-  std::cout << "Time taken for " << num_ntts << "NTTs" << ": " << elapsed_seconds << "s" << std::endl;
-  std::cout << "Amortized time taken per NTT " << (elapsed_seconds / num_ntts) << "s" << std::endl;
-  std::cout << "Throughput: " << (num_ntts / elapsed_seconds) << "NTTs/second" << std::endl;
+  std::cout << "Time taken for " << host_args.num_evaluations << "NTTs (with memcpy and checking)" << ": " << elapsed_seconds << "s" << std::endl;
+  std::cout << "Amortized time taken per NTT " << (elapsed_seconds / host_args.num_evaluations) << "s" << std::endl;
+  std::cout << "Throughput: " << (host_args.num_evaluations / elapsed_seconds) << "NTTs/second" << std::endl;
 
   return failed;
+}
+
+static int
+run_ntt_bench_throughput(host_args_t host_args)
+{
+  auto driver_arg = host_args.driver_arg;
+
+  std::cout
+    << "Running ntt-fpga throughput benchmark with\n"
+    << "  binaryFile =  "  << host_args.binaryFile << "\n"
+    << "  core_type "      << driver_arg.core_type << "\n"
+    << "  log_row_size = " << driver_arg.log_row_size << "\n"
+    << "  num_evaluations = " << host_args.num_evaluations << "\n"
+    << "  what_to_measure = "  << host_args.what_to_measure << "\n";
+
+  NttFpgaDriver driver(driver_arg);
+  driver.load_xclbin(host_args.binaryFile);
+
+  uint64_t num_user_buffers = driver.max_num_buffers_in_flight();
+  std::vector<NttFpgaBuffer*> user_buffers(num_user_buffers);
+  for (uint64_t i = 0; i < num_user_buffers; i++) {
+    user_buffers[i] = driver.request_buffer();
+    assert(user_buffers[i] != nullptr);
+  }
+
+  switch (host_args.what_to_measure) {
+  case WhatToMeasure::MEMCPY_AND_EVALUATE_AND_CHECK:
+    return run_ntt_bench_throughput_memcpy_evaluate_and_check(driver, host_args, user_buffers);
+
+  case WhatToMeasure::EVALUATE_ONLY:
+    return run_ntt_bench_throughput_evaluate_only(driver, host_args, user_buffers);
+
+  }
+
+  return 1;
 }
 
 // --------------------
 // Mostly uninteresting parsing code follows
 // --------------------
 
-static const char *flag_xcl_bin_file   = "--xclbin";
-static const char *flag_log_row_size   = "--log-row-size";
-static const char *flag_core_type      = "--core-type";
-static const char *flag_num_rounds     = "--num-rounds";
+static const char *flag_xcl_bin_file    = "--xclbin";
+static const char *flag_log_row_size    = "--log-row-size";
+static const char *flag_core_type       = "--core-type";
+static const char *flag_num_evaluations = "--num-evaluations";
+static const char *flag_what_to_measure = "--what-to-measure";
 
 static host_args_t
 parse_args(int argc, char **argv)
@@ -108,7 +217,8 @@ parse_args(int argc, char **argv)
   uint64_t log_row_size = 0;
   std::string error_message;
   char *core_type = nullptr;
-  uint64_t num_rounds = 1;
+  uint64_t num_evaluations = 1;
+  WhatToMeasure what_to_measure = WhatToMeasure::MEMCPY_AND_EVALUATE_AND_CHECK;
   
   auto print_usage = [=]() {
     std::cout
@@ -116,7 +226,8 @@ parse_args(int argc, char **argv)
       << flag_xcl_bin_file << " <FILENAME> " 
       << flag_core_type    << " <REVERSE|NTT> "
       << "[" << flag_log_row_size << " <LOG-ROW-SIZE>] "
-      << "[" << flag_num_rounds << " <NUM-ROUNDS>] "
+      << "[" << flag_num_evaluations << " <NUM-ROUNDS>] "
+      << "[" << flag_what_to_measure << " <memcpy-and-evaluate|evaluate-only>] "
       << std::endl;
   };
 
@@ -149,13 +260,30 @@ parse_args(int argc, char **argv)
       continue;
     }
 
-    if (strcmp(*argv, flag_num_rounds) == 0) {
-      num_rounds = std::stoull(capture_next_arg(flag_num_rounds));
+    if (strcmp(*argv, flag_num_evaluations) == 0) {
+      num_evaluations = std::stoull(capture_next_arg(flag_num_evaluations));
       continue;
     }
 
     if (strcmp(*argv, flag_core_type) == 0) {
       core_type = capture_next_arg(flag_core_type);
+      continue;
+    }
+
+    if (strcmp(*argv, flag_what_to_measure) == 0) {
+      char *s = capture_next_arg(flag_what_to_measure);
+      if (strcmp(s, "memcpy-and-evaluate-and-check") == 0) {
+        what_to_measure = WhatToMeasure::MEMCPY_AND_EVALUATE_AND_CHECK;
+
+      } else if (strcmp(s, "evaluate-only") == 0) {
+        what_to_measure = WhatToMeasure::EVALUATE_ONLY;
+
+      } else {
+        error_message.append(flag_what_to_measure);
+        error_message.append(" expects one of 'memcpy-and-evaluate-and-check' or 'evaluate-only'");
+        throw std::runtime_error(error_message);
+
+      }
       continue;
     }
 
@@ -213,7 +341,8 @@ parse_args(int argc, char **argv)
   host_args_t args = {
       .binaryFile = binaryFile,
       .driver_arg = driver_arg,
-      .num_rounds = num_rounds 
+      .num_evaluations = num_evaluations,
+      .what_to_measure = what_to_measure
       };
   return args;
 };
@@ -221,6 +350,6 @@ parse_args(int argc, char **argv)
 int
 main(int argc, char** argv) {
   auto args = parse_args(argc, argv);
-  return run_ntt_test(args);
+  return run_ntt_bench_throughput(args);
 }
 
