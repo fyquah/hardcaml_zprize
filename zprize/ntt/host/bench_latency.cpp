@@ -118,7 +118,7 @@ static const char *flag_xcl_bin_file    = "--xclbin";
 static const char *flag_log_row_size    = "--log-row-size";
 static const char *flag_core_type       = "--core-type";
 static const char *flag_num_evaluations = "--num-evaluations";
-static const char *flag_what_to_measure = "--how-to-evaluate";
+static const char *flag_what_to_measure = "--what-to-measure";
 
 static host_args_t
 parse_args(int argc, char **argv)
