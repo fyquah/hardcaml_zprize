@@ -28,22 +28,12 @@ run_ntt_test(host_args_t host_args)
   NttFpgaDriver driver(driver_arg);
   driver.load_xclbin(host_args.binaryFile);
 
-  uint64_t num_user_buffers = driver.max_num_buffers_in_flight();
-
-  std::mt19937_64 rng;
-  std::vector<NttFpgaBuffer*> user_buffers(num_user_buffers);
-  std::vector<std::vector<uint64_t>> expected_outputs(num_user_buffers);
-  for (uint64_t t = 0; t < user_buffers.size(); t++) {
-    user_buffers[t] = driver.request_buffer();
-    assert(user_buffers[t] != nullptr);
-  }
+  auto *user_buffer = driver.request_buffer();
+  std::vector<uint64_t> expected_output(driver.input_vector_size());
 
   std::cout << "Setting up input data... " << std::flush;
-  for (uint64_t t = 0; t < user_buffers.size(); t++) {
-    auto *user_buffer = user_buffers[t];
-    auto &expected_output = expected_outputs[t];
-    expected_output.resize(driver.input_vector_size());
-
+  {
+    std::mt19937_64 rng;
     uint64_t *input_data = user_buffer->input_data();
 
     // if we have more than 1 test cases, we make the very first test case a special
@@ -53,39 +43,38 @@ run_ntt_test(host_args_t host_args)
     }
 
     ntt_reference(expected_output.data(), input_data, driver_arg);
+
+    std::cout << "Done!" << std::endl;
   }
-  std::cout << "Done!" << std::endl;
   std::vector<double> time_takens(host_args.num_evaluations);
 
-  uint64_t t = 0;
   bool failed = false;
   for (size_t r = 0; r < host_args.num_evaluations; r++) {
-    auto *user_buffer = user_buffers[t];
-
     std::chrono::time_point<std::chrono::steady_clock> t_start(std::chrono::steady_clock::now());
     driver.enqueue_evaluation_async(user_buffer);
-    driver.wait_for_result(user_buffers[t]);
+    driver.wait_for_result(user_buffer);
     std::chrono::time_point<std::chrono::steady_clock> t_end(std::chrono::steady_clock::now());
 
-    t = (t + 1) % num_user_buffers;
     double elapsed_seconds = (std::chrono::duration<double>(t_end - t_start)).count();
-    time_takens[t] = elapsed_seconds;
+    time_takens[r] = elapsed_seconds;
 
-    auto *expected_output = expected_outputs[t].data();
     auto *output_data = user_buffer->output_data();
 
-    if (memcmp(expected_output, output_data, driver.input_vector_size() * sizeof(uint64_t)) != 0) {
+    if (memcmp(expected_output.data(), output_data, driver.input_vector_size() * sizeof(uint64_t)) != 0) {
       std::cout << "Incorrect result in run  " << r << std::endl;
       failed = 1;
     }
+
   }
 
   std::sort(time_takens.begin(), time_takens.end());
 
   std::cout << "Latency over " << host_args.num_evaluations << " NTTs\n";
-  std::cout << "Min latency: " << time_takens[0] << "s\n";
-  std::cout << "Median latency: " << time_takens[time_takens.size() / 2] << "s\n";
-  std::cout << "Max latency: " << time_takens.back() << "s\n";
+  std::cout << "Min latency          : " << time_takens[0] << "s\n";
+  std::cout << "25-percentile latency: " << time_takens[time_takens.size() / 4] << "s\n";
+  std::cout << "Median latency       : " << time_takens[time_takens.size() / 2] << "s\n";
+  std::cout << "75-percentile latency: " << time_takens[time_takens.size() * 3 / 4] << "s\n";
+  std::cout << "Max latency          : " << time_takens.back() << "s\n";
 
   return failed;
 }
