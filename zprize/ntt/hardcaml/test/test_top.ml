@@ -330,7 +330,7 @@ let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
       : Waveform.t option);
   [%expect
     {|
-  (!cycles 612)
+    (!cycles 612)
     "Hardware and software reference results match!"
     (!cycles 560)
     "Hardware and software reference results match!" |}]
@@ -375,7 +375,7 @@ let%expect_test "other configurations with twiddles" =
       : Waveform.t option);
   [%expect
     {|
-  (!cycles 1656)
+    (!cycles 1656)
     "Hardware and software reference results match!"
     (!cycles 1464)
     "Hardware and software reference results match!"
