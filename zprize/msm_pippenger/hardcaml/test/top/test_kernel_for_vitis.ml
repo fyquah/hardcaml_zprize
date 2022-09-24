@@ -107,19 +107,40 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         |> Bits.split_lsb ~exact:true ~part_width:512
       in
       assert (List.length point_words_to_send = 3);
-      let scalar_to_send =
-        let even_scalar = Bits.uresize inputs.(2 * (idx / 2)).scalar 256 in
-        let odd_scalar = Bits.uresize inputs.((2 * (idx / 2)) + 1).scalar 256 in
-        Bits.(odd_scalar @: even_scalar)
+      let scalar_to_send, scalar_beat, scalar_initial, scalar_last_word =
+        let num_scalar_64b_words =
+          Int.round_up Config.scalar_bits ~to_multiple_of:64 / 64
+        in
+        let num_scalars_per_ddr_word = 512 / 64 / num_scalar_64b_words in
+        (* print_s [%message (num_scalar_64b_words : int) (num_scalars_per_ddr_word : int)];*)
+        let scalars =
+          List.init num_scalars_per_ddr_word ~f:(fun i ->
+            let index = Int.round_down idx ~to_multiple_of:num_scalars_per_ddr_word + i in
+            let scalar =
+              if index < Array.length inputs
+              then inputs.(index).scalar
+              else Bits.zero Config.scalar_bits
+            in
+            Bits.uresize scalar (64 * num_scalar_64b_words))
+        in
+        ( Bits.uresize (Bits.concat_lsb scalars) 512
+        , idx mod num_scalars_per_ddr_word = num_scalars_per_ddr_word - 1
+        , idx mod num_scalars_per_ddr_word = 0
+        , idx / num_scalars_per_ddr_word = (num_inputs - 1) / num_scalars_per_ddr_word )
       in
-      assert (Bits.width scalar_to_send = 512);
-      let scalar_beat = idx mod 2 = 1 in
-      (*print_s [%message (idx : int) (scalar_beat : bool) (aligned_point : Bits.t Input_aligned.t) (point_words_to_send : Bits.t list) (scalar_to_send : Bits.t)];*)
+      (*print_s
+        [%message
+          (idx : int)
+            (scalar_beat : bool)
+            (aligned_point : Bits.t Input_aligned.t)
+            (point_words_to_send : Bits.t list)
+            (scalar_to_send : Bits.t)];*)
       let module Scalar_state = struct
         type t =
           | Initial
           | Started_sending
           | Done_sending
+        [@@deriving sexp_of]
 
         let is_done t =
           match t with
@@ -138,11 +159,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         type state =
           | Initial
           | Sending
+        [@@deriving sexp_of]
 
         type t =
           { words : Bits.t list
           ; state : state
           }
+        [@@deriving sexp_of]
       end
       in
       (* bad hack of a step testbench, not really exactly what we want *)
@@ -151,12 +174,23 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         let last_input_pair = idx = num_inputs - 1 in
         (* exit condition - done or timeout *)
         let scalar_done =
-          ((not scalar_beat) && Scalar_state.is_started scalar_state)
-          || (scalar_beat && Scalar_state.is_done scalar_state)
+          if scalar_beat || last_input_pair
+          then Scalar_state.is_done scalar_state
+          else if not scalar_beat
+          then Scalar_state.is_started scalar_state
+          else false
         in
         let point_done = List.length point_state.words = 0 in
         if cycle_cnt >= timeout
-        then print_s [%message "Timed out while sending scalars!"]
+        then
+          print_s
+            [%message
+              "Timed out while sending scalars!"
+                (scalar_done : bool)
+                (point_done : bool)
+                (scalar_beat : bool)
+                (scalar_state : Scalar_state.t)
+                (point_state : Point_state.t)]
         else if not (scalar_done && point_done)
         then (
           (* scalar step *)
@@ -164,7 +198,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             let send_scalar () : Scalar_state.t =
               i.host_scalars_to_fpga.tdata := scalar_to_send;
               i.host_scalars_to_fpga.tvalid := Bits.vdd;
-              if last_input_pair then i.host_scalars_to_fpga.tlast := Bits.vdd;
+              if scalar_last_word then i.host_scalars_to_fpga.tlast := Bits.vdd;
               if Bits.is_vdd !(o.host_scalars_to_fpga_dest.tready)
               then Done_sending
               else Started_sending
@@ -200,7 +234,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       in
       loop
         0
-        (if scalar_beat then Started_sending else Initial)
+        (if scalar_initial then Initial else Started_sending)
         { words = point_words_to_send; state = Initial };
       if scalar_beat then i.host_scalars_to_fpga.tvalid := Bits.gnd;
       i.ddr_points_to_fpga.tvalid := Bits.gnd;

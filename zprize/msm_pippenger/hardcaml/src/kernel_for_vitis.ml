@@ -8,6 +8,7 @@ module Make (Config : Config.S) = struct
   module Top = Top.Make (Config)
   module Msm_result_to_host = Msm_result_to_host.Make (Config)
   module Host_to_msm = Host_to_msm.Make (Config)
+  module Merge_axi_streams = Merge_axi_streams.Make (Config)
 
   module I = struct
     type 'a t =
