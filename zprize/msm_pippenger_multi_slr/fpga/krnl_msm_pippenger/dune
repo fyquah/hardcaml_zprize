@@ -1,5 +1,12 @@
 (rule
  (mode promote)
- (action (with-stdout-to krnl_msm_pippenger.v (run ../../hardcaml/bin/generate.exe kernel))))
+ (action
+  (with-stdout-to
+   krnl_msm_pippenger.v
+   (run ../../hardcaml/bin/generate.exe kernel))))
 
-(rule (target stub.sv) (action (write-file %{target} "")))
+(rule
+ (target stub.sv)
+ (mode promote)
+ (action
+  (write-file %{target} "")))

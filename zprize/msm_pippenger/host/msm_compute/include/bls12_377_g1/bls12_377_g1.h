@@ -161,7 +161,7 @@ class GFq {
         /* rop */ b,
         /* countp */ nullptr,
         /* order */ WORDS_LEAST_SIGNIFICANT,
-        /* size */ sizeof(uint64_t),
+        /* size */ sizeof(uint32_t),
         /* endian */ BYTES_LEAST_SIGNIFICANT,
         /* nails */ 0,
         /* op */ v);
@@ -285,58 +285,10 @@ class Xyzt {
    * 64-bit aligned results.
    */
   void import_from_fpga_vector(const uint32_t packed_repr[]) {
-    mpz_t tmp1;
-    mpz_t tmp2;
-    mpz_t tmp3;
-    mpz_t tmp4;
-    init_empty(tmp1);
-    init_empty(tmp2);
-    init_empty(tmp3);
-    init_empty(tmp4);
-    size_t w;
-
     x.set_32b(packed_repr + NUM_32B_WORDS * 0);
-    w = mpz_sizeinbase(x.v, 2);
-    for (size_t i = 377; i < w; i++) {
-      mpz_clrbit(x.v, i);
-    }
-
-    /* tmp1 = first_384_bytes
-     * tmp2 = second_384_bytes
-     * tmp3 = (tmp1 >> 377);
-     * tmp4 = (tmp2 << 7)
-     * y = tmp3 | tmp4
-     */
-    set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 0);
-    set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 1);
-    mpz_fdiv_q_2exp(tmp3, tmp1, 377);
-    mpz_mul_2exp(tmp4, tmp2, 7);
-    mpz_ior(y.v, tmp3, tmp4);
-    w = mpz_sizeinbase(y.v, 2);
-
-    for (size_t i = 377; i < w; i++) {
-      mpz_clrbit(y.v, i);
-    }
-
-    set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 1);
-    set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 2);
-    mpz_fdiv_q_2exp(tmp3, tmp1, 384 - 14);
-    mpz_mul_2exp(tmp4, tmp2, 14);
-    mpz_ior(z.v, tmp3, tmp4);
-    w = mpz_sizeinbase(z.v, 2);
-    for (size_t i = 377; i < w; i++) {
-      mpz_clrbit(z.v, i);
-    }
-
-    set_32b_words(tmp1, packed_repr + NUM_32B_WORDS * 2);
-    set_32b_words(tmp2, packed_repr + NUM_32B_WORDS * 3);
-    mpz_fdiv_q_2exp(tmp3, tmp1, 384 - 21);
-    mpz_mul_2exp(tmp4, tmp2, 21);
-    mpz_ior(t.v, tmp3, tmp4);
-    w = mpz_sizeinbase(t.v, 2);
-    for (size_t i = 377; i < w; i++) {
-      mpz_clrbit(t.v, i);
-    }
+    y.set_32b(packed_repr + NUM_32B_WORDS * 1);
+    z.set_32b(packed_repr + NUM_32B_WORDS * 2);
+    t.set_32b(packed_repr + NUM_32B_WORDS * 3);
   }
 
   bool is_z_zero() const { return mpz_cmp_si(z.v, 0) == 0; }
@@ -483,10 +435,10 @@ class Xyzt {
     y.set((uint64_t *)affine.y.data);
     y.set_div(y, COFACTOR);
 
-    printf("\n\nINITIAL POINT IN C++ -----------------\n");
-    dump();
-    println_hex();
-    printf("\n\n--------------------------------------\n");
+    // printf("\n\nINITIAL POINT IN C++ -----------------\n");
+    // dump();
+    // println_hex();
+    // printf("\n\n--------------------------------------\n");
 
     affineWeierstrassToExtendedTwistedEdwards();
   }

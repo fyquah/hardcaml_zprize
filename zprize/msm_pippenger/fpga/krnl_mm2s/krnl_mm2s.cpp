@@ -27,9 +27,10 @@ and writes to a stream interface to another kernel */
 typedef ap_axiu<DWIDTH, 0, 0, 0> pkt;
 
 extern "C" {
-void krnl_mm2s(ap_uint<512>* in,      // Read-Only Vector 1
-               hls::stream<pkt>& out, // Internal Stream
-               int size               // Size in integer
+void krnl_mm2s(ap_uint<512>* in,               // Read-Only Vector 1
+               hls::stream<pkt>& out,          // Internal Stream
+               int size,                       // Size in integer
+               ap_uint<1> tlast_for_last_word  // Value of tlast at last cycle
                ) {
 #pragma HLS INTERFACE m_axi port = in offset = slave bundle = gmem
 #pragma HLS INTERFACE axis port = out
@@ -54,7 +55,7 @@ data_mover:
     }
     ap_uint<512> res = in[i];
     v.data = res;
-    v.last = 1;
+    v.last = tlast_for_last_word;
     out.write(v);
 }
 }

@@ -36,7 +36,7 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
     Int.round_up (4 * Config.t.field_bits) ~to_multiple_of:512 / 512
   ;;
 
-  let num_cores = Array.length Config.t.scalar_bits_by_core
+  let num_cores = Array.length Config.t.for_cores
 
   let create_sim ~verilator () =
     let scope =
@@ -241,13 +241,13 @@ module Make (Config : Msm_pippenger_multi_slr.Config.S) = struct
                      Config.t
                      ~core_index:!core_index
               then
-                Msm_pippenger_multi_slr.Config.last_window_size_bits_for_slr
+                Msm_pippenger_multi_slr.Config.last_window_size_bits_for_core
                   Config.t
-                  !core_index
+                  ~core_index:!core_index
               else
-                Msm_pippenger_multi_slr.Config.window_size_bits_for_slr
+                Msm_pippenger_multi_slr.Config.window_size_bits_for_core
                   Config.t
-                  !core_index
+                  ~core_index:!core_index
             in
             bucket := (1 lsl next_window_size_bits) - 1)));
       cycle ()
@@ -289,7 +289,11 @@ let%expect_test "Test over small input size" =
   let module Config = struct
     let t =
       { Msm_pippenger_multi_slr.Config.field_bits = 377
-      ; scalar_bits_by_core = [| 7; 7; 7 |]
+      ; for_cores =
+          [| { scalar_bits = 7; slr = SLR2 }
+           ; { scalar_bits = 7; slr = SLR2 }
+           ; { scalar_bits = 7; slr = SLR2 }
+          |]
       ; controller_log_stall_fifo_depth = 2
       ; window_size_bits = 2
       ; ram_read_latency = 1
