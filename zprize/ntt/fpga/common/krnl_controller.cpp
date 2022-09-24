@@ -5,6 +5,9 @@
 #include "ap_int.h"
 #include "hls_stream.h"
 
+#define NUM_BLOCKS (1 << LOGBLOCKS)
+#define MEMORY_DWIDTH 512
+
 typedef ap_axiu<MEMORY_DWIDTH, 1, 0, 0> chunk_t;
 
 /* Suppressing loop flattening below prevents DSP usages. We do pay a constant 1-2 cycles exiting and

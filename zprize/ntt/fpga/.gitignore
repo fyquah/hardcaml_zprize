@@ -1,1 +1,4 @@
 */build/
+
+# This file is copied from a common dir
+*/krnl_controller/krnl_controller.cpp
