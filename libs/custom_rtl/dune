@@ -1,0 +1,6 @@
+(library
+ (name custom_rtl)
+ (libraries base hardcaml)
+ (preprocess
+  (pps ppx_jane ppx_deriving_hardcaml)))
+
