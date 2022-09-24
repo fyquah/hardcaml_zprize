@@ -72,12 +72,12 @@ NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_12()
   return NttFpgaDriverArg(CoreType::NTT_2_12, 6);
 }
 
-
 NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) : 
     core_type(driver_arg.core_type),
     log_row_size(driver_arg.log_row_size),
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
+    m_max_num_buffers_in_flight(1),
 	  host_buffer_points(matrix_size),
     host_buffer_intermediate(matrix_size)
 {
@@ -91,8 +91,39 @@ bench(const char *descr, F f) {
   return f();
 }
 
+NttFpgaBuffer* NttFpgaDriver::request_buffer()
+{
+  for (auto & p : user_buffers) {
+    if (!p.m_in_use) {
+      p.m_in_use = true;
+      return &p;
+    }
+  }
 
-void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_length) {
+  return nullptr;
+}
+
+void NttFpgaDriver::free_buffer(NttFpgaBuffer *buffer)
+{
+  /* TODO(fyquah): Check no outstanding events? */
+  buffer->m_in_use = false;
+}
+
+void NttFpgaDriver::transfer_data_to_fpga(NttFpgaBuffer *buffer)
+{
+  assert (buffer->m_index == 0);
+  OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, 0 /* 0 means from host*/, nullptr, nullptr));
+  OCL_CHECK(err, err = q.finish());
+}
+
+void NttFpgaDriver::transfer_data_from_fpga(NttFpgaBuffer *buffer)
+{
+  assert (buffer->m_index == 0);
+  OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, CL_MIGRATE_MEM_OBJECT_HOST));
+  OCL_CHECK(err, err = q.finish());
+}
+
+void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const uint64_t *in, uint64_t data_length) {
   if (data_length > matrix_size) {
     std::string error_message;
     error_message
@@ -103,16 +134,17 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
     throw std::runtime_error(error_message);
   }
 
+  auto *buffer = request_buffer();
+
   bench("Evaluate NTT", [&]() {
 
     bench("Copy to internal page-aligned buffer", [&](){
-        memcpy(host_buffer_points.data()              , in, sizeof(uint64_t) * data_length);
-        memset(host_buffer_points.data() + data_length, 0 , sizeof(uint64_t) * (matrix_size - data_length));
+        memcpy(buffer->data()              , in, sizeof(uint64_t) * data_length);
+        memset(buffer->data() + data_length, 0 , sizeof(uint64_t) * (matrix_size - data_length));
     });
 
     bench("Copying input points to device", [&]() {
-        OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, 0 /* 0 means from host*/, nullptr, nullptr));
-        OCL_CHECK(err, err = q.finish());
+        transfer_data_to_fpga(buffer);
     });
 
     bench("Doing phase 1 work (including twiddling)", [&]() {
@@ -138,8 +170,7 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
     });
 
     bench("Copying final result to host", [&]() {
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects({cl_buffer_points}, CL_MIGRATE_MEM_OBJECT_HOST));
-      OCL_CHECK(err, err = q.finish());
+        transfer_data_from_fpga(buffer);
     });
 
     bench("Copy from internal page-aligned buffer", [&]() {
@@ -150,6 +181,13 @@ void NttFpgaDriver::evaluate(uint64_t *out, const uint64_t *in, uint64_t data_le
 
 void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
 {
+  if (loaded_xclbin) {
+    std::string error_message("Cannot call NttFpgaDriver::load_xclbin multiple times!");
+    throw std::runtime_error(error_message);
+  }
+
+  loaded_xclbin = true;
+
   // Allocate Memory in Host Memory
   size_t size = row_size * row_size;
   size_t vector_size_bytes = sizeof(uint64_t) * size;
@@ -213,5 +251,10 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   // Set the reverse arguments
   if (core_type == CoreType::REVERSE) {
     OCL_CHECK(err, err = krnl_ntt.setArg(2, (uint16_t) row_size));
+  }
+
+  // Populate user_buffers with the pointers allocated to use from openCL
+  for (size_t i = 0; i < m_max_num_buffers_in_flight; i++) {
+    user_buffers.emplace_back(host_buffer_points.data(), i);
   }
 }

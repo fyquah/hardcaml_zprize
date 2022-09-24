@@ -94,7 +94,7 @@ run_ntt_test(host_args_t host_args)
   load_input(input, host_args.input_filename);
 
   driver.load_xclbin(host_args.binaryFile);
-  driver.evaluate(output.data(), input.data(), num_elements);
+  driver.simple_evaluate_slow_with_profilling(output.data(), input.data(), num_elements);
 
   store_output(output, host_args.output_filename);
 

@@ -62,7 +62,7 @@ run_ntt_test(host_args_t host_args)
 
     for (uint64_t i = 0; i < num_runs; i++) {
       std::cout << "Run " << i << ":\n";
-      driver.evaluate(obtained_output.data(), input.data(), num_elements);
+      driver.simple_evaluate_slow_with_profilling(obtained_output.data(), input.data(), num_elements);
       std::cout << "\n";
     }
 
