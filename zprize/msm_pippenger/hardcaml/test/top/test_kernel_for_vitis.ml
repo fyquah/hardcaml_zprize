@@ -106,7 +106,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
           (512 * num_clocks_per_input_point)
         |> Bits.split_lsb ~exact:true ~part_width:512
       in
-      assert(List.length point_words_to_send = 3);
+      assert (List.length point_words_to_send = 3);
       let scalar_to_send =
         let even_scalar = Bits.uresize inputs.(2 * (idx / 2)).scalar 256 in
         let odd_scalar = Bits.uresize inputs.((2 * (idx / 2)) + 1).scalar 256 in
@@ -114,6 +114,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       in
       assert (Bits.width scalar_to_send = 512);
       let scalar_beat = idx mod 2 = 1 in
+      (*print_s [%message (idx : int) (scalar_beat : bool) (aligned_point : Bits.t Input_aligned.t) (point_words_to_send : Bits.t list) (scalar_to_send : Bits.t)];*)
       let module Scalar_state = struct
         type t =
           | Initial
@@ -163,8 +164,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             let send_scalar () : Scalar_state.t =
               i.host_scalars_to_fpga.tdata := scalar_to_send;
               i.host_scalars_to_fpga.tvalid := Bits.vdd;
-              if last_input_pair
-              then i.host_scalars_to_fpga.tlast := Bits.vdd;
+              if last_input_pair then i.host_scalars_to_fpga.tlast := Bits.vdd;
               if Bits.is_vdd !(o.host_scalars_to_fpga_dest.tready)
               then Done_sending
               else Started_sending
@@ -188,14 +188,21 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             in
             match point_state.state with
             | Initial ->
-              if Bits.((is_vdd (random ~width:1)) && (List.length point_state.words > 0)) then send_point () else point_state
+              if Bits.(is_vdd (random ~width:1) && List.length point_state.words > 0)
+              then send_point ()
+              else (
+                i.ddr_points_to_fpga.tvalid := Bits.gnd;
+                point_state)
             | Sending -> send_point ()
           in
           Cyclesim.cycle sim;
           loop (cycle_cnt + 1) next_scalar_state next_point_state)
       in
-      loop 0 (if (scalar_beat) then Started_sending else Initial) { words = point_words_to_send; state = Initial };
-      i.host_scalars_to_fpga.tvalid := Bits.gnd;
+      loop
+        0
+        (if scalar_beat then Started_sending else Initial)
+        { words = point_words_to_send; state = Initial };
+      if scalar_beat then i.host_scalars_to_fpga.tvalid := Bits.gnd;
       i.ddr_points_to_fpga.tvalid := Bits.gnd;
       for _ = 0 to Random.int 5 do
         Cyclesim.cycle sim

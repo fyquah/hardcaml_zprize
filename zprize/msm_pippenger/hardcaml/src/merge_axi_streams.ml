@@ -89,7 +89,7 @@ let create
             in
             let tvalid = host_scalars_to_fpga.tvalid &: ddr_points_to_fpga.tvalid in
             (* it's fine to just take tlast from the point stream because they should be in lock-step *)
-            let tlast = ddr_points_to_fpga.tvalid in
+            let tlast = ddr_points_to_fpga.tlast in
             [ Axi512.Stream.Source.Of_always.(
                 assign
                   host_to_fpga
