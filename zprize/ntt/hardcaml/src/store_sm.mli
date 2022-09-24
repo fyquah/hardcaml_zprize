@@ -1,3 +1,5 @@
+open Hardcaml
+
 module Make (Config : Hardcaml_ntt.Core_config.S) : sig
   module I : sig
     type 'a t =
@@ -15,9 +17,11 @@ module Make (Config : Hardcaml_ntt.Core_config.S) : sig
       ; tvalid : 'a
       ; rd_addr : 'a
       ; rd_en : 'a
+      ; block : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create : Hardcaml.Signal.t Hardcaml.Interface.Create_fn(I)(O).t
+  val create : Scope.t -> Hardcaml.Signal.t Hardcaml.Interface.Create_fn(I)(O).t
+  val hierarchy : Scope.t -> Hardcaml.Signal.t Hardcaml.Interface.Create_fn(I)(O).t
 end
