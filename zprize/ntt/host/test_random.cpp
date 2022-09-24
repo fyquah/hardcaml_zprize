@@ -62,7 +62,10 @@ run_ntt_test(host_args_t host_args)
 
     for (uint64_t run = 0; run < num_runs; run++) {
       std::cout << "Run " << run << ": ";
+      std::chrono::time_point<std::chrono::steady_clock> t_start(std::chrono::steady_clock::now());
       driver.simple_evaluate(obtained_output.data(), input.data(), num_elements);
+      std::chrono::time_point<std::chrono::steady_clock> t_end(std::chrono::steady_clock::now());
+      std::chrono::duration<double> elapsed_seconds = t_end - t_start;
 
       // Compare the results of the Device to the simulation
       int found_mismatch = 0;
@@ -84,7 +87,7 @@ run_ntt_test(host_args_t host_args)
         std::cout << "Ok!";
       }
 
-      std::cout << "\n";
+      std::cout << " (Time taken: " << elapsed_seconds.count() << "s)\n";
     }
 
   }
