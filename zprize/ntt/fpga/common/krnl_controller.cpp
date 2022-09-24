@@ -104,15 +104,18 @@ void krnl_controller(
     hls::stream<chunk_t>&   controller_to_compute_phase_2,
     ap_uint<MEMORY_DWIDTH>* gmem_a,
     ap_uint<MEMORY_DWIDTH>* gmem_b,
+    ap_uint<MEMORY_DWIDTH>* gmem_c,
     ap_uint<16>             row_size,
     ap_uint<2>              phase) {
 #pragma HLS INTERFACE m_axi     port = gmem_a offset = slave bundle = gmem_a
 #pragma HLS INTERFACE m_axi     port = gmem_b offset = slave bundle = gmem_b
+#pragma HLS INTERFACE m_axi     port = gmem_c offset = slave bundle = gmem_c
 #pragma HLS INTERFACE axis      port = compute_to_controller
 #pragma HLS INTERFACE axis      port = controller_to_compute_phase_1
 #pragma HLS INTERFACE axis      port = controller_to_compute_phase_2
 #pragma HLS INTERFACE s_axilite port = gmem_a
 #pragma HLS INTERFACE s_axilite port = gmem_b
+#pragma HLS INTERFACE s_axilite port = gmem_c
 #pragma HLS INTERFACE s_axilite port = row_size
 #pragma HLS INTERFACE s_axilite port = return
 
@@ -121,7 +124,7 @@ void krnl_controller(
   }
 
   if (phase(1, 1)) {
-    phase2(compute_to_controller, controller_to_compute_phase_2, gmem_b, gmem_a, row_size);
+    phase2(compute_to_controller, controller_to_compute_phase_2, gmem_b, gmem_c, row_size);
   }
 }
 
