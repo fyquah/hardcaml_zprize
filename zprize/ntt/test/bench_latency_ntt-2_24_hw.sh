@@ -12,4 +12,5 @@ sed -e "s#CURRENT_DIRECTORY#$PWD#g" xrt.template.ini >xrt.ini
 ./bench_latency.exe \
     --xclbin ../fpga/ntt-2_24/build/build_dir.hw.xilinx_u55n_gen3x4_xdma_2_202110_1/ntt_fpga.xclbin \
     --num-evaluations 50 \
-    --core-type NTT-2_24
+    --core-type NTT-2_24 \
+    $@
