@@ -5,8 +5,8 @@
 #include "hls_stream.h"
 
 #define MEMORY_DWIDTH 512
-#define LOGBLOCK 3
-#define NUM_BLOCKS (1 << LOGBLOCK)
+#define LOGBLOCKS 2
+#define NUM_BLOCKS (1 << LOGBLOCKS)
 
 typedef ap_axiu<MEMORY_DWIDTH, 1, 0, 0> chunk_t;
 
@@ -58,6 +58,7 @@ phase1_store:
   }
 }
 
+
 void phase2(
     hls::stream<chunk_t>&   compute_to_controller,
     hls::stream<chunk_t>&   controller_to_compute,
@@ -68,16 +69,15 @@ void phase2(
 #pragma HLS INLINE off
 #pragma HLS dataflow
 
-  // Phase 2: read linear, writeback transposed
 phase2_load:
+  // Phase 2: read linear, writeback transposed
   for (ap_uint<16> i = 0; i < row_size / 8; i++) {
-    for (ap_uint<16> j = 0; j < row_size / 8; j += NUM_BLOCKS) {
+    for (ap_uint<16> j = 0; j < row_size / 8 / NUM_BLOCKS; j++) {
       for (ap_uint<16> k = 0; k < 8; k++) {
-        for (ap_uint<16> l = 0; l < NUM_BLOCKS; k++) {
+        for (ap_uint<16> l = 0; l < NUM_BLOCKS; l++) {
 #pragma HLS pipeline II=1
           chunk_t v;
-          ap_uint<512> d = gmem_in[j + l + ((8 * i + k) * (row_size / 8))];
-          v.data = d;
+          v.data = gmem_in[l + (j * NUM_BLOCKS) + ((8 * i + k) * (row_size / 8))];
           v.user = 1;
           controller_to_compute.write(v);
         }
