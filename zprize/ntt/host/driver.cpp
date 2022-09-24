@@ -233,6 +233,8 @@ void NttFpgaDriver::load_xclbin(const std::string& binaryFile)
   // Allocate Memory in Host Memory
   size_t size = row_size * row_size;
   size_t vector_size_bytes = sizeof(uint64_t) * size;
+  host_buffer_input = vec64(size);
+  host_buffer_output = vec64(size);
 
   // OPENCL HOST CODE AREA START
   // Create Program and Kernel

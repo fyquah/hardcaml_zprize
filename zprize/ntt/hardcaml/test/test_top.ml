@@ -12,9 +12,11 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   let n = 1 lsl logn
   let logcores = Config.logcores
   let logblocks = Config.logblocks
+  let logtotal = logblocks + logcores
   let num_cores = 1 lsl logcores
   let log_passes = logn - logcores
   let num_passes = 1 lsl log_passes
+  let num_blocks = 1 lsl logblocks
   let () = assert (1 lsl (logn + logn) = n * num_cores * num_passes)
 
   let random_input_coef_matrix () =
@@ -43,6 +45,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   ;;
 
   let copy_matrix c = Array.map c ~f:Array.copy
+  let transpose = Reference_model.transpose
 
   let create_sim waves =
     let sim =
@@ -75,7 +78,43 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     cycle ()
   ;;
 
-  let get_results results =
+  let grouped n l = List.groupi l ~break:(fun i _ _ -> i % n = 0)
+
+  let get_result_blocks (results : Bits.t list) =
+    let results =
+      List.rev results
+      |> List.map ~f:(fun b -> Bits.split_lsb ~part_width:64 b)
+      |> List.concat
+      |> List.map ~f:(fun b -> Gf.Bits.of_bits b |> Gf.Bits.to_z |> Gf.Z.of_z)
+    in
+    results
+    |> grouped (1 lsl (logtotal + logtotal))
+    |> List.map ~f:(fun x ->
+         grouped (1 lsl logtotal) x |> List.map ~f:Array.of_list |> Array.of_list)
+  ;;
+
+  let get_results (results : Bits.t list) =
+    let blocks = ref (get_result_blocks results) in
+    let out = Array.init n ~f:(fun _ -> Array.init n ~f:(Fn.const Gf.Z.zero)) in
+    for block_col = 0 to (n lsr logtotal) - 1 do
+      for block_row = 0 to (n lsr logtotal) - 1 do
+        match !blocks with
+        | [] -> raise_s [%message "not enough result blocks"]
+        | block :: tl ->
+          for row = 0 to (1 lsl logtotal) - 1 do
+            for col = 0 to (1 lsl logtotal) - 1 do
+              out.((block_row lsl logtotal) + row).((block_col lsl logtotal) + col)
+                <- block.(row).(col)
+            done
+          done;
+          blocks := tl
+      done
+    done;
+    if not (List.is_empty !blocks) then raise_s [%message "too many blocks"];
+    out
+  ;;
+
+  let _get_results results =
     let results =
       List.rev results
       |> List.map ~f:(fun b -> Bits.split_lsb ~part_width:64 b |> Array.of_list)
@@ -103,6 +142,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let sw_results = copy_matrix input_coefs in
     Array.iter sw_results ~f:Reference_model.inverse_dit;
     if first_4step_pass then twiddle sw_results;
+    let sw_results = transpose sw_results in
     if verbose
     then
       List.iter
@@ -137,24 +177,49 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     in
     start_sim inputs cycle;
     inputs.first_4step_pass := Bits.of_bool first_4step_pass;
-    for pass = 0 to num_passes - 1 do
-      (* wait for tready *)
-      while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
-        cycle ()
+    if first_4step_pass
+    then
+      for pass = 0 to (num_passes / num_blocks) - 1 do
+        (* wait for tready *)
+        while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
+          cycle ()
+        done;
+        for i = 0 to n - 1 do
+          for block = 0 to num_blocks - 1 do
+            let row_base_index = ((pass * num_blocks) + block) * num_cores in
+            inputs.data_in.tvalid := Bits.vdd;
+            inputs.data_in.tdata
+              := List.init num_cores ~f:(fun core ->
+                   input_coefs.(row_base_index + core).(i))
+                 |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
+                 |> Bits.concat_lsb;
+            cycle ()
+          done
+        done;
+        inputs.data_in.tvalid := Bits.gnd;
+        (* A few cycles of flushing after each pass *)
+        cycle ~n:4 ()
+      done
+    else
+      for pass = 0 to num_passes - 1 do
+        (* wait for tready *)
+        while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
+          cycle ()
+        done;
+        for i = 0 to n - 1 do
+          let row_base_index = pass * num_cores in
+          inputs.data_in.tvalid := Bits.vdd;
+          inputs.data_in.tdata
+            := List.init num_cores ~f:(fun core ->
+                 input_coefs.(row_base_index + core).(i))
+               |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
+               |> Bits.concat_lsb;
+          cycle ()
+        done;
+        inputs.data_in.tvalid := Bits.gnd;
+        (* A few cycles of flushing after each pass *)
+        cycle ~n:4 ()
       done;
-      for i = 0 to n - 1 do
-        let row_base_index = pass * num_cores in
-        inputs.data_in.tvalid := Bits.vdd;
-        inputs.data_in.tdata
-          := List.init num_cores ~f:(fun core -> input_coefs.(row_base_index + core).(i))
-             |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
-             |> Bits.concat_lsb;
-        cycle ()
-      done;
-      inputs.data_in.tvalid := Bits.gnd;
-      (* A few cycles of flushing after each pass *)
-      cycle ~n:4 ()
-    done;
     (* wait for the core to complete. *)
     while not (Bits.to_bool !(outputs.done_)) do
       cycle ()
@@ -239,10 +304,9 @@ let%expect_test "2 cores, 2 blocks, no twiddles" =
        ~support_4step_twiddle:false
        ~first_4step_pass:false
       : Waveform.t option);
-  [%expect
-    {|
+  [%expect {|
     (!cycles 359)
-    ("RAISED :(" (e "ERROR: Hardware and software results do not match :(")) |}]
+    "Hardware and software reference results match!" |}]
 ;;
 
 let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
@@ -266,10 +330,10 @@ let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
       : Waveform.t option);
   [%expect
     {|
-    (!cycles 624)
-    ("RAISED :(" (e "ERROR: Hardware and software results do not match :("))
+  (!cycles 612)
+    "Hardware and software reference results match!"
     (!cycles 560)
-    ("RAISED :(" (e "ERROR: Hardware and software results do not match :(")) |}]
+    "Hardware and software reference results match!" |}]
 ;;
 
 let%expect_test "other configurations with twiddles" =
@@ -311,12 +375,12 @@ let%expect_test "other configurations with twiddles" =
       : Waveform.t option);
   [%expect
     {|
-    (!cycles 1668)
-    ("RAISED :(" (e "ERROR: Hardware and software results do not match :("))
+  (!cycles 1656)
+    "Hardware and software reference results match!"
     (!cycles 1464)
     "Hardware and software reference results match!"
-    (!cycles 1104)
-    ("RAISED :(" (e "ERROR: Hardware and software results do not match :("))
-    (!cycles 488)
-    ("RAISED :(" (e "ERROR: Hardware and software results do not match :(")) |}]
+    (!cycles 1048)
+    "Hardware and software reference results match!"
+    (!cycles 484)
+    "Hardware and software reference results match!" |}]
 ;;

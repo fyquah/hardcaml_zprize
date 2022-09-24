@@ -54,11 +54,6 @@ let command_kernel_for_vitis =
       let verbose = flag "-verbose" no_arg ~doc:" Print detailed results"
       and input_coefs = flag "-inputs" (optional string) ~doc:" Input coefficients"
       and logn = anon ("LOGN" %: int)
-      and logcores =
-        flag
-          "-log-cores"
-          (optional_with_default 3 int)
-          ~doc:" Log number of parallel cores"
       and logblocks =
         flag
           "-log-blocks"
@@ -71,6 +66,8 @@ let command_kernel_for_vitis =
           "verilator"
           no_arg
           ~doc:" Use verilator (rather than the hardcaml simulator) for simulation"
+      and wiggle_prob =
+        flag "-wiggle-probability-true" (optional float) ~doc:" Wiggle testing"
       in
       fun () ->
         let rand_state = Random.State.make [| seed |] in
@@ -78,7 +75,7 @@ let command_kernel_for_vitis =
         let module Test =
           Zprize_ntt_test.Test_kernel_for_vitis.Make (struct
             let logn = logn
-            let logcores = logcores
+            let logcores = 3
             let logblocks = logblocks
             let support_4step_twiddle = true
           end)
@@ -92,7 +89,7 @@ let command_kernel_for_vitis =
               Array.init (1 lsl logn) ~f:(fun col ->
                 Z.of_string coefs.((row * (1 lsl logn)) + col)))
         in
-        let waves = Test.run ~verilator ~verbose ~waves input_coefs in
+        let waves = Test.run ~verilator ~verbose ~waves ?wiggle_prob input_coefs in
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 
