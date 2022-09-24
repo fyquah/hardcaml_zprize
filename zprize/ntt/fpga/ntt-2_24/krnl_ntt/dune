@@ -1,6 +1,6 @@
 (rule
  (mode promote)
- (action (with-stdout-to krnl_ntt.v (run ../../../hardcaml/bin/generate.exe kernel 12))))
+ (action (with-stdout-to krnl_ntt.v (run ../../../hardcaml/bin/generate.exe kernel 12 -log-blocks 3))))
 
 (rule
  (mode promote)

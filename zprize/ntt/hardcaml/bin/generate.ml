@@ -5,14 +5,20 @@ let command_kernel =
   Command.basic
     ~summary:"Generate NTT kernel"
     [%map_open.Command
-      let logn = anon ("LOGN" %: int) in
+      let logn = anon ("LOGN" %: int)
+      and logblocks =
+        flag
+          "-log-blocks"
+          (optional_with_default 0 int)
+          ~doc:" Log number of parallel blocks"
+      in
       fun () ->
         let module Kernel_for_vitis =
           Zprize_ntt.For_vitis.Make (struct
             let logn = logn
             let support_4step_twiddle = true
             let logcores = 3
-            let logblocks = 0
+            let logblocks = logblocks
           end)
         in
         let module Circuit =

@@ -9,6 +9,7 @@ let create scope ~build_mode ~size ~clock ~port_a ~port_b =
   in
   Hardcaml_xilinx.True_dual_port_ram.create
     ~build_mode
+    ~arch:Ultraram
     ()
     ~clock_a:clock
     ~clock_b:clock
