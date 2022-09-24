@@ -11,6 +11,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) : sig
     :  ?verbose:bool
     -> ?waves:bool
     -> ?verilator:bool
+    -> ?wiggle_prob:float
     -> Z.t array array
     -> Hardcaml_waveterm.Waveform.t option
 end

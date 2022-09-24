@@ -24,6 +24,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   let print_matrix = Test_top.print_matrix
   let copy_matrix = Test_top.copy_matrix
   let grouped n l = List.groupi l ~break:(fun i _ _ -> i % n = 0)
+  let random_bool ~p_true = Float.(Random.float 1.0 < p_true)
 
   let get_result_blocks (results : Bits.t list) =
     let results =
@@ -144,7 +145,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   ;;
 
   (* Read a square block of [2^logtotal].  Used to read data in the first pass. *)
-  let read_block ~block_row ~block_col (inputs : 'a array array) =
+  let read_block_transposed_pass ~block_row ~block_col (inputs : 'a array array) =
     Array.init (1 lsl logtotal) ~f:(fun row ->
       Array.init (1 lsl logblocks) ~f:(fun col ->
         read_words
@@ -154,7 +155,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   ;;
 
   (* Read a rectangle of [2^locores by 2^logtotal] used in the 2nd pass. *)
-  let read_block_cores ~block_row ~block_col (inputs : 'a array array) =
+  let read_block_linear_pass ~block_row ~block_col (inputs : 'a array array) =
     Array.init (1 lsl logcores) ~f:(fun row ->
       Array.init (1 lsl logblocks) ~f:(fun col ->
         read_words
@@ -167,6 +168,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     ?(verbose = false)
     ?(waves = false)
     ?(verilator = false)
+    ?(wiggle_prob = 1.)
     (input_coefs : Z.t array array)
     =
     let sim, waves, inputs, outputs = create_sim ~verilator waves in
@@ -176,10 +178,12 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let cycle ?(n = 1) () =
       assert (n > 0);
       for _ = 1 to n do
-        if Bits.to_bool !(outputs.compute_to_controller.tvalid)
+        let tready = random_bool ~p_true:wiggle_prob in
+        if Bits.to_bool !(outputs.compute_to_controller.tvalid) && tready
         then (
           results := !(outputs.compute_to_controller.tdata) :: !results;
           Int.incr num_results);
+        inputs.compute_to_controller_dest.tready := Bits.of_bool tready;
         Cyclesim.cycle sim
       done
     in
@@ -206,11 +210,15 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
          assert (Bits.to_bool !(controller_to_compute_dest.tready));
          for block_col = 0 to (n lsr logtotal) - 1 do
            for block_row = 0 to (n lsr logtotal) - 1 do
-             let block = read_block ~block_row ~block_col coefs in
+             let block = read_block_transposed_pass ~block_row ~block_col coefs in
              Array.iter
                block
                ~f:
                  (Array.iter ~f:(fun coefs ->
+                    controller_to_compute.tvalid := Bits.gnd;
+                    while not (random_bool ~p_true:wiggle_prob) do
+                      cycle ()
+                    done;
                     controller_to_compute.tvalid := Bits.vdd;
                     controller_to_compute.tdata
                       := coefs
@@ -222,18 +230,21 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                     done;
                     cycle ()))
            done;
-           controller_to_compute.tvalid := Bits.gnd;
+           controller_to_compute.tvalid := Bits.gnd
            (* A few cycles of flushing after each pass *)
-           cycle ~n:4 ()
          done
        | `Second ->
          for block_row = 0 to (n lsr logcores) - 1 do
            for block_col = 0 to (n lsr logtotal) - 1 do
-             let block = read_block_cores ~block_row ~block_col coefs in
+             let block = read_block_linear_pass ~block_row ~block_col coefs in
              Array.iter
                block
                ~f:
                  (Array.iter ~f:(fun coefs ->
+                    while not (random_bool ~p_true:wiggle_prob) do
+                      controller_to_compute.tvalid := Bits.gnd;
+                      cycle ()
+                    done;
                     controller_to_compute.tvalid := Bits.vdd;
                     controller_to_compute.tdata
                       := coefs
@@ -297,7 +308,6 @@ let%expect_test "2 blocks" =
   ignore
     (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
-  [%expect
-    {|
-    ("RAISED :(" (e "ERROR: Hardware and software results do not match :(")) |}]
+  [%expect {|
+    "Hardware and software reference results match!" |}]
 ;;
