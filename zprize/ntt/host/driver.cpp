@@ -119,14 +119,8 @@ void NttFpgaDriver::free_buffer(NttFpgaBuffer *buffer)
   buffer->in_use = false;
 }
 
-void NttFpgaDriver::transfer_data_to_fpga(NttFpgaBuffer *buffer)
+void NttFpgaDriver::enqueue_transfer_data_to_fpga(NttFpgaBuffer *buffer)
 {
-  // Set the controller arguments
-  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_INPUT, buffer->cl_buffer_input));
-  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_INTERMEDIATE, buffer->cl_buffer_intermediate));
-  OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_OUTPUT, buffer->cl_buffer_output));
-  OCL_CHECK(err, err = krnl_controller.setArg(argpos::ROW_SIZE, (uint16_t) row_size));
-
   OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
         {buffer->cl_buffer_input},
         0 /* 0 means from host*/,
@@ -134,7 +128,7 @@ void NttFpgaDriver::transfer_data_to_fpga(NttFpgaBuffer *buffer)
         &buffer->ev_transfer_data_to_fpga));
 }
 
-void NttFpgaDriver::transfer_data_from_fpga_blocking(NttFpgaBuffer *buffer)
+void NttFpgaDriver::enqueue_transfer_data_from_fpga(NttFpgaBuffer *buffer)
 {
   tmp_events_to_wait_for.clear();
   tmp_events_to_wait_for.push_back(buffer->ev_phase2_work);
@@ -145,10 +139,9 @@ void NttFpgaDriver::transfer_data_from_fpga_blocking(NttFpgaBuffer *buffer)
         &tmp_events_to_wait_for,
         &buffer->ev_transfer_data_from_fpga
         ));
-  OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
 }
 
-void NttFpgaDriver::enqueue_for_phase_1(NttFpgaBuffer *buffer)
+void NttFpgaDriver::enqueue_phase1_work(NttFpgaBuffer *buffer)
 {
   tmp_events_to_wait_for.clear();
   tmp_events_to_wait_for.push_back(buffer->ev_transfer_data_to_fpga);
@@ -166,7 +159,7 @@ void NttFpgaDriver::enqueue_for_phase_1(NttFpgaBuffer *buffer)
   OCL_CHECK(err, err = q.enqueueTask(krnl_controller, &tmp_events_to_wait_for, &buffer->ev_phase1_work));
 }
 
-void NttFpgaDriver::enqueue_for_phase_2(NttFpgaBuffer *buffer)
+void NttFpgaDriver::enqueue_phase2_work(NttFpgaBuffer *buffer)
 {
   tmp_events_to_wait_for.clear();
   tmp_events_to_wait_for.push_back(buffer->ev_phase1_work);
@@ -181,7 +174,7 @@ void NttFpgaDriver::enqueue_for_phase_2(NttFpgaBuffer *buffer)
   outstanding_execution_is_set = true;
 }
 
-void NttFpgaDriver::enqueue_for_evaluation_async(NttFpgaBuffer *buffer)
+void NttFpgaDriver::set_args(NttFpgaBuffer *buffer)
 {
   // Set the controller arguments
   OCL_CHECK(err, err = krnl_controller.setArg(argpos::GMEM_INPUT, buffer->cl_buffer_input));
@@ -193,14 +186,20 @@ void NttFpgaDriver::enqueue_for_evaluation_async(NttFpgaBuffer *buffer)
   if (core_type == CoreType::REVERSE) {
     OCL_CHECK(err, err = krnl_ntt.setArg(2, (uint16_t) row_size));
   }
-
-  enqueue_for_phase_1(buffer);
-  enqueue_for_phase_2(buffer);
 }
 
-void NttFpgaDriver::poll_for_completion_blocking(NttFpgaBuffer *buffer)
+void NttFpgaDriver::wait_for_result(NttFpgaBuffer *buffer)
 {
-  OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
+  OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
+}
+
+void NttFpgaDriver::enqueue_evaluation_async(NttFpgaBuffer *buffer)
+{
+  set_args(buffer);
+  enqueue_transfer_data_to_fpga(buffer);
+  enqueue_phase1_work(buffer);
+  enqueue_phase2_work(buffer);
+  enqueue_transfer_data_from_fpga(buffer);
 }
 
 void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const uint64_t *in, uint64_t data_length) {
@@ -217,30 +216,46 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
   auto *buffer = request_buffer();
 
   bench("Evaluate NTT", [&]() {
-
     bench("Copy to internal page-aligned buffer", [&](){
         memcpy(buffer->input_data()              , in, sizeof(uint64_t) * data_length);
         memset(buffer->input_data() + data_length, 0 , sizeof(uint64_t) * (matrix_size - data_length));
     });
 
     bench("Copying input points to device", [&]() {
-        transfer_data_to_fpga(buffer);
+        set_args(buffer);
+        enqueue_transfer_data_to_fpga(buffer);
         OCL_CHECK(err, err = buffer->ev_transfer_data_to_fpga.wait());
     });
 
     bench("Doing NTT (phase1 + twiddling + phase2)", [&]() {
-        enqueue_for_evaluation_async(buffer);
-        poll_for_completion_blocking(buffer);
+        enqueue_phase1_work(buffer);
+        enqueue_phase2_work(buffer);
+        OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
     });
 
     bench("Copying final result to host", [&]() {
-        transfer_data_from_fpga_blocking(buffer);
+        enqueue_transfer_data_from_fpga(buffer);
+        OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
     });
 
     bench("Copy from internal page-aligned buffer", [&]() {
       memcpy(out, buffer->output_data(), sizeof(uint64_t) * data_length);
     });
   });
+
+  free_buffer(buffer);
+}
+
+void NttFpgaDriver::simple_evaluate(uint64_t *out, const uint64_t *in, uint64_t data_length) {
+  auto *buffer = request_buffer();
+
+  memcpy(buffer->input_data()              , in, sizeof(uint64_t) * data_length);
+  memset(buffer->input_data() + data_length, 0 , sizeof(uint64_t) * (matrix_size - data_length));
+
+  enqueue_evaluation_async(buffer);
+  wait_for_result(buffer);
+
+  memcpy(out, buffer->output_data(), sizeof(uint64_t) * data_length);
 
   free_buffer(buffer);
 }

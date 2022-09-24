@@ -60,27 +60,33 @@ run_ntt_test(host_args_t host_args)
       num_runs = 1;
     }
 
-    for (uint64_t i = 0; i < num_runs; i++) {
-      std::cout << "Run " << i << ":\n";
-      driver.simple_evaluate_slow_with_profilling(obtained_output.data(), input.data(), num_elements);
+    for (uint64_t run = 0; run < num_runs; run++) {
+      std::cout << "Run " << run << ": ";
+      driver.simple_evaluate(obtained_output.data(), input.data(), num_elements);
+
+      // Compare the results of the Device to the simulation
+      int found_mismatch = 0;
+      for (size_t i = 0; i < num_elements; i++) {
+        if (expected_output[i] != obtained_output[i]) {
+          std::cout << "Error: Result mismatch" << std::endl;
+          std::cout
+            << " i = " << i
+            << " Expected = " << expected_output[i]
+            << " Obtained = " << obtained_output[i]
+            << std::endl;
+          found_mismatch = 1;
+          break;
+        }
+      }
+      if (found_mismatch) {
+        test_cases_okay[t] = false;
+      } else {
+       std::cout << "Ok!";
+      }
+
       std::cout << "\n";
     }
 
-    // Compare the results of the Device to the simulation
-    int found_mismatch = 0;
-    for (size_t i = 0; i < num_elements; i++) {
-      if (expected_output[i] != obtained_output[i]) {
-        std::cout << "Error: Result mismatch" << std::endl;
-        std::cout
-          << " i = " << i
-          << " Expected = " << expected_output[i]
-          << " Obtained = " << obtained_output[i]
-          << std::endl;
-        found_mismatch = 1;
-        break;
-      }
-    }
-    test_cases_okay[t] = !found_mismatch;
   }
 
   bool all_okay = true;

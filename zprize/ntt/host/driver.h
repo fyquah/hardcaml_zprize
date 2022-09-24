@@ -96,9 +96,15 @@ private:
 
   /* Internal helper functions follows */
 
-  void enqueue_for_phase_1(UserBuffer*);
+  void enqueue_phase1_work(UserBuffer*);
 
-  void enqueue_for_phase_2(UserBuffer*);
+  void enqueue_phase2_work(UserBuffer*);
+
+  void enqueue_transfer_data_to_fpga(UserBuffer*);
+
+  void enqueue_transfer_data_from_fpga(UserBuffer*);
+
+  void set_args(UserBuffer*);
 
 public:
   NttFpgaDriver(NttFpgaDriverArg driver_arg);
@@ -128,28 +134,14 @@ public:
    */
   UserBuffer* request_buffer();
 
-  /**
-   * Enqueue a buffer for evaluation.
-   *
-   * Raises an exception if the buffer is already evaluating. This will enqueue
-   * the operation asynchronously.
-   */
-  void transfer_data_to_fpga(UserBuffer*);
-
-  void enqueue_for_evaluation_async(UserBuffer*);
+  void enqueue_evaluation_async(UserBuffer*);
 
   /**
    * Poll the buffer for completion. This blocks until a result is available
    * from the FPGA for this. If UserBuffer* is not enqueued for any
    * evaluation, this raises an exception.
    */
-  void poll_for_completion_blocking(UserBuffer*);
-
-  /**
-   * Wait for the NTT evaluation to complete and copy data from the FPGA back
-   * to the host. This blocks until the copy is done.
-   */
-  void transfer_data_from_fpga_blocking(UserBuffer*);
+  void wait_for_result(UserBuffer*);
 
   /**
    * Returns the buffer to the driver. This buffer will be free for future
