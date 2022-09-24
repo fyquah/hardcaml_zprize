@@ -5,7 +5,7 @@ open Signal
 
 module Make (C : Config.S) = struct
   let config = C.t
-  let num_cores = Array.length config.scalar_bits_by_core
+  let num_cores = Array.length config.for_cores
 
   module Kernel_for_single_instance = Kernel_for_single_instance.Make (C)
 
@@ -91,9 +91,14 @@ module Make (C : Config.S) = struct
            ; dn_dest = sub_kernels.(core_index).host_to_fpga_dest
            }));
     Array.iteri sub_kernels ~f:(fun core_index sub_kernel ->
+      let slr = config.for_cores.(core_index).slr in
+      let instance =
+        sprintf "kernel_for_single_instance_core_%d_%s" core_index (Slr.to_string slr)
+      in
       Kernel_for_single_instance.O.Of_signal.assign
         sub_kernel
         (Kernel_for_single_instance.hierarchical
+           ~instance
            ~build_mode
            ~core_index
            scope

@@ -6,6 +6,12 @@ module T = struct
     | SLR1
     | SLR2
   [@@deriving sexp_of, compare, enumerate]
+
+  let to_string x =
+    match sexp_of_t x with
+    | Atom s -> s
+    | _ -> assert false
+  ;;
 end
 
 include T

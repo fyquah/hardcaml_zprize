@@ -82,7 +82,7 @@ After running the compile\_afi.sh script, there should be a folder 'afi/'. Get
 the afi id from the file afi/\...\_afi_id.txt this to get the afi id and run:
 
 ```
-aws ec2 describe-fpga-images --fpga-image-ids afi-04f8603ed1582001a
+aws ec2 describe-fpga-images --fpga-image-ids afi-06740c40be3315e44
 ```
 Which will show up as "available" when the image is ready to use.
 
@@ -110,6 +110,13 @@ Now you can run the host.exe test program:
 ./host.exe  msm_pippenger.link.awsxclbin input.points output.points
 ```
 
+## AFI-ids
+A place to record AFI image ids and keep track of what point in the code they were made.
+AFI-id | AFI-gid | Notes
+------- | ------- | -----
+ afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned.
+ afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering afi-064af6a9ebb4349d9 | agfi-0275df76295dbc8c1 | same as above, but with tlast set via C++
+ 
 # Running `host_buckets.exe`
 
 `host_buckets.exe` is a debug application that pumps test vectors into the

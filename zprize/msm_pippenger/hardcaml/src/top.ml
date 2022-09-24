@@ -42,7 +42,7 @@ module Make (Config : Config.S) = struct
 
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
   let result_point_bits = Mixed_add.Xyzt.(fold port_widths ~init:0 ~f:( + ))
-  let ram_read_latency = Config.ram_read_latency
+  let ram_read_latency = 3
   let ram_lookup_latency = 3
   let ram_write_latency = 3
 
@@ -133,7 +133,7 @@ module Make (Config : Config.S) = struct
         ; clear
         ; start = ctrl_start.value
         ; scalar
-        ; scalar_valid = scalar_valid &: sm.is Working
+        ; scalar_valid = (scalar_valid &: sm.is Working) -- "scalar_valid"
         ; last_scalar
         ; affine_point = Mixed_add.Xyt.Of_signal.pack input_point
         }
@@ -141,7 +141,7 @@ module Make (Config : Config.S) = struct
     let ctrl_affine_point_as_xyt = Adder.Xyt.Of_signal.unpack ctrl.adder_affine_point in
     let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
     ignore (sm.current -- "STATE" : Signal.t);
-    let adder_p3 = wire result_point_bits in
+    let adder_p3 = wire result_point_bits -- "adder_p3" in
     let window_address = Variable.reg spec ~width:(num_bits_to_represent num_windows) in
     let bucket_address = Variable.reg spec ~width:last_window_size_bits in
     let adder_valid_out = wire 1 in
@@ -167,45 +167,36 @@ module Make (Config : Config.S) = struct
           ~port_a:
             (let port =
                { Ram_port.write_enable =
-                   mux2
-                     (sm.is Init_to_identity)
-                     vdd
-                     (pipeline
-                        ~n:
-                          (ram_lookup_latency
-                          + ram_read_latency
-                          + adder_latency
-                          + ram_write_latency)
-                        spec
-                        (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en))
+                   pipeline
+                     ~n:
+                       (ram_lookup_latency
+                       + ram_read_latency
+                       + adder_latency
+                       + ram_write_latency)
+                     spec
+                     ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_a_we")
                ; read_enable =
                    pipeline
                      ~n:ram_lookup_latency
                      spec
-                     (sm.is Read_result
-                     &: (window_address.value ==:. window)
-                     &: fifo_q_has_space)
-               ; data =
-                   mux2
-                     (sm.is Init_to_identity)
-                     (Mixed_add.Xyzt.Of_signal.pack identity_point)
-                     (pipeline ~n:ram_write_latency spec adder_p3)
+                     ((sm.is Read_result
+                      &: (window_address.value ==:. window)
+                      &: fifo_q_has_space)
+                     -- "port_a_re")
+               ; data = pipeline ~n:ram_write_latency spec (adder_p3 -- "port_a_d")
                ; address =
                    sel_bottom
-                     (mux2
-                        (sm.is Init_to_identity)
-                        bucket_address.value
+                     (pipeline
+                        ~n:ram_lookup_latency
+                        spec
                         (mux2
-                           (pipeline ~n:ram_lookup_latency spec (sm.is Read_result))
-                           (pipeline ~n:ram_lookup_latency spec bucket_address.value)
+                           (sm.is Read_result)
+                           bucket_address.value
                            (pipeline
-                              ~n:
-                                (ram_lookup_latency
-                                + ram_read_latency
-                                + adder_latency
-                                + ram_write_latency)
+                              ~n:(ram_read_latency + adder_latency + ram_write_latency)
                               spec
-                              ctrl.bucket)))
+                              ctrl.bucket
+                           -- "ctrl.bucket")))
                      address_bits
                }
              in
@@ -220,14 +211,15 @@ module Make (Config : Config.S) = struct
                    pipeline
                      ~n:ram_lookup_latency
                      spec
-                     (sm.is Read_result
-                     &: (window_address.value ==:. window)
-                     &: fifo_q_has_space)
+                     ((sm.is Read_result
+                      &: (window_address.value ==:. window)
+                      &: fifo_q_has_space)
+                     -- "port_b_we")
                ; read_enable =
                    pipeline
                      ~n:ram_lookup_latency
                      spec
-                     (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en)
+                     ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
                ; data = Mixed_add.Xyzt.Of_signal.pack identity_point
                ; address =
                    pipeline
@@ -235,8 +227,8 @@ module Make (Config : Config.S) = struct
                      spec
                      (mux2
                         (sm.is Read_result)
-                        (sel_bottom bucket_address.value address_bits)
-                        (sel_bottom ctrl.bucket address_bits))
+                        (sel_bottom bucket_address.value address_bits -- "bucket.address")
+                        (sel_bottom ctrl.bucket address_bits -- "ctrl.bucket"))
                }
              in
              Ram_port.(
@@ -256,7 +248,6 @@ module Make (Config : Config.S) = struct
         scope
         ~config:adder_config
         { clock
-        ; clear
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
         ; p1 =
@@ -268,7 +259,7 @@ module Make (Config : Config.S) = struct
             Mixed_add.Xyt.Of_signal.(
               pipeline
                 spec
-                (mux2 ctrl.bubble (of_int 0) ctrl_affine_point_as_xyt)
+                ctrl_affine_point_as_xyt
                 ~n:(ram_lookup_latency + ram_read_latency))
         }
     in
@@ -290,14 +281,11 @@ module Make (Config : Config.S) = struct
     ignore (finished.value -- "finished" : Signal.t);
     compile
       [ sm.switch
-          [ ( Init_to_identity
-            , [ done_l <-- gnd
-              ; finished <-- gnd
-              ; last_scalar_l <-- gnd
-              ; bucket_address <-- bucket_address.value -- "bucket_address" +:. 1
-              ; when_
-                  (bucket_address.value ==:. (1 lsl last_window_size_bits) - 1)
-                  [ sm.set_next Idle ]
+          [ (* We initialize the RAM to identity by doing a "fake" ram read in the Read_result state. *)
+            ( Init_to_identity
+            , [ bucket_address <--. (1 lsl window_size_bits) - 1
+              ; window_address <--. 0
+              ; sm.set_next Read_result
               ] )
           ; ( Idle
             , [ bucket_address <--. 0
@@ -347,18 +335,21 @@ module Make (Config : Config.S) = struct
                   ]
               ] )
           ; ( Wait_for_done_reading
-            , [ when_ (last_result_point &: result_point_ready) [ sm.set_next Idle ] ] )
+            , [ when_
+                  (~:(done_l.value) |: (last_result_point &: result_point_ready))
+                  [ sm.set_next Idle ]
+              ] )
           ]
       ];
     (* Put the output points through a FIFO so that downstream can backpressure
        and we hold off on reading points from RAM. *)
-    let fifo_capacity = 32 in
+    let fifo_capacity = 16 in
     let fifo_q =
       let wr =
         pipeline
           spec
           ~n:(ram_lookup_latency + ram_read_latency)
-          (sm.is Read_result &: fifo_q_has_space -- "fifo_q_has_space")
+          (done_l.value &: sm.is Read_result &: fifo_q_has_space -- "fifo_q_has_space")
         -- "fifo_wr"
       in
       let d =
@@ -372,7 +363,7 @@ module Make (Config : Config.S) = struct
            -- "fifo_d")
       in
       let rd = result_point_ready -- "fifo_rd" in
-      Fifo.create_showahead_from_classic
+      Fifo.create_showahead_with_extra_reg
         ~overflow_check:true
         ~underflow_check:true
         ~scope
