@@ -2,6 +2,7 @@
 
 set -x
 
+dune build
 ../../../libs/vitis_infrastructure/scripts/run_build.py \
 	--top-level-name msm_pippenger \
 	--platform aws \

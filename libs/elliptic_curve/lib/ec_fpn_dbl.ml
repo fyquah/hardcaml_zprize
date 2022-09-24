@@ -73,13 +73,14 @@ let arbitrate_square
   ~scope
   ~enable
   ~clock
+  ~clear
   ~valid
   ~latency_without_arbitration
   x1
   x2
   =
   let scope = Scope.sub_scope scope "square" in
-  Arbitrate.arbitrate2 (x1, x2) ~enable ~clock ~valid ~f:(fun x ->
+  Arbitrate.arbitrate2 (x1, x2) ~enable ~clock ~clear ~valid ~f:(fun x ->
     config.square.impl ~scope ~clock ~enable x None
     |> Config.reduce config ~scope ~clock ~enable
     |> pipeline
@@ -94,6 +95,7 @@ let arbitrate_multiply
   ~scope
   ~enable
   ~clock
+  ~clear
   ~valid
   ~latency_without_arbitration
   (x1, y1)
@@ -108,6 +110,7 @@ let arbitrate_multiply
     (x1 @: y1, x2 @: y2)
     ~enable
     ~clock
+    ~clear
     ~valid
     ~f:(fun input ->
       let y = sel_bottom input wy in
@@ -142,6 +145,7 @@ module Stage1 = struct
   let create
     ~scope
     ~clock
+    ~clear
     ~enable
     (config : Config.t)
     { Stage0.data_in = { x; y; z }; valid_in }
@@ -154,6 +158,7 @@ module Stage1 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid:valid_in
         ~latency_without_arbitration
@@ -223,6 +228,7 @@ module Stage3 = struct
   let create
     ~scope
     ~clock
+    ~clear
     ~enable
     (config : Config.t)
     { Stage2.y_squared_times_2; m; x_times_2; y; z; valid }
@@ -235,6 +241,7 @@ module Stage3 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid
         ~latency_without_arbitration
@@ -246,6 +253,7 @@ module Stage3 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid
         ~latency_without_arbitration
@@ -380,6 +388,7 @@ module Stage7 = struct
   let create
     ~scope
     ~clock
+    ~clear
     ~enable
     (config : Config.t)
     { Stage6.x'; z'; m; s_minus_x'; y_pow_4_times_8; valid }
@@ -391,6 +400,7 @@ module Stage7 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid
         ~latency_without_arbitration
@@ -466,6 +476,7 @@ struct
   module I = struct
     type 'a t =
       { clock : 'a
+      ; clear : 'a
       ; enable : 'a
       ; valid_in : 'a [@rtlprefix "in_"]
       ; data_in : 'a Jacobian.t [@rtlprefix "in_"]
@@ -490,21 +501,24 @@ struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~(config : Config.t) (scope : Scope.t) { I.clock; enable; valid_in; data_in }
+  let create
+    ~(config : Config.t)
+    (scope : Scope.t)
+    { I.clock; clear; enable; valid_in; data_in }
     =
     let ready_in =
-      Signal.reg_fb (Reg_spec.create ~clock ()) ~width:1 ~f:(fun fb ->
+      Signal.reg_fb (Reg_spec.create ~clock ~clear ()) ~width:1 ~f:(fun fb ->
         mux2 (fb ==:. 0) vdd ~:valid_in)
     in
     let { Stage8.valid_out; data_out } =
       Stage0.name scope { valid_in = valid_in &: ready_in; data_in }
-      |> Stage1.create ~clock ~enable ~scope config
+      |> Stage1.create ~clock ~clear ~enable ~scope config
       |> Stage2.create ~clock ~enable ~scope config
-      |> Stage3.create ~clock ~enable ~scope config
+      |> Stage3.create ~clock ~clear ~enable ~scope config
       |> Stage4.create ~clock ~enable ~scope config
       |> Stage5.create ~clock ~enable ~scope config
       |> Stage6.create ~clock ~enable ~scope config
-      |> Stage7.create ~clock ~enable ~scope config
+      |> Stage7.create ~clock ~clear ~enable ~scope config
       |> Stage8.create ~clock ~enable ~scope config
     in
     { O.data_out; valid_out; ready_in }

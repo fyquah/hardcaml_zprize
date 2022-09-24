@@ -8,6 +8,7 @@ module type S = sig
     module I : sig
       type 'a t =
         { clock : 'a
+        ; clear : 'a
         ; valid_in : 'a
         ; p1 : 'a Xyzt.t
         ; p2 : 'a Xyt.t

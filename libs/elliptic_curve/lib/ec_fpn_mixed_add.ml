@@ -36,13 +36,14 @@ let arbitrate_square
   ~scope
   ~enable
   ~clock
+  ~clear
   ~valid
   ~latency_without_arbitration
   x1
   x2
   =
   let scope = Scope.sub_scope scope "square" in
-  Arbitrate.arbitrate2 (x1, x2) ~enable ~clock ~valid ~f:(fun x ->
+  Arbitrate.arbitrate2 (x1, x2) ~enable ~clear ~clock ~valid ~f:(fun x ->
     config.square.impl ~scope ~clock ~enable x None
     |> Config.reduce config ~scope ~clock ~enable
     |> pipeline
@@ -57,6 +58,7 @@ let arbitrate_multiply
   ~scope
   ~enable
   ~clock
+  ~clear
   ~valid
   ~latency_without_arbitration
   (x1, y1)
@@ -71,6 +73,7 @@ let arbitrate_multiply
     (x1 @: y1, x2 @: y2)
     ~enable
     ~clock
+    ~clear
     ~valid
     ~f:(fun input ->
       let y = sel_bottom input wy in
@@ -120,6 +123,7 @@ module Stage1 = struct
   let create
     ~scope
     ~clock
+    ~clear
     ~enable
     (config : Config.t)
     ({ data_in0 = { x = x0; y = y0 }
@@ -136,6 +140,7 @@ module Stage1 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid
         ~latency_without_arbitration
@@ -215,6 +220,7 @@ module Stage3 = struct
   let create
     ~scope
     ~clock
+    ~clear
     ~enable
     (config : Config.t)
     { Stage2.y0; h; z1_cubed; u2; s2; u1; z1; valid }
@@ -226,6 +232,7 @@ module Stage3 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid
         ~latency_without_arbitration
@@ -307,6 +314,7 @@ module Stage5 = struct
   let create
     ~scope
     ~clock
+    ~clear
     ~enable
     (config : Config.t)
     { Stage4.z_out; h; r; u1; s1 : 'a; error; valid }
@@ -319,6 +327,7 @@ module Stage5 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid
         ~latency_without_arbitration
@@ -361,6 +370,7 @@ module Stage6 = struct
   let create
     ~scope
     ~clock
+    ~clear
     ~enable
     (config : Config.t)
     { Stage5.r_squared; h; h_squared; z_out; s1; r; u1; error; valid }
@@ -373,6 +383,7 @@ module Stage6 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid
         ~latency_without_arbitration
@@ -540,6 +551,7 @@ module Stage10 = struct
   let create
     ~scope
     ~clock
+    ~clear
     ~enable
     (config : Config.t)
     { Stage9.tmp2; x_out; z_out; s1; r; h_cubed; error; valid }
@@ -552,6 +564,7 @@ module Stage10 = struct
         ~config
         ~scope
         ~clock
+        ~clear
         ~enable
         ~valid
         ~latency_without_arbitration
@@ -641,6 +654,7 @@ struct
   module I = struct
     type 'a t =
       { clock : 'a
+      ; clear : 'a
       ; enable : 'a
       ; valid_in : 'a [@rtlprefix "valid_in_"]
       ; data_in0 : 'a Affine.t [@rtlprefix "data_in0_"]
@@ -663,7 +677,7 @@ struct
   let create
     ~(config : Config.t)
     (scope : Scope.t)
-    { I.clock; enable; valid_in; data_in0; data_in1; data_in1_z_squared }
+    { I.clock; clear; enable; valid_in; data_in0; data_in1; data_in1_z_squared }
     =
     let ready_in =
       Signal.reg_fb (Reg_spec.create ~clock ()) ~width:1 ~f:(fun fb ->
@@ -673,16 +687,16 @@ struct
       Stage0.name
         scope
         { valid_in = valid_in &: ready_in; data_in0; data_in1; data_in1_z_squared }
-      |> Stage1.create ~clock ~enable ~scope config
+      |> Stage1.create ~clock ~clear ~enable ~scope config
       |> Stage2.create ~clock ~enable ~scope config
-      |> Stage3.create ~clock ~enable ~scope config
+      |> Stage3.create ~clock ~clear ~enable ~scope config
       |> Stage4.create ~clock ~enable ~scope config
-      |> Stage5.create ~clock ~enable ~scope config
-      |> Stage6.create ~clock ~enable ~scope config
+      |> Stage5.create ~clock ~clear ~enable ~scope config
+      |> Stage6.create ~clock ~clear ~enable ~scope config
       |> Stage7.create ~clock ~enable ~scope config
       |> Stage8.create ~clock ~enable ~scope config
       |> Stage9.create ~clock ~enable ~scope config
-      |> Stage10.create ~clock ~enable ~scope config
+      |> Stage10.create ~clock ~clear ~enable ~scope config
       |> Stage11.create ~clock ~enable ~scope config
     in
     { O.data_out; valid_out; error; ready_in }
