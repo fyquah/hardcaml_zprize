@@ -1,3 +1,4 @@
 test_random.exe
 evaluate_given.exe
 bench_throughput.exe
+bench_latency.exe
