@@ -7,6 +7,7 @@ include struct
   open Twisted_edwards_lib
   module Adder_config = Config
   module Mixed_add = Mixed_add
+  module Mixed_add_precompute = Mixed_add_precompute
   module Num_bits = Num_bits
   module Xyzt = Xyzt
 end
@@ -25,7 +26,9 @@ end
 module Make (Config : Config.S) = struct
   open Config
 
-  module Mixed_add = Mixed_add.Make (struct
+  let precompute = true
+
+  module Mixed_add = Mixed_add_precompute.Make (struct
     let num_bits = field_bits
   end)
 
@@ -84,15 +87,6 @@ module Make (Config : Config.S) = struct
     [@@deriving sexp_of, hardcaml ~rtlmangle:true]
   end
 
-  module Adder = struct
-    include Mixed_add
-
-    let hierarchical ~config scope =
-      let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ~name:"adder" ~scope (create ~config)
-    ;;
-  end
-
   module State = struct
     type t =
       | Init_to_identity
@@ -103,7 +97,20 @@ module Make (Config : Config.S) = struct
     [@@deriving sexp_of, compare, enumerate]
   end
 
-  let identity_point = Mixed_add.Xyzt.Of_signal.of_ints { x = 0; y = 1; t = 0; z = 1 }
+  let identity_point_for_ram =
+    if precompute
+    then (
+      let point =
+        Twisted_edwards_model_lib.Twisted_edwards_curve.to_fpga_internal_representation
+          { x = Z.zero; y = Z.one; t = Z.zero; z = Z.one }
+      in
+      { Mixed_add.Xyzt.x = Signal.of_z point.x ~width:Config.field_bits
+      ; y = Signal.of_z point.y ~width:Config.field_bits
+      ; t = Signal.of_z point.t ~width:Config.field_bits
+      ; z = Signal.of_z point.z ~width:Config.field_bits
+      })
+    else Mixed_add.Xyzt.Of_signal.of_ints { x = 0; y = 1; t = 0; z = 1 }
+  ;;
 
   let create
     ~build_mode
@@ -138,7 +145,9 @@ module Make (Config : Config.S) = struct
         ; affine_point = Mixed_add.Xyt.Of_signal.pack input_point
         }
     in
-    let ctrl_affine_point_as_xyt = Adder.Xyt.Of_signal.unpack ctrl.adder_affine_point in
+    let ctrl_affine_point_as_xyt =
+      Mixed_add.Xyt.Of_signal.unpack ctrl.adder_affine_point
+    in
     let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
     ignore (sm.current -- "STATE" : Signal.t);
     let adder_p3 = wire result_point_bits -- "adder_p3" in
@@ -220,7 +229,7 @@ module Make (Config : Config.S) = struct
                      ~n:ram_lookup_latency
                      spec
                      ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
-               ; data = Mixed_add.Xyzt.Of_signal.pack identity_point
+               ; data = Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram
                ; address =
                    pipeline
                      ~n:ram_lookup_latency
@@ -244,11 +253,10 @@ module Make (Config : Config.S) = struct
     List.iteri port_b_q ~f:(fun i port ->
       ignore (port -- ("window" ^ Int.to_string i ^ "$ram_b$q") : Signal.t));
     let adder =
-      Adder.hierarchical
+      Mixed_add.hierarchical
         scope
         ~config:adder_config
         { clock
-        ; clear
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
         ; p1 =

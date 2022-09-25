@@ -12,6 +12,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   module I_rules = Display_rules.With_interface (Top.I)
   module O_rules = Display_rules.With_interface (Top.O)
 
+  let precompute = Top.precompute
+
   let create_sim verilator () =
     let scope =
       Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()
@@ -44,7 +46,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     i.clear := Bits.gnd;
     Cyclesim.cycle sim;
     reset_cycle_cnt ();
-    let inputs = Utils.random_inputs ~seed num_inputs in
+    let inputs = Utils.random_inputs ~precompute ~seed num_inputs in
     Array.iteri inputs ~f:(fun idx input ->
       Top.Mixed_add.Xyt.iter2
         i.input_point
@@ -92,7 +94,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
           ; z = result_point.z
           }
         in
-        let affine = Utils.twisted_edwards_extended_to_affine extended in
+        let affine = Utils.twisted_edwards_extended_to_affine ~precompute extended in
         result_points
           := { Utils.point = affine; bucket = !bucket; window = !window }
              :: !result_points;

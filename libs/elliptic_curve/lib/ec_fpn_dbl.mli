@@ -16,7 +16,6 @@ end) : sig
   module I : sig
     type 'a t =
       { clock : 'a
-      ; clear : 'a
       ; enable : 'a
       ; valid_in : 'a
       ; data_in : 'a Jacobian.t

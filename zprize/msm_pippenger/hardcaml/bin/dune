@@ -2,12 +2,13 @@
  (names generate simulate tools)
  (promote)
  (libraries
-   core
-   core_unix
-   core_unix.command_unix
-   hardcaml_waveterm.interactive
-   msm_pippenger
-   msm_pippenger_test_components
-   msm_pippenger_test_top)
- (preprocess (pps ppx_jane))
-)
+  core
+  core_unix
+  core_unix.command_unix
+  custom_rtl
+  hardcaml_waveterm.interactive
+  msm_pippenger
+  msm_pippenger_test_components
+  msm_pippenger_test_top)
+ (preprocess
+  (pps ppx_jane)))
