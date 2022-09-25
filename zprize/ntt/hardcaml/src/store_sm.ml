@@ -6,8 +6,12 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
-  let sync_cycles = 4
-  let logsync = Int.ceil_log2 sync_cycles
+  let read_address_pipelining = 2
+  let read_data_pipelining = 2
+
+  let sync_cycles =
+    Hardcaml_ntt.Core_config.ram_latency + read_data_pipelining + read_address_pipelining
+  ;;
 
   module State = struct
     type t =
@@ -45,14 +49,14 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let sm = Always.State_machine.create (module State) spec in
     let addr = Var.reg spec ~width:(logn + logblocks + 1) in
     let addr_next = addr.value +:. 1 in
-    let sync = Var.reg spec ~width:logsync in
+    let sync = Var.reg spec ~width:(Int.ceil_log2 sync_cycles) in
     let rd_en = Var.wire ~default:gnd in
     let tvalid = Var.reg spec ~width:1 in
     let tready = i.tready in
     Always.(
       compile
         [ sm.switch
-            [ Start, [ addr <--. 0; when_ i.start [ sm.set_next Preroll ] ]
+            [ Start, [ addr <--. 0; sync <--. 0; when_ i.start [ sm.set_next Preroll ] ]
             ; ( Preroll
               , [ rd_en <-- vdd
                 ; addr <-- addr_next

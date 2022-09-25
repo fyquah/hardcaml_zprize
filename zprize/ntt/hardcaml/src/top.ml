@@ -61,6 +61,13 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         }
     in
     let pipe = pipeline (Reg_spec.create ~clock:i.clock ()) in
+    let pipe_with_keep ~n x =
+      Signal.pipeline
+        ~attributes:[ Rtl_attribute.Vivado.keep true ]
+        (Reg_spec.create ~clock:i.clock ())
+        ~n
+        x
+    in
     let cores =
       Four_step.create
         ~build_mode
@@ -77,10 +84,14 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                |> Array.of_list
              in
              Array.init blocks ~f:(Fn.const d))
-        ; wr_en = pipe ~n:2 load_sm.wr_en
-        ; wr_addr = Array.init blocks ~f:(Fn.const (pipe ~n:2 load_sm.wr_addr))
-        ; rd_en = store_sm.rd_en
-        ; rd_addr = Array.init blocks ~f:(Fn.const store_sm.rd_addr)
+        ; wr_en = pipe_with_keep ~n:Load_sm.write_pipelining load_sm.wr_en
+        ; wr_addr =
+            Array.init blocks ~f:(fun _ ->
+              pipe_with_keep ~n:Load_sm.write_pipelining load_sm.wr_addr)
+        ; rd_en = pipe_with_keep ~n:Store_sm.read_address_pipelining store_sm.rd_en
+        ; rd_addr =
+            Array.init blocks ~f:(fun _ ->
+              pipe_with_keep ~n:Store_sm.read_address_pipelining store_sm.rd_addr)
         ; input_done = load_sm.done_
         ; output_done = store_sm.done_
         }
@@ -94,7 +105,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
              (* We're assuming vivado will do some rejigging here.  We could/should
                instantiate a pipelined mux. *)
              pipe
-               ~n:(Store_sm.sync_cycles - Hardcaml_ntt.Core_config.ram_latency)
+               ~n:Store_sm.read_data_pipelining
                ~enable:rd_en
                (let qs =
                   List.init blocks ~f:(fun index ->
@@ -105,7 +116,9 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                 else
                   mux
                     (pipe
-                       ~n:Hardcaml_ntt.Core_config.ram_latency
+                       ~n:
+                         (Hardcaml_ntt.Core_config.ram_latency
+                         + Store_sm.read_address_pipelining)
                        ~enable:rd_en
                        store_sm.block)
                     qs))
