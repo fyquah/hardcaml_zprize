@@ -40,7 +40,7 @@ module Make (Config : Config.S) : sig
   val result_point_bits : int
   val num_windows : int
   val num_result_points : int
-  val last_window_size_bits : int
+  val first_window_size_bits : int
 
   module O : sig
     type 'a t =

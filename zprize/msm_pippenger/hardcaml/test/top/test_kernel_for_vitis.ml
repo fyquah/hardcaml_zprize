@@ -184,8 +184,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
                then (
                  Int.incr window;
                  let next_window_size_bits =
-                   if !window = Top.num_windows - 1
-                   then Top.last_window_size_bits
+                   if !window = 0
+                   then Top.first_window_size_bits
                    else Config.window_size_bits
                  in
                  (1 lsl next_window_size_bits) - 1)
