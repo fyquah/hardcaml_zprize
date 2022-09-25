@@ -131,7 +131,7 @@ module Make (Config : Config.S) = struct
     let spec = Reg_spec.create ~clock () in
     let spec_with_clear = Reg_spec.create ~clear ~clock () in
     let sm = State_machine.create (module State) spec_with_clear in
-    let ctrl_start = Variable.reg spec ~width:1 in
+    let ctrl_start = Variable.reg spec_with_clear ~width:1 in
     let ctrl =
       Full_controller.hierarchical
         scope
