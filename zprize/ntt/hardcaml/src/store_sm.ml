@@ -8,9 +8,13 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   let blocks = 1 lsl Config.logblocks
   let read_address_pipelining = 2
   let read_data_pipelining = 2
+  let read_data_tree_mux_stages = 2
 
   let sync_cycles =
-    Hardcaml_ntt.Core_config.ram_latency + read_data_pipelining + read_address_pipelining
+    Hardcaml_ntt.Core_config.ram_latency
+    + read_data_pipelining
+    + read_address_pipelining
+    + read_data_tree_mux_stages
   ;;
 
   module State = struct

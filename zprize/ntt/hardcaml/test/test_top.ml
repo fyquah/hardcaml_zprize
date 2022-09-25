@@ -275,7 +275,7 @@ let%expect_test "single core, no twiddles" =
          ~display_height:80
          ~wave_width:(-1));
   [%expect {|
-    (!cycles 1346)
+    (!cycles 1348)
     "Hardware and software reference results match!" |}]
 ;;
 
@@ -290,7 +290,7 @@ let%expect_test "8 cores, no twiddles" =
        ~first_4step_pass:false
       : Waveform.t option);
   [%expect {|
-    (!cycles 212)
+    (!cycles 214)
     "Hardware and software reference results match!" |}]
 ;;
 
@@ -306,7 +306,7 @@ let%expect_test "2 cores, 2 blocks, no twiddles" =
       : Waveform.t option);
   [%expect
     {|
-    (!cycles 410)
+    (!cycles 412)
     "Hardware and software reference results match!" |}]
 ;;
 
@@ -331,9 +331,9 @@ let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
       : Waveform.t option);
   [%expect
     {|
-    (!cycles 648)
+    (!cycles 650)
     "Hardware and software reference results match!"
-    (!cycles 571)
+    (!cycles 573)
     "Hardware and software reference results match!" |}]
 ;;
 
@@ -376,12 +376,12 @@ let%expect_test "other configurations with twiddles" =
       : Waveform.t option);
   [%expect
     {|
-    (!cycles 1782)
+    (!cycles 1784)
     "Hardware and software reference results match!"
-    (!cycles 1590)
+    (!cycles 1592)
     "Hardware and software reference results match!"
-    (!cycles 1054)
+    (!cycles 1058)
     "Hardware and software reference results match!"
-    (!cycles 520)
+    (!cycles 522)
     "Hardware and software reference results match!" |}]
 ;;

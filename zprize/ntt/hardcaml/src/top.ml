@@ -61,8 +61,9 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         }
     in
     let pipe = pipeline (Reg_spec.create ~clock:i.clock ()) in
-    let pipe_with_keep ~n x =
+    let pipe_with_keep ?enable ~n x =
       Signal.pipeline
+        ?enable
         ~attributes:[ Rtl_attribute.Vivado.keep true ]
         (Reg_spec.create ~clock:i.clock ())
         ~n
@@ -103,13 +104,16 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         ; tdata =
             (let rd_en = store_sm.rd_en <>:. 0 in
              (* We're assuming vivado will do some rejigging here.  We could/should
-               instantiate a pipelined mux. *)
+                instantiate a pipelined mux. *)
              pipe
-               ~n:Store_sm.read_data_pipelining
+               ~n:Store_sm.read_data_tree_mux_stages
                ~enable:rd_en
                (let qs =
                   List.init blocks ~f:(fun index ->
-                    cores.rd_q.(index) |> Array.to_list |> concat_lsb)
+                    cores.rd_q.(index)
+                    |> Array.to_list
+                    |> concat_lsb
+                    |> pipe_with_keep ~enable:rd_en ~n:Store_sm.read_data_pipelining)
                 in
                 if Config.logblocks = 0
                 then List.nth_exn qs 0
@@ -118,7 +122,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                     (pipe
                        ~n:
                          (Hardcaml_ntt.Core_config.ram_latency
-                         + Store_sm.read_address_pipelining)
+                         + Store_sm.read_address_pipelining
+                         + Store_sm.read_data_pipelining)
                        ~enable:rd_en
                        store_sm.block)
                     qs))

@@ -24,6 +24,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) : sig
 
   val read_address_pipelining : int
   val read_data_pipelining : int
+  val read_data_tree_mux_stages : int
   val create : Scope.t -> Hardcaml.Signal.t Hardcaml.Interface.Create_fn(I)(O).t
   val hierarchy : Scope.t -> Hardcaml.Signal.t Hardcaml.Interface.Create_fn(I)(O).t
 end
