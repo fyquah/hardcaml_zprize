@@ -308,5 +308,5 @@ let%expect_test "2 blocks" =
   ignore
     (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
-  [%expect{| "Hardware and software reference results match!" |}]
+  [%expect {| "Hardware and software reference results match!" |}]
 ;;

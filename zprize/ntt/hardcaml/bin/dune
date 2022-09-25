@@ -2,11 +2,11 @@
  (names ntt simulate generate)
  (promote)
  (libraries
-  core
-  core_unix
-  core_unix.command_unix
-  hardcaml_waveterm.interactive
-  hardcaml_ntt_test
-  zprize_ntt_test)
- (preprocess
-  (pps ppx_jane)))
+   core
+   core_unix
+   core_unix.command_unix
+   hardcaml_waveterm.interactive
+   hardcaml_ntt_test
+   zprize_ntt_test)
+ (preprocess (pps ppx_jane))
+)

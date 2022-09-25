@@ -287,6 +287,7 @@ module Make (C : Pippenger_compute_unit_config.S) = struct
         scope
         ~config:adder_config
         { clock
+        ; clear
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
         ; p1 =

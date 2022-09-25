@@ -57,7 +57,7 @@ let command_kernel =
             (Kernel_for_vitis.hierarchical ~build_mode:Synthesis scope)
         in
         printf "//Expecting %i result points\n" Kernel_for_vitis.Top.num_result_points;
-        Custom_rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
+        Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
 ;;
 
 let commands =
