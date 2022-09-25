@@ -1,6 +1,7 @@
 #include <assert.h>
 
 #include "driver.h"
+#include "host_to_fpga_transpose.h"
 
 namespace argpos {
   const uint64_t GMEM_INPUT = 3;
@@ -229,16 +230,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
 
   bench("Evaluate NTT", [&]() {
     bench("Copy to internal page-aligned buffer", [&](){
-        uint64_t *dst = buffer->input_data();
-        for (uint64_t c = 0; c < row_size / 8; c++) {
-          for (uint64_t r = 0; r < row_size; r++) {
-            memcpy(
-                dst + (c * row_size * 8) + (r * 8),
-                in + (c * 8) + (r * row_size),
-                sizeof(uint64_t) * 8
-                );
-          }
-        }
+        host_to_fpga_transpose(buffer->input_data(), in, row_size);
     });
 
     bench("Copying input points to device", [&]() {
