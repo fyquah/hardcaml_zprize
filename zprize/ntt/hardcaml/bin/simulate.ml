@@ -31,7 +31,7 @@ let command_top =
             let logn = logn
             let logcores = logcores
             let logblocks = logblocks
-            let support_4step_twiddle = support_4step_twiddle
+            let support_4step_twiddle = support_4step_twiddle || first_4step_pass
           end)
         in
         let input_coefs =
