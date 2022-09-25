@@ -27,8 +27,15 @@ host_to_fpga_transpose_impl(uint64_t *arg_dst, const uint64_t *arg_in, uint64_t 
 
   if (prefetch_read_lookahead == 0) {
     for (uint64_t r = 0; r < row_size; r += 1) {
-      for (uint64_t c = 0; c < row_size / 8; c++) {
-        MEMCPY_64BYTES(dst, in, r, c);
+      for (uint64_t c = 0; c < row_size / 8; c+=8) {
+        MEMCPY_64BYTES(dst, in, r, c + 0);
+        MEMCPY_64BYTES(dst, in, r, c + 1);
+        MEMCPY_64BYTES(dst, in, r, c + 2);
+        MEMCPY_64BYTES(dst, in, r, c + 3);
+        MEMCPY_64BYTES(dst, in, r, c + 4);
+        MEMCPY_64BYTES(dst, in, r, c + 5);
+        MEMCPY_64BYTES(dst, in, r, c + 6);
+        MEMCPY_64BYTES(dst, in, r, c + 7);
       }
     }
     return;

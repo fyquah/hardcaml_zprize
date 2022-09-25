@@ -1,5 +1,5 @@
 COMMON_DIR=../../../libs/vitis_infrastructure/common
-CXXFLAGS+=-I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -O3 -g -std=c++1y
+CXXFLAGS+=-I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -O3 -g -std=c++1y -march=native
 CXXFLAGS+=-I$(COMMON_DIR)/includes/xcl2
 CXXFLAGS+=-fmessage-length=0
 CXXFLAGS+=-L/opt/xilinx/xrt/lib -pthread -lOpenCL -lrt -lstdc++ -lxrt_coreutil
