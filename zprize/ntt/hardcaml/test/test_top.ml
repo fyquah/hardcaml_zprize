@@ -16,7 +16,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   let num_cores = 1 lsl logcores
   let log_passes = logn - logcores
   let num_passes = 1 lsl log_passes
-  let _num_blocks = 1 lsl logblocks
+  let num_blocks = 1 lsl logblocks
   let () = assert (1 lsl (logn + logn) = n * num_cores * num_passes)
 
   let random_input_coef_matrix () =
@@ -169,51 +169,54 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     start_sim inputs cycle;
     inputs.first_4step_pass := Bits.of_bool first_4step_pass;
     if first_4step_pass
-    then (
-      (* for pass = 0 to (num_passes / num_blocks) - 1 do *)
-      (*   (\* wait for tready *\) *)
-      (*   while not (Bits.to_bool !(outputs.data_in_dest.tready)) do *)
-      (*     cycle () *)
-      (*   done; *)
-      (*   for i = 0 to n - 1 do *)
-      (*     for block = 0 to num_blocks - 1 do *)
-      (*       let row_base_index = ((pass * num_blocks) + block) * num_cores in *)
-      (*       inputs.data_in.tvalid := Bits.vdd; *)
-      (*       inputs.data_in.tdata *)
-      (*         := List.init num_cores ~f:(fun core -> *)
-      (*              input_coefs.(row_base_index + core).(i)) *)
-      (*            |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z))) *)
-      (*            |> Bits.concat_lsb; *)
-      (*       cycle () *)
-      (*     done *)
-      (*   done; *)
-      (*   inputs.data_in.tvalid := Bits.gnd; *)
-      (*   (\* A few cycles of flushing after each pass *\) *)
-      (*   cycle ~n:4 () *)
-      (* done *)
-      (* for r = 0 to n - 1 do *)
-      (*   for c = 0 to n - 1 do *)
-      (*     input_coefs.(r).(c) <- Z.of_int ((r lsl 16) + c) |> Gf.Z.of_z *)
-      (*   done *)
-      (* done; *)
-      let coefs = copy_input_to_blocked_arrays input_coefs in
-      while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
-        cycle ()
-      done;
-      for i = 0 to (Array.length coefs lsr logcores) - 1 do
-        inputs.data_in.tvalid := Bits.vdd;
-        inputs.data_in.tdata
-          := List.init num_cores ~f:(fun j ->
-               coefs.((i lsl logcores) + j)
-               |> Gf.Z.to_z
-               |> Gf.Bits.of_z
-               |> Gf.Bits.to_bits)
-             |> Bits.concat_lsb;
-        cycle ()
-      done;
-      inputs.data_in.tvalid := Bits.gnd;
-      (* A few cycles of flushing after each pass *)
-      cycle ~n:4 ())
+    then
+      if true
+      then (
+        for pass = 0 to (num_passes / num_blocks) - 1 do
+          (* wait for tready *)
+          while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
+            cycle ()
+          done;
+          for i = 0 to n - 1 do
+            for block = 0 to num_blocks - 1 do
+              let row_base_index = ((pass * num_blocks) + block) * num_cores in
+              inputs.data_in.tvalid := Bits.vdd;
+              inputs.data_in.tdata
+                := List.init num_cores ~f:(fun core ->
+                     input_coefs.(row_base_index + core).(i))
+                   |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
+                   |> Bits.concat_lsb;
+              cycle ()
+            done
+          done;
+          inputs.data_in.tvalid := Bits.gnd;
+          (* A few cycles of flushing after each pass *)
+          cycle ~n:4 ()
+        done;
+        for r = 0 to n - 1 do
+          for c = 0 to n - 1 do
+            input_coefs.(r).(c) <- Z.of_int ((r lsl 16) + c) |> Gf.Z.of_z
+          done
+        done)
+      else (
+        let coefs = copy_input_to_blocked_arrays input_coefs in
+        while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
+          cycle ()
+        done;
+        for i = 0 to (Array.length coefs lsr logcores) - 1 do
+          inputs.data_in.tvalid := Bits.vdd;
+          inputs.data_in.tdata
+            := List.init num_cores ~f:(fun j ->
+                 coefs.((i lsl logcores) + j)
+                 |> Gf.Z.to_z
+                 |> Gf.Bits.of_z
+                 |> Gf.Bits.to_bits)
+               |> Bits.concat_lsb;
+          cycle ()
+        done;
+        inputs.data_in.tvalid := Bits.gnd;
+        (* A few cycles of flushing after each pass *)
+        cycle ~n:4 ())
     else
       for pass = 0 to num_passes - 1 do
         (* wait for tready *)
