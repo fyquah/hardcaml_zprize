@@ -224,8 +224,10 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
   });
 
   bench("Doing actual work", [&]() {
-    OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s));
-    std::cout << "Launched writer kernel!" << std::endl;
+    OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_points));
+    std::cout << "Launched points writer kernel!" << std::endl;
+    OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_scalars));
+    std::cout << "Launched scalars writer kernel!" << std::endl;
 
     // Launch the reader kernel
     OCL_CHECK(err, err = q.enqueueTask(krnl_s2mm));
