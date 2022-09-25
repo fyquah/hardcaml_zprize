@@ -5,6 +5,7 @@ val create
   :  Scope.t
   -> build_mode:Build_mode.t
   -> size:int
+  -> read_latency:int
   -> clock:Signal.t
   -> port_a:Signal.t Ram_port.t
   -> port_b:Signal.t Ram_port.t
@@ -25,6 +26,7 @@ val create_dual
   :  Scope.t
   -> build_mode:Build_mode.t
   -> size:int
+  -> read_latency:int
   -> clock:Signal.t
   -> clear:Signal.t
   -> flip:Signal.t

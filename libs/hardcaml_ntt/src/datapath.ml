@@ -33,6 +33,7 @@ module Make (Config : Core_config.S) = struct
   end
 
   let support_4step_twiddle = Config.support_4step_twiddle
+  let ram_latency = Core_config.ram_latency
   let ram_output_pipelining = Core_config.ram_output_pipelining
   let gf_z_to_bits g = Gf.Z.to_z g |> Gf.Signal.of_z |> Gf.Signal.to_bits
   let twiddle_root row iter = Gf.Z.pow Roots.inverse.(logn * 2) (row * (iter + 1))
@@ -73,13 +74,18 @@ module Make (Config : Core_config.S) = struct
       Twiddle_factor_stream.hierarchy
         scope
         { clock = i.clock
-        ; start_twiddles = pipe ~n:ram_output_pipelining ~clear:true i.start_twiddles
+        ; start_twiddles =
+            (* -1 here because we need to make sure the twiddle factor
+             * stream is ready for the next cycle when the ram data
+             * is available.
+             *)
+            pipe ~n:(ram_latency + ram_output_pipelining - 1) ~clear:true i.start_twiddles
         ; omegas =
             (if support_4step_twiddle
             then
               List.init Twiddle_factor_stream.pipe_length ~f:(fun idx ->
                 mux2
-                  i.twiddle_stage
+                  (pipe ~n:(ram_latency + ram_output_pipelining - 1) i.twiddle_stage)
                   twiddle_omegas.(idx).value
                   (List.nth_exn i.omegas idx))
             else i.omegas)
@@ -112,28 +118,35 @@ module Make (Config : Core_config.S) = struct
             ]
         ]);
     let () =
+      let piped_twiddle_update_index =
+        pipe ~n:(ram_latency + ram_output_pipelining) i.twiddle_update.index
+      in
+      let piped_twidle_updated_valid =
+        pipe ~n:(ram_latency + ram_output_pipelining) i.twiddle_update.valid
+        -- "piped_twidle_updated_valid"
+      in
       let twiddle_omega =
         mux
-          i.twiddle_update.index
+          piped_twiddle_update_index
           (Array.to_list twiddle_omegas |> List.map ~f:(fun v -> v.value))
       in
-      let twiddle_scale = mux i.twiddle_update.index twiddle_scale in
-      t
-      <==
+      let twiddle_scale = mux piped_twiddle_update_index twiddle_scale in
       let a =
         mux2
-          (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.valid)
+          piped_twidle_updated_valid
           twiddle_omega
-          (pipe ~n:ram_output_pipelining i.d2)
+          (pipe ~n:ram_output_pipelining i.d2 -- "piped_d2")
+        -- "a"
       in
       let b =
-        mux2 (pipe ~n:(1 + ram_output_pipelining) i.twiddle_update.valid) twiddle_scale w
+        mux2 piped_twidle_updated_valid (twiddle_scale -- "twiddle_scale") (w -- "w")
+        -- "b"
       in
-      Multiplier.create ~clock:i.clock a b -- "T"
+      t <== Multiplier.create ~clock:i.clock a b
     in
     let d1 = pipe ~n:(Multiplier.latency + ram_output_pipelining) i.d1 in
     let piped_twiddle_stage =
-      pipe ~n:(Multiplier.latency + ram_output_pipelining + 1) i.twiddle_stage
+      pipe ~n:(Multiplier.latency + ram_output_pipelining + ram_latency) i.twiddle_stage
       -- "piped_twiddle_stage"
     in
     { O.q1 = reg spec_no_clear (d1 +: t)
