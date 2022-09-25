@@ -8,8 +8,16 @@ let command_test_vectors =
     [%map_open.Command
       let num_points =
         flag "-num-points" (required int) ~doc:" The number of points to simulate over"
-      and input_filename =
-        flag "-input-filename" (required string) ~doc:" File to write input points to"
+      and input_points_filename =
+        flag
+          "-input-points-filename"
+          (required string)
+          ~doc:" File to write input points to"
+      and input_scalars_filename =
+        flag
+          "-input-scalars-filename"
+          (required string)
+          ~doc:" File to write input points to"
       and output_filename =
         flag
           "-output-filename"
@@ -73,20 +81,34 @@ let command_test_vectors =
           else input_points
         in
         Out_channel.write_all
-          input_filename
+          input_points_filename
           ~data:
             (Array.map input_points ~f:(fun data ->
                let bits =
                  let x = Bits.uresize data.affine_point_with_t.x 384 in
                  let y = Bits.uresize data.affine_point_with_t.y 384 in
                  let t = Bits.uresize data.affine_point_with_t.t 384 in
-                 Bits.(data.scalar @: t @: y @: x)
+                 Bits.(t @: y @: x)
                in
                assert (Bits.width bits <= 512 * 3);
                Bits.uresize bits (512 * 3)
                |> Bits.to_constant
                |> Constant.to_hex_string ~signedness:Unsigned)
             |> Array.to_list
+            |> String.concat ~sep:"\n");
+        Out_channel.write_all
+          input_scalars_filename
+          ~data:
+            (List.init
+               (Int.round_up (Array.length input_points) ~to_multiple_of:2 / 2)
+               ~f:(fun i ->
+                 let even_scalar = Bits.uresize input_points.(2 * i).scalar 256 in
+                 let odd_scalar = Bits.uresize input_points.((2 * i) + 1).scalar 256 in
+                 let bits = Bits.(odd_scalar @: even_scalar) in
+                 assert (Bits.width bits = 512);
+                 Bits.uresize bits 512
+                 |> Bits.to_constant
+                 |> Constant.to_hex_string ~signedness:Unsigned)
             |> String.concat ~sep:"\n");
         (* Do the bucket sums like the FPGA will. *)
         let windows =
