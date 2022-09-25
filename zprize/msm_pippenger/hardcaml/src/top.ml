@@ -150,8 +150,10 @@ module Make (Config : Config.S) = struct
     let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
     ignore (sm.current -- "STATE" : Signal.t);
     let adder_p3 = wire result_point_bits -- "adder_p3" in
-    let window_address = Variable.reg spec ~width:(num_bits_to_represent num_windows) in
-    let bucket_address = Variable.reg spec ~width:last_window_size_bits in
+    let window_address =
+      Variable.reg spec_with_clear ~width:(num_bits_to_represent num_windows)
+    in
+    let bucket_address = Variable.reg spec_with_clear ~width:last_window_size_bits in
     let adder_valid_out = wire 1 in
     let fifo_q_has_space = wire 1 in
     let port_a_q, port_b_q =
@@ -277,14 +279,14 @@ module Make (Config : Config.S) = struct
     (* State machine for flow control. *)
     let wait_count =
       Variable.reg
-        spec
+        spec_with_clear
         ~width:
           (num_bits_to_represent
              (ram_lookup_latency + ram_read_latency + adder_latency + ram_write_latency))
     in
-    let last_scalar_l = Variable.reg spec ~width:1 in
+    let last_scalar_l = Variable.reg spec_with_clear ~width:1 in
     let last_result_point = wire 1 in
-    let done_l = Variable.reg spec ~width:1 in
+    let done_l = Variable.reg spec_with_clear ~width:1 in
     let finished = Variable.wire ~default:gnd in
     ignore (finished.value -- "finished" : Signal.t);
     compile
