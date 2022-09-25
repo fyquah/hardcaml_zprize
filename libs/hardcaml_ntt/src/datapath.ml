@@ -105,7 +105,11 @@ module Make (Config : Core_config.S) = struct
         ; when_
             (pipeline
                spec_with_clear
-               ~n:(Twiddle_factor_stream.pipe_length + ram_output_pipelining)
+               ~n:
+                 (Twiddle_factor_stream.pipe_length
+                 + ram_output_pipelining
+                 + ram_latency
+                 - 1)
                i.twiddle_update.valid)
             [ (* depending on the pipe dpeth, this might not work.*)
               for_

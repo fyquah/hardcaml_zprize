@@ -94,7 +94,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
              (* We're assuming vivado will do some rejigging here.  We could/should
                instantiate a pipelined mux. *)
              pipe
-               ~n:3
+               ~n:(Store_sm.sync_cycles - Hardcaml_ntt.Core_config.ram_latency)
                ~enable:rd_en
                (let qs =
                   List.init blocks ~f:(fun index ->
@@ -102,7 +102,13 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                 in
                 if Config.logblocks = 0
                 then List.nth_exn qs 0
-                else mux (pipe ~n:1 ~enable:rd_en store_sm.block) qs))
+                else
+                  mux
+                    (pipe
+                       ~n:Hardcaml_ntt.Core_config.ram_latency
+                       ~enable:rd_en
+                       store_sm.block)
+                    qs))
         ; tlast = gnd
         ; tkeep = ones (num_cores * Gf.num_bits / 8)
         ; tstrb = ones (num_cores * Gf.num_bits / 8)

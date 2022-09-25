@@ -6,7 +6,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
-  let logsync = 2
+  let sync_cycles = 4
+  let logsync = Int.ceil_log2 sync_cycles
 
   module State = struct
     type t =
@@ -56,7 +57,9 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
               , [ rd_en <-- vdd
                 ; addr <-- addr_next
                 ; sync <-- sync.value +:. 1
-                ; when_ (sync.value ==:. -1) [ tvalid <-- vdd; sm.set_next Stream ]
+                ; when_
+                    (sync.value ==:. sync_cycles - 1)
+                    [ tvalid <-- vdd; sm.set_next Stream ]
                 ] )
             ; ( Stream
               , [ when_
@@ -64,7 +67,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                     [ addr <-- addr_next
                     ; rd_en <-- vdd
                     ; when_
-                        (addr.value ==:. (1 lsl (logn + logblocks)) + (1 lsl logsync) - 1)
+                        (addr.value ==:. (1 lsl (logn + logblocks)) + (sync_cycles - 1))
                         [ tvalid <-- gnd; addr <--. 0; sm.set_next Start ]
                     ]
                 ] )
