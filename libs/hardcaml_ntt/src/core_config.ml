@@ -13,6 +13,6 @@ let ram_output_pipelining = 2
 (** [ram_latency] dictates the latency of the ram when instantiating the XPM
  * memory.
  *)
-let ram_latency = 2
+let ram_latency = 1
 
 let datapath_latency = ram_latency + ram_output_pipelining + Multiplier.latency
