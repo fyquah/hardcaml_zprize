@@ -274,7 +274,10 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
       // std::cout << "Expected:\n";
       // expected.println_hex();
 
+      fpga.postComputeFPGA();
       fpga.twistedEdwardsExtendedToAffine();
+
+      expected.postComputeFPGA();
       expected.twistedEdwardsExtendedToAffine();
 
       if (!(fpga == expected)) {

@@ -87,7 +87,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     | Some p -> Ark_bls12_377_g1.create ~x:p.x ~y:p.y ~infinity:false
   ;;
 
-  let random_inputs ?(seed = 0) num_inputs =
+  let random_inputs ?(precompute = false) ?(seed = 0) num_inputs =
     Random.init seed;
     Array.init num_inputs ~f:(fun _ ->
       let affine_point =
@@ -95,11 +95,19 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       in
       let affine_point = twisted_edwards_affine_of_ark_bls12_377 affine_point in
       let affine_point_with_t = Twisted_edwards.affine_to_affine_with_t affine_point in
+      let affine_point_with_t_for_fpga =
+        if precompute
+        then
+          Twisted_edwards.affine_with_t_to_host_extended_representation
+            bls12_377_twisted_edwards_params
+            affine_point_with_t
+        else affine_point_with_t
+      in
       { Msm_input.scalar = Bits.random ~width:Config.scalar_bits
       ; affine_point_with_t =
-          { x = Bits.of_z ~width:Config.field_bits affine_point_with_t.x
-          ; y = Bits.of_z ~width:Config.field_bits affine_point_with_t.y
-          ; t = Bits.of_z ~width:Config.field_bits affine_point_with_t.t
+          { x = Bits.of_z ~width:Config.field_bits affine_point_with_t_for_fpga.x
+          ; y = Bits.of_z ~width:Config.field_bits affine_point_with_t_for_fpga.y
+          ; t = Bits.of_z ~width:Config.field_bits affine_point_with_t_for_fpga.t
           }
       ; affine_point =
           { x = Bits.of_z ~width:Config.field_bits affine_point.x
@@ -154,7 +162,12 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       Ark_bls12_377_g1.(mul_wide ~part_width:61 point ~by:i.scalar |> add acc))
   ;;
 
-  let twisted_edwards_extended_to_affine ?(has_t = true) extended =
+  let twisted_edwards_extended_to_affine ?(precompute = false) ?(has_t = true) extended =
+    let extended =
+      if precompute
+      then Twisted_edwards.from_fpga_internal_representation extended
+      else extended
+    in
     Twisted_edwards.extended_to_affine extended ~has_t
     |> C.twisted_edwards_affine_to_weierstrass_affine bls12_377_twisted_edwards_params
   ;;
