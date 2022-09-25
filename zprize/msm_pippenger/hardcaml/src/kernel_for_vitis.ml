@@ -15,9 +15,8 @@ module Make (Config : Config.S) = struct
       { ap_clk : 'a
       ; ap_rst_n : 'a
       ; host_scalars_to_fpga : 'a Axi512.Stream.Source.t
-           [@rtlprefix "host_scalars_to_fpga$src$"]
-      ; ddr_points_to_fpga : 'a Axi512.Stream.Source.t
-           [@rtlprefix "ddr_points_to_fpga$src$"]
+           [@rtlprefix "host_scalars_to_fpga_"]
+      ; ddr_points_to_fpga : 'a Axi512.Stream.Source.t [@rtlprefix "ddr_points_to_fpga_"]
       ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t [@rtlprefix "fpga_to_host_"]
       }
     [@@deriving sexp_of, hardcaml]
@@ -27,9 +26,9 @@ module Make (Config : Config.S) = struct
     type 'a t =
       { fpga_to_host : 'a Axi512.Stream.Source.t [@rtlprefix "fpga_to_host_"]
       ; host_scalars_to_fpga_dest : 'a Axi512.Stream.Dest.t
-           [@rtlprefix "host_scalars_to_fpga$dst$"]
+           [@rtlprefix "host_scalars_to_fpga_"]
       ; ddr_points_to_fpga_dest : 'a Axi512.Stream.Dest.t
-           [@rtlprefix "ddr_points_to_fpga$dst$"]
+           [@rtlprefix "ddr_points_to_fpga_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
