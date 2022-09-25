@@ -29,15 +29,24 @@ module Make (Config : Config.S) = struct
     let num_bits = field_bits
   end)
 
+  open Config_utils.Make (Config)
+
   let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction
   let adder_latency = Mixed_add.latency adder_config
+  let first_window_size_bits = window_bit_sizes.(0)
+  let window_size_bits = window_bit_sizes.(1)
 
-  (* Integer divison so the last window might be slightly larger than the others. *)
-  let num_windows = scalar_bits / window_size_bits
-  let last_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
+  let () =
+    Array.iteri window_bit_sizes ~f:(fun i width ->
+      if i > 0 then assert (width = window_size_bits))
+  ;;
+
+  let num_windows = num_windows
 
   let num_result_points =
-    ((num_windows - 1) lsl window_size_bits) + (1 lsl last_window_size_bits) - num_windows
+    ((num_windows - 1) lsl window_size_bits)
+    + (1 lsl first_window_size_bits)
+    - num_windows
   ;;
 
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
@@ -47,7 +56,7 @@ module Make (Config : Config.S) = struct
   let ram_write_latency = 3
 
   module Controller = Controller.Make (struct
-    let window_size_bits = last_window_size_bits
+    let window_size_bits = first_window_size_bits
     let num_windows = num_windows
     let affine_point_bits = input_point_bits
 
@@ -117,11 +126,11 @@ module Make (Config : Config.S) = struct
     let scalar =
       Array.init num_windows ~f:(fun i ->
         if i = num_windows - 1
-        then sel_top scalar last_window_size_bits
+        then sel_top scalar first_window_size_bits
         else
           uresize
             scalar.:+[window_size_bits * i, Some window_size_bits]
-            last_window_size_bits)
+            first_window_size_bits)
     in
     let spec = Reg_spec.create ~clear ~clock () in
     let sm = State_machine.create (module State) spec in
@@ -143,13 +152,14 @@ module Make (Config : Config.S) = struct
     ignore (sm.current -- "STATE" : Signal.t);
     let adder_p3 = wire result_point_bits -- "adder_p3" in
     let window_address = Variable.reg spec ~width:(num_bits_to_represent num_windows) in
-    let bucket_address = Variable.reg spec ~width:last_window_size_bits in
+    let bucket_address = Variable.reg spec ~width:first_window_size_bits in
     let adder_valid_out = wire 1 in
     let fifo_q_has_space = wire 1 in
     let port_a_q, port_b_q =
+      (* CR rayesantharao: fix this *)
       List.init num_windows ~f:(fun window ->
         let address_bits =
-          if window = num_windows - 1 then last_window_size_bits else window_size_bits
+          if window = num_windows - 1 then first_window_size_bits else window_size_bits
         in
         let ctrl_window_en = ctrl.window ==:. window in
         (* To support write before read mode in URAM, writes must happen on port
@@ -162,7 +172,7 @@ module Make (Config : Config.S) = struct
           ~clear
           ~size:
             (if window = num_windows - 1
-            then 1 lsl last_window_size_bits
+            then 1 lsl first_window_size_bits
             else 1 lsl window_size_bits)
           ~port_a:
             (let port =
@@ -324,7 +334,7 @@ module Make (Config : Config.S) = struct
                       [ window_address <-- window_address.value -- "window_address" +:. 1
                       ; if_
                           (window_address.value ==:. num_windows - 2)
-                          [ bucket_address <--. (1 lsl last_window_size_bits) - 1 ]
+                          [ bucket_address <--. (1 lsl first_window_size_bits) - 1 ]
                           [ bucket_address <--. (1 lsl window_size_bits) - 1 ]
                       ; when_
                           (window_address.value ==:. num_windows - 1)

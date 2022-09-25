@@ -92,8 +92,8 @@ let command_test_vectors =
         let windows =
           Array.init Top.num_windows ~f:(fun window ->
             Array.init
-              (if window = Top.num_windows - 1
-              then 1 lsl Top.last_window_size_bits
+              (if window = 0
+              then 1 lsl Top.first_window_size_bits
               else 1 lsl Config.window_size_bits)
               ~f:(fun _ ->
                 Utils.Twisted_edwards.(affine_identity |> affine_to_extended ~z:Z.one)))
@@ -108,8 +108,8 @@ let command_test_vectors =
           in
           for i = 0 to Top.num_windows - 1 do
             let upper_bound =
-              if i = Top.num_windows - 1
-              then (i * Config.window_size_bits) + Top.last_window_size_bits
+              if i = 0
+              then (i * Config.window_size_bits) + Top.first_window_size_bits
               else (i + 1) * Config.window_size_bits
             in
             let slice =
