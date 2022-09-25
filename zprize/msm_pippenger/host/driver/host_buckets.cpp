@@ -32,7 +32,7 @@ using namespace std::chrono;
 #define DDR_BITS 512
 
 // We round up our points to the nearest multiple of the AXI stream / DDR
-#define BYTES_PER_POINT_INPUT (((BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_INPUT_POINT (((BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_SCALAR_INPUT (((SCALAR_BITS + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define SCALARS_PER_DDR_WORD (DDR_BITS / SCALAR_BITS)
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
@@ -89,7 +89,7 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
   printf("Running MSM with [%i] input points and [%i] output points\n", num_points,
          num_output_points);
 
-  auto input_points_size = (BYTES_PER_POINT_INPUT * num_points) / 4;
+  auto input_points_size = (BYTES_PER_INPUT_POINT * num_points) / 4;
   auto input_scalars_size = (num_scalar_words * (512 / 8)) / 4;
   auto output_size = (BYTES_PER_OUTPUT * num_output_points) / 4;
 
