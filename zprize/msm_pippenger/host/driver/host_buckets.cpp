@@ -171,8 +171,8 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
       std::cout << "Failed to program device[" << i << "] with xclbin file!\n";
     } else {
       std::cout << "Device[" << i << "]: program successful!\n";
-      OCL_CHECK(err, krnl_mm2s_points = cl::Kernel(program, "krnl_mm2s_points", &err));
-      OCL_CHECK(err, krnl_mm2s_scalars = cl::Kernel(program, "krnl_mm2s_scalars", &err));
+      OCL_CHECK(err, krnl_mm2s_points = cl::Kernel(program, "krnl_mm2s", &err));
+      OCL_CHECK(err, krnl_mm2s_scalars = cl::Kernel(program, "krnl_mm2s", &err));
       OCL_CHECK(err, krnl_msm_pippenger = cl::Kernel(program, "krnl_msm_pippenger", &err));
       OCL_CHECK(err, krnl_s2mm = cl::Kernel(program, "krnl_s2mm", &err));
       valid_device = true;
