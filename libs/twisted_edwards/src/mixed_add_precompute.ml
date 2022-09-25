@@ -55,7 +55,7 @@ module Make (Num_bits : Num_bits.S) = struct
     assert (width x1 = width x2);
     let wy = width y1 in
     let wx = width x1 in
-    let scope = Scope.sub_scope scope "multiply" in
+    let scope = Scope.sub_scope scope "arbed_multiply" in
     Arbitrate.arbitrate2
       (x1 @: y1, x2 @: y2)
       ~enable
@@ -72,6 +72,24 @@ module Make (Num_bits : Num_bits.S) = struct
              ~n:
                (latency_without_arbitration config
                - Config.multiply_latency ~reduce:true config))
+  ;;
+
+  let multiply ~(config : Config.t) ~scope ~clock ~latency_without_arbitration (x1, y1) =
+    let enable = vdd in
+    assert (width y1 = width y1);
+    let wy = width y1 in
+    let wx = width x1 in
+    let scope = Scope.sub_scope scope "multiply" in
+    let y = sel_bottom y1 wy in
+    let x = sel_top x1 wx in
+    config.multiply.impl ~scope ~clock ~enable x (Some y)
+    |> Config.reduce config ~scope ~clock ~enable
+    |> pipeline
+         (Reg_spec.create ~clock ())
+         ~enable
+         ~n:
+           (latency_without_arbitration config
+           - Config.multiply_latency ~reduce:true config)
   ;;
 
   let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
@@ -156,25 +174,36 @@ module Make (Num_bits : Num_bits.S) = struct
       Config.multiply_latency ~reduce:true config
     ;;
 
-    let latency (config : Config.t) = latency_without_arbitration config + 1
+    let latency (config : Config.t) =
+      latency_without_arbitration config + if config.arbitrated_multiplier then 1 else 0
+    ;;
 
     let create ~config ~scope ~clock { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; valid } =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       let c_A, c_B =
-        arbitrate_multiply
-          ~config
-          ~scope
-          ~clock
-          ~valid
-          ~latency_without_arbitration
-          (y1_minus_x1, p2.x)
-          (y1_plus_x1, p2.y)
+        if config.arbitrated_multiplier
+        then
+          arbitrate_multiply
+            ~config
+            ~scope
+            ~clock
+            ~valid
+            ~latency_without_arbitration
+            (y1_minus_x1, p2.x)
+            (y1_plus_x1, p2.y)
+        else
+          ( multiply ~latency_without_arbitration ~config ~scope ~clock (y1_minus_x1, p2.x)
+          , multiply ~latency_without_arbitration ~config ~scope ~clock (y1_plus_x1, p2.y)
+          )
       in
       let c_C =
         config.multiply.impl ~scope ~clock ~enable:vdd p1.t (Some p2.t)
         |> Config.reduce config ~scope ~clock ~enable:vdd
-        |> pipeline (Reg_spec.create ~clock ()) ~enable:vdd ~n:1
+        |> pipeline
+             (Reg_spec.create ~clock ())
+             ~enable:vdd
+             ~n:(latency config - Config.multiply_latency ~reduce:true config)
       in
       let scope = Scope.sub_scope scope "stage1" in
       { c_A; c_B; c_C; c_D = pipe p1.z; valid = pipe valid }
@@ -223,32 +252,42 @@ module Make (Num_bits : Num_bits.S) = struct
       Config.multiply_latency ~reduce:true config
     ;;
 
-    let latency (config : Config.t) = latency_without_arbitration config + 1
+    let latency (config : Config.t) =
+      latency_without_arbitration config + if config.arbitrated_multiplier then 1 else 0
+    ;;
 
     let create ~config ~scope ~clock { Stage2.c_E; c_F; c_G; c_H; valid } =
-      let spec = Reg_spec.create ~clock () in
-      let _pipe = pipeline spec ~n:(latency config) in
       let spec_with_clear = Reg_spec.create ~clock () in
       let pipe_with_clear = pipeline spec_with_clear ~n:(latency config) in
       let x3, y3 =
-        arbitrate_multiply
-          ~config
-          ~scope
-          ~clock
-          ~valid
-          ~latency_without_arbitration
-          (c_E, c_F)
-          (c_G, c_H)
+        if config.arbitrated_multiplier
+        then
+          arbitrate_multiply
+            ~config
+            ~scope
+            ~clock
+            ~valid
+            ~latency_without_arbitration
+            (c_E, c_F)
+            (c_G, c_H)
+        else
+          ( multiply ~latency_without_arbitration ~config ~scope ~clock (c_E, c_F)
+          , multiply ~latency_without_arbitration ~config ~scope ~clock (c_G, c_H) )
       in
       let t3, z3 =
-        arbitrate_multiply
-          ~config
-          ~scope
-          ~clock
-          ~valid
-          ~latency_without_arbitration
-          (c_E, c_H)
-          (c_F, c_G)
+        if config.arbitrated_multiplier
+        then
+          arbitrate_multiply
+            ~config
+            ~scope
+            ~clock
+            ~valid
+            ~latency_without_arbitration
+            (c_E, c_H)
+            (c_F, c_G)
+        else
+          ( multiply ~latency_without_arbitration ~config ~scope ~clock (c_E, c_H)
+          , multiply ~latency_without_arbitration ~config ~scope ~clock (c_F, c_G) )
       in
       let scope = Scope.sub_scope scope "stage3" in
       { x3; y3; z3; t3; valid = pipe_with_clear valid }

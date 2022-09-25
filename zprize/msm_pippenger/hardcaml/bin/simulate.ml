@@ -67,11 +67,30 @@ let command_msm_result_to_host =
           (Msm_pippenger_test_components.Test_msm_result_to_host.waveform ())]
 ;;
 
+let command_top_small_test =
+  Command.basic
+    ~summary:"Simulate a smaller MSM at the top level"
+    [%map_open.Command
+      let _ = return () in
+      fun () ->
+        let module Config = struct
+          let field_bits = 377
+          let scalar_bits = 12
+          let controller_log_stall_fifo_depth = 2
+          let window_size_bits = 3
+        end
+        in
+        let module Test = Msm_pippenger_test_top.Test_top.Make (Config) in
+        let result = Test.run_test 4 in
+        Hardcaml_waveterm_interactive.run result.waves]
+;;
+
 let command_test_cases =
   Command.group
     ~summary:""
     [ "kernel-back-to-back", command_vitis_kernel_back_to_back
     ; "msm-result-to-host", command_msm_result_to_host
+    ; "top-small-test", command_top_small_test
     ]
 ;;
 

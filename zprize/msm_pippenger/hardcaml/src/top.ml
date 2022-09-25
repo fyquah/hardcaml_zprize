@@ -32,7 +32,7 @@ module Make (Config : Config.S) = struct
     let num_bits = field_bits
   end)
 
-  let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction
+  let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction_full
   let adder_latency = Mixed_add.latency adder_config
 
   (* Integer divison so the last window might be slightly larger than the others. *)
@@ -49,10 +49,8 @@ module Make (Config : Config.S) = struct
   let ram_lookup_latency = 3
   let ram_write_latency = 3
 
-  module Controller = Controller.Make (struct
-    let window_size_bits = last_window_size_bits
-    let num_windows = num_windows
-    let affine_point_bits = input_point_bits
+  module Full_controller = Full_controller.Make (struct
+    module Top_config = Config
 
     let pipeline_depth =
       Int.round_up
@@ -61,7 +59,7 @@ module Make (Config : Config.S) = struct
       / 2
     ;;
 
-    let log_stall_fifo_depth = controller_log_stall_fifo_depth
+    let input_point_bits = input_point_bits
   end)
 
   module I = struct
@@ -130,13 +128,14 @@ module Make (Config : Config.S) = struct
             scalar.:+[window_size_bits * i, Some window_size_bits]
             last_window_size_bits)
     in
-    let spec = Reg_spec.create ~clear ~clock () in
-    let sm = State_machine.create (module State) spec in
+    let spec = Reg_spec.create ~clock () in
+    let spec_with_clear = Reg_spec.create ~clear ~clock () in
+    let sm = State_machine.create (module State) spec_with_clear in
     let ctrl_start = Variable.reg spec ~width:1 in
     let ctrl =
-      Controller.hierarchy
+      Full_controller.hierarchical
         scope
-        { Controller.I.clock
+        { Full_controller.I.clock
         ; clear
         ; start = ctrl_start.value
         ; scalar
@@ -390,7 +389,7 @@ module Make (Config : Config.S) = struct
     { O.result_point = Mixed_add.Xyzt.Of_signal.unpack (lsbs fifo_q.q)
     ; result_point_valid = ~:(fifo_q.empty)
     ; last_result_point
-    ; scalar_and_input_point_ready = ctrl.scalar_read
+    ; scalar_and_input_point_ready = ctrl.scalar_read &: sm.is Working
     }
   ;;
 

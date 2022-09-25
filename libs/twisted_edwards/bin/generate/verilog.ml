@@ -20,7 +20,7 @@ let command_mixed_add_barrett_reduction =
     (let%map_open.Command filename = flag_filename in
      fun () ->
        let module C = Circuit.With_interface (Mixed_add377.I) (Mixed_add377.O) in
-       let config = Lazy.force Config.For_bls12_377.with_barrett_reduction in
+       let config = Lazy.force Config.For_bls12_377.with_barrett_reduction_arbitrated in
        let scope = Scope.create () in
        let create = Mixed_add377.create ~config scope in
        let circuit = C.create_exn ~name:"twisted_edwards_mixed_add" create in
