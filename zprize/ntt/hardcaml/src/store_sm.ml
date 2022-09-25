@@ -6,8 +6,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
-  let read_address_pipelining = 2
-  let read_data_pipelining = 2
+  let read_address_pipelining = 3
+  let read_data_pipelining = 3
   let read_data_tree_mux_stages = 2
 
   let sync_cycles =
