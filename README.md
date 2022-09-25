@@ -29,7 +29,7 @@ libgmp3-dev), especially on the AWS boxes. In ubuntu, you can run
 
 
 ```
-sudo apt-get install m4 gmp-devel libffi-devel libgmp3-dev
+sudo apt-get install m4 gmp-devel libffi-devel libgmp3-dev z3
 ```
 
 
@@ -116,7 +116,8 @@ AFI-id | AFI-gid | Notes
 ------- | ------- | -----
  afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned.
  afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering afi-064af6a9ebb4349d9 | agfi-0275df76295dbc8c1 | same as above, but with tlast set via C++
- 
+
+
 # Running `host_buckets.exe`
 
 `host_buckets.exe` is a debug application that pumps test vectors into the

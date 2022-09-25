@@ -142,7 +142,7 @@ let display_rules =
 let%expect_test "Test over small input size and small number of scalars" =
   let module Config = struct
     let field_bits = 377
-    let scalar_bits = 5
+    let scalar_bits = 9
     let controller_log_stall_fifo_depth = 2
     let window_size_bits = 2
   end
@@ -152,8 +152,8 @@ let%expect_test "Test over small input size and small number of scalars" =
   print_s [%message (result.points : Test.Utils.window_bucket_point list)];
   [%expect
     {|
-    (Expecting (Top.num_result_points 10))
-    (Got ("List.length (!result_points)" 10))
+    (Expecting (Top.num_result_points 16))
+    (Got ("List.length (!result_points)" 16))
     PASS
     (result.points
      (((point ()) (bucket 3) (window 0))
@@ -169,8 +169,22 @@ let%expect_test "Test over small input size and small number of scalars" =
            0x15519d706bc4a7f8f5040b7a0fed1c0bf6b5352c982a43a2b4cb2873efb4ed423c42771548e4a42104e7eed7001a701)
           (y
            0x6fc267222a824a554287790181ab66409855e518b3eb724187c0a643fb5a4661146d32e8b3baf700a8fed07e67bcfc))))
-       (bucket 7) (window 1))
-      ((point ()) (bucket 6) (window 1)) ((point ()) (bucket 5) (window 1))
-      ((point ()) (bucket 4) (window 1)) ((point ()) (bucket 3) (window 1))
-      ((point ()) (bucket 2) (window 1)) ((point ()) (bucket 1) (window 1)))) |}]
+       (bucket 3) (window 1))
+      ((point ()) (bucket 2) (window 1)) ((point ()) (bucket 1) (window 1))
+      ((point ()) (bucket 3) (window 2)) ((point ()) (bucket 2) (window 2))
+      ((point
+        (((x
+           0x15519d706bc4a7f8f5040b7a0fed1c0bf6b5352c982a43a2b4cb2873efb4ed423c42771548e4a42104e7eed7001a701)
+          (y
+           0x6fc267222a824a554287790181ab66409855e518b3eb724187c0a643fb5a4661146d32e8b3baf700a8fed07e67bcfc))))
+       (bucket 1) (window 2))
+      ((point ()) (bucket 7) (window 3)) ((point ()) (bucket 6) (window 3))
+      ((point ()) (bucket 5) (window 3)) ((point ()) (bucket 4) (window 3))
+      ((point ()) (bucket 3) (window 3)) ((point ()) (bucket 2) (window 3))
+      ((point
+        (((x
+           0x15519d706bc4a7f8f5040b7a0fed1c0bf6b5352c982a43a2b4cb2873efb4ed423c42771548e4a42104e7eed7001a701)
+          (y
+           0x6fc267222a824a554287790181ab66409855e518b3eb724187c0a643fb5a4661146d32e8b3baf700a8fed07e67bcfc))))
+       (bucket 1) (window 3)))) |}]
 ;;
