@@ -127,14 +127,25 @@ module Make (Config : Config.S) = struct
     =
     let ( -- ) = Scope.naming scope in
     let open Always in
-    (* CR rayesantharao: fix this to use Scalar_transformation instead *)
-    (* We want to split our [scalar_bits] input scalar into an array of windows.
-       The last one might be larger. *)
-    let scalar =
-      Array.init num_windows ~f:(fun i ->
-        let width = window_bit_sizes.(i) in
-        let offset = window_bit_offsets.(i) in
-        sresize scalar.:+[offset, Some width] max_window_size_bits)
+    let controller_scalar_and_input_point_ready = wire 1 in
+    let { Scalar_transformation.O.scalar
+        ; scalar_negatives
+        ; scalar_valid
+        ; last_scalar
+        ; input_point
+        ; scalar_and_input_point_ready
+        }
+      =
+      Scalar_transformation.hierarchical
+        scope
+        { I.clock
+        ; clear
+        ; scalar
+        ; scalar_valid
+        ; last_scalar
+        ; input_point
+        ; controller_scalar_and_input_point_ready
+        }
     in
     let spec = Reg_spec.create ~clear ~clock () in
     let sm = State_machine.create (module State) spec in
@@ -145,7 +156,7 @@ module Make (Config : Config.S) = struct
         { Controller.I.clock
         ; clear
         ; start = ctrl_start.value
-        ; scalar
+        ; scalar (* CR rayesantharao: pass scalar_negative *)
         ; scalar_valid = (scalar_valid &: sm.is Working) -- "scalar_valid"
         ; last_scalar
         ; affine_point = Mixed_add.Xyt.Of_signal.pack input_point
@@ -389,10 +400,11 @@ module Make (Config : Config.S) = struct
     fifo_q_has_space
     <== (fifo_q.used <:. fifo_capacity - ram_lookup_latency - ram_read_latency - 2);
     last_result_point <== (msb fifo_q.q &: ~:(fifo_q.empty));
+    controller_scalar_and_input_point_ready <== ctrl.scalar_read;
     { O.result_point = Mixed_add.Xyzt.Of_signal.unpack (lsbs fifo_q.q)
     ; result_point_valid = ~:(fifo_q.empty)
     ; last_result_point
-    ; scalar_and_input_point_ready = ctrl.scalar_read
+    ; scalar_and_input_point_ready
     }
   ;;
 
