@@ -8,7 +8,6 @@ module type S = sig
     module I : sig
       type 'a t =
         { clock : 'a
-        ; clear : 'a
         ; valid_in : 'a
         ; p1 : 'a Xyzt.t
         ; p2 : 'a Xyt.t
@@ -27,5 +26,11 @@ module type S = sig
 
     val latency : Config.t -> int
     val create : config:Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
+
+    val hierarchical
+      :  ?instance:string
+      -> config:Config.t
+      -> Scope.t
+      -> Signal.t Interface.Create_fn(I)(O).t
   end
 end

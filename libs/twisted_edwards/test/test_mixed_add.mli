@@ -28,3 +28,6 @@ module Test_mixed_add : Test_adder with module Adder_i := Twisted_edwards_lib.Mi
 
 module Test_mixed_add_precompute :
   Test_adder with module Adder_i := Twisted_edwards_lib.Mixed_add_precompute
+
+module Test_mixed_add_precompute_full :
+  Test_adder with module Adder_i := Twisted_edwards_lib.Mixed_add_precompute
