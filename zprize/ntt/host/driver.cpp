@@ -229,16 +229,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
 
   bench("Evaluate NTT", [&]() {
     bench("Copy to internal page-aligned buffer", [&](){
-        uint64_t *dst = buffer->input_data();
-        for (uint64_t c = 0; c < row_size / 8; c++) {
-          for (uint64_t r = 0; r < row_size; r++) {
-            memcpy(
-                dst + (c * row_size * 8) + (r * 8),
-                in + (c * 8) + (r * row_size),
-                sizeof(uint64_t) * 8
-                );
-          }
-        }
+        memcpy(buffer->input_data(), in, sizeof(uint64_t) * data_length);
     });
 
     bench("Copying input points to device", [&]() {
