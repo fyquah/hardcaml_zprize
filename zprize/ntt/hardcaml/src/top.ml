@@ -70,7 +70,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         x
     in
     let cores =
-      Four_step.create
+      Four_step.hierarchy
         ~build_mode
         scope
         { Four_step.I.clock = i.clock
