@@ -61,21 +61,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                 ] )
             ]
         ]);
-    let block =
-      if logblocks = 0
-      then gnd
-      else
-        (* mux2 *)
-        (*   i.first_4step_pass *)
-        (*   (sel_bottom addr.value logblocks) *)
-        drop_bottom addr.value logn
-    in
-    let addr =
-      (* mux2 *)
-      (*   i.first_4step_pass *)
-      (*   (drop_bottom addr.value logblocks) *)
-      sel_bottom addr.value logn
-    in
+    let block = if logblocks = 0 then gnd else drop_bottom addr.value logn in
+    let addr = sel_bottom addr.value logn in
     let block1h = binary_to_onehot block in
     let mask_by_block x =
       if Config.logblocks = 0 then x else repeat x blocks &: block1h
