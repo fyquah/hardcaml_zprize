@@ -164,7 +164,6 @@ module Make (Config : Core_config.S) = struct
   let hierarchy ?single_controller ~start_row ~build_mode scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
     Hier.hierarchical
-      ~attributes:[ Rtl_attribute.Vivado.keep_hierarchy true ]
       ~name:"parallel_cores"
       ~scope
       (create ?single_controller ~build_mode ~start_row)
