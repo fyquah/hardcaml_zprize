@@ -16,6 +16,7 @@ module Make (Config : Config.S) = struct
       ; clear : 'a
       ; start : 'a
       ; scalar : 'a array [@bits window_size_bits] [@length num_windows]
+      ; negatives : 'a array [@length num_windows]
       ; scalar_valid : 'a
       ; last_scalar : 'a
       ; affine_point : 'a [@bits affine_point_bits]
@@ -30,6 +31,7 @@ module Make (Config : Config.S) = struct
       ; window : 'a [@bits log_num_windows]
       ; bucket : 'a [@bits window_size_bits]
       ; adder_affine_point : 'a [@bits affine_point_bits]
+      ; subtract : 'a
       ; bubble : 'a
       ; execute : 'a
       }
@@ -105,6 +107,7 @@ module Make (Config : Config.S) = struct
     let window = Var.reg spec ~width:log_num_windows in
     let window_next = window.value +:. 1 in
     let scalar = mux window.value (Array.to_list i.scalar) in
+    let negative = mux window.value (Array.to_list i.negatives) in
     let bubble = Var.wire ~default:gnd in
     let push_stalled_point = Var.wire ~default:gnd in
     let pop_stalled_point = Var.wire ~default:gnd in
@@ -214,6 +217,7 @@ module Make (Config : Config.S) = struct
          ; clear = i.clear
          ; push = push_stalled_point.value -- "push"
          ; scalar
+         ; negative
          ; window = window.value
          ; affine_point = i.affine_point
          ; pop = pop_stalled_point.value -- "pop"
@@ -223,6 +227,7 @@ module Make (Config : Config.S) = struct
     ; window = window.value
     ; bucket = mux2 executing_scalar scalar stalled.scalar_out
     ; adder_affine_point = mux2 executing_scalar i.affine_point stalled.affine_point_out
+    ; subtract = mux2 executing_scalar negative stalled.negative_out
     ; bubble = bubble.value
     ; execute = shift_pipeline.value
     }

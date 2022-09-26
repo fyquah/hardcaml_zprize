@@ -14,6 +14,7 @@ module Make (Config : Config.S) = struct
       ; clear : 'a
       ; push : 'a
       ; scalar : 'a [@bits window_size_bits] [@rtlprefix "i_"]
+      ; negative : 'a [@rtlprefix "i_"]
       ; window : 'a [@bits log_num_windows]
       ; affine_point : 'a [@bits affine_point_bits]
       ; pop : 'a
@@ -30,6 +31,7 @@ module Make (Config : Config.S) = struct
       ; affine_point_out : 'a [@bits affine_point_bits]
       ; scalar_out : 'a [@bits window_size_bits]
       ; scalar_out_valid : 'a
+      ; negative_out : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -42,11 +44,20 @@ module Make (Config : Config.S) = struct
       ; read_address : 'a [@bits log_stall_fifo_depth]
       ; write_address : 'a [@bits log_stall_fifo_depth]
       ; scalar : 'a [@bits window_size_bits]
+      ; negative : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module Var = Always.Variable
+
+  module Scalar = struct
+    type 'a t =
+      { scalar : 'a [@bits window_size_bits]
+      ; negative : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
 
   let create_window scope (i : _ I.t) ~window_index =
     let ( -- ) = Scope.naming scope in
@@ -58,14 +69,15 @@ module Make (Config : Config.S) = struct
     ignore (level.value -- "LEVEL" : Signal.t);
     let push = i.push &: enable in
     let pop = i.pop &: enable in
-    let scalar =
+    let ram =
       memory
         stall_fifo_depth
         ~write_port:
           { write_clock = i.clock
           ; write_address = write_address.value
           ; write_enable = push
-          ; write_data = i.scalar
+          ; write_data =
+              Scalar.Of_signal.pack { scalar = i.scalar; negative = i.negative }
           }
         ~read_address:read_address.value
     in
@@ -79,12 +91,14 @@ module Make (Config : Config.S) = struct
         ; when_ push [ write_address <-- write_address.value +:. 1 ]
         ; when_ pop [ read_address <-- read_address.value +:. 1 ]
         ]);
+    let ({ scalar; negative } : Signal.t Scalar.t) = Scalar.Of_signal.unpack ram in
     { O_window.empty = level.value ==:. 0
     ; not_empty = level.value <>:. 0
     ; full = level.value ==:. stall_fifo_depth
     ; read_address = read_address.value
     ; write_address = write_address.value
     ; scalar
+    ; negative
     }
   ;;
 
@@ -132,6 +146,7 @@ module Make (Config : Config.S) = struct
     ; affine_point_out
     ; scalar_out = current_stalled_window.scalar
     ; scalar_out_valid = current_stalled_window.not_empty
+    ; negative_out = current_stalled_window.negative
     }
   ;;
 

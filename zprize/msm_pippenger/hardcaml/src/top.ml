@@ -158,6 +158,7 @@ module Make (Config : Config.S) = struct
         ; start = ctrl_start.value
         ; scalar (* CR rayesantharao: pass scalar_negative *)
         ; scalar_valid = (scalar_valid &: sm.is Working) -- "scalar_valid"
+        ; scalar_negatives
         ; last_scalar
         ; affine_point = Mixed_add.Xyt.Of_signal.pack input_point
         }

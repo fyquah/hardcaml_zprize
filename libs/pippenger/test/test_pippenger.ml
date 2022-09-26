@@ -92,6 +92,7 @@ module Model (Config : Config) = struct
         ; start = i.start
         ; scalar = i.scalar
         ; scalar_valid = i.scalar_valid
+        ; negatives = Array.init Config.num_windows ~f:(Fn.const gnd)
         ; last_scalar = i.last_scalar
         ; affine_point = i.affine_point
         }

@@ -8,6 +8,7 @@ module Make (Config : Config.S) : sig
       ; clear : 'a
       ; push : 'a
       ; scalar : 'a [@bits window_size_bits]
+      ; negative : 'a
       ; window : 'a [@bits log_num_windows]
       ; affine_point : 'a [@bits affine_point_bits]
       ; pop : 'a
@@ -24,6 +25,7 @@ module Make (Config : Config.S) : sig
       ; affine_point_out : 'a [@bits affine_point_bits]
       ; scalar_out : 'a [@bits window_size_bits]
       ; scalar_out_valid : 'a
+      ; negative_out : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

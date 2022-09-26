@@ -10,6 +10,7 @@ module Make (Config : Config.S) : sig
       ; clear : 'a
       ; start : 'a
       ; scalar : 'a array
+      ; negatives : 'a array
       ; scalar_valid : 'a
       ; last_scalar : 'a
       ; affine_point : 'a
@@ -24,6 +25,7 @@ module Make (Config : Config.S) : sig
       ; window : 'a
       ; bucket : 'a
       ; adder_affine_point : 'a
+      ; subtract : 'a
       ; bubble : 'a
       ; execute : 'a
       }
