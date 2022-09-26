@@ -12,6 +12,7 @@ module type S = sig
         ; valid_in : 'a
         ; p1 : 'a Xyzt.t
         ; p2 : 'a Xyt.t
+        ; subtract : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
