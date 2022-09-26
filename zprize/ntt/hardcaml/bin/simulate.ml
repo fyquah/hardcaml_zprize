@@ -7,10 +7,6 @@ let command_top =
       let verbose = flag "-verbose" no_arg ~doc:" Print detailed results"
       and input_coefs = flag "-inputs" (optional string) ~doc:" Input coefficients"
       and logn = anon ("LOGN" %: int)
-      and first_4step_pass =
-        flag "-first-4step-pass" no_arg ~doc:" Run first pass (outputs are twiddled)"
-      and support_4step_twiddle =
-        flag "-support-4step-twiddle" no_arg ~doc:" Enable 4step twiddle logic"
       and logcores =
         flag
           "-log-cores"
@@ -31,7 +27,7 @@ let command_top =
             let logn = logn
             let logcores = logcores
             let logblocks = logblocks
-            let support_4step_twiddle = support_4step_twiddle || first_4step_pass
+            let support_4step_twiddle = true
           end)
         in
         let input_coefs =
@@ -43,7 +39,7 @@ let command_top =
               Array.init (1 lsl logn) ~f:(fun col ->
                 Z.of_string coefs.((row * (1 lsl logn)) + col)))
         in
-        let waves = Test.run ~verbose ~waves ~first_4step_pass input_coefs in
+        let waves = Test.run ~verbose ~waves input_coefs in
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 
