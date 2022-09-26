@@ -1,5 +1,5 @@
 open! Core
-open Hardcaml
+open! Hardcaml
 open! Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
@@ -17,55 +17,17 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   let num_blocks = 1 lsl logblocks
   let log_passes = logn - logcores
   let num_passes = 1 lsl log_passes
-  let logtotal = logblocks + logcores
   let () = assert (1 lsl (logn + logn) = n * num_cores * num_passes)
 
   (* Common functions *)
   let random_input_coef_matrix = Test_top.random_input_coef_matrix
   let print_matrix = Test_top.print_matrix
   let copy_matrix = Test_top.copy_matrix
-  let _transpose = Reference_model.transpose
   let convert_to_first_pass_input = Test_top.convert_to_first_pass_input
   let get_first_pass_results = Test_top.get_first_pass_results
   let check_first_pass_output = Test_top.check_first_pass_output
-  let grouped n l = List.groupi l ~break:(fun i _ _ -> i % n = 0)
   let random_bool ~p_true = Float.(Random.float 1.0 < p_true)
-
-  let get_result_blocks (results : Bits.t list) =
-    let results =
-      List.rev results
-      |> List.map ~f:(fun b -> Bits.split_lsb ~part_width:64 b)
-      |> List.concat
-      |> List.map ~f:(fun b -> Gf.Bits.of_bits b |> Gf.Bits.to_z |> Gf.Z.of_z)
-    in
-    results
-    |> grouped (1 lsl (logtotal + logtotal))
-    |> List.map ~f:(fun x ->
-         grouped (1 lsl logtotal) x |> List.map ~f:Array.of_list |> Array.of_list)
-  ;;
-
   let get_second_pass_results = get_first_pass_results
-
-  let get_results (results : Bits.t list) =
-    let blocks = ref (get_result_blocks results) in
-    let out = Array.init n ~f:(fun _ -> Array.init n ~f:(Fn.const Gf.Z.zero)) in
-    for block_col = 0 to (n lsr logtotal) - 1 do
-      for block_row = 0 to (n lsr logtotal) - 1 do
-        match !blocks with
-        | [] -> raise_s [%message "not enough result blocks"]
-        | block :: tl ->
-          for row = 0 to (1 lsl logtotal) - 1 do
-            for col = 0 to (1 lsl logtotal) - 1 do
-              out.((block_row lsl logtotal) + row).((block_col lsl logtotal) + col)
-                <- block.(row).(col)
-            done
-          done;
-          blocks := tl
-      done
-    done;
-    if not (List.is_empty !blocks) then raise_s [%message "too many blocks"];
-    out
-  ;;
 
   let create_sim ~verilator waves =
     let sim =
@@ -115,12 +77,24 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     Array.init n ~f:(fun row -> Array.init n ~f:(fun col -> coefs.((row * n) + col)))
   ;;
 
+  let convert_from_second_pass_output output =
+    let r = Array.init n ~f:(fun _ -> Array.init n ~f:(Fn.const Gf.Z.zero)) in
+    let pos = ref 0 in
+    for col1 = 0 to (n lsr (logcores + logblocks)) - 1 do
+      for row = 0 to n - 1 do
+        for col2 = 0 to (1 lsl (logcores + logblocks)) - 1 do
+          r.(row).((col1 * num_cores * num_blocks) + col2) <- output.(!pos);
+          Int.incr pos
+        done
+      done
+    done;
+    r
+  ;;
+
   (* Check the final results using a standard full size ntt. *)
   let check_second_pass_output ~verbose input_coefs hw_results =
     let sw_results = reference_intt input_coefs in
-    let hw_results =
-      Array.init n ~f:(fun r -> Array.init n ~f:(fun c -> hw_results.((r * n) + c)))
-    in
+    let hw_results = convert_from_second_pass_output hw_results in
     if verbose
     then
       List.iter
@@ -131,30 +105,6 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     if [%equal: Gf.Z.t array array] hw_results sw_results
     then print_s [%message "Hardware and software reference results match!"]
     else raise_s [%message "ERROR: Hardware and software results do not match :("]
-  ;;
-
-  let read_words inputs ~row ~col =
-    List.init (1 lsl logcores) ~f:(fun c -> inputs.(row).(col + c))
-  ;;
-
-  (* Read a square block of [2^logtotal].  Used to read data in the first pass. *)
-  let _read_block_transposed_pass ~block_row ~block_col (inputs : 'a array array) =
-    Array.init (1 lsl logtotal) ~f:(fun row ->
-      Array.init (1 lsl logblocks) ~f:(fun col ->
-        read_words
-          inputs
-          ~row:((block_row lsl logtotal) + row)
-          ~col:((block_col lsl logtotal) + (col lsl logcores))))
-  ;;
-
-  (* Read a rectangle of [2^locores by 2^logtotal] used in the 2nd pass. *)
-  let _read_block_linear_pass ~block_row ~block_col (inputs : 'a array array) =
-    Array.init (1 lsl logcores) ~f:(fun row ->
-      Array.init (1 lsl logblocks) ~f:(fun col ->
-        read_words
-          inputs
-          ~row:((block_row lsl logcores) + row)
-          ~col:((block_col lsl logtotal) + (col lsl logcores))))
   ;;
 
   let sync_to_last_result ~cycle ~num_results =
@@ -217,11 +167,9 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let controller_to_compute_dest = outputs.controller_to_compute_phase_2_dest in
     let step1 = num_cores * num_cores * num_blocks in
     let step2 = n * num_cores * num_blocks in
-    print_s [%message (step1 : int) (step2 : int) (Array.length coefs : int)];
     for block_col = 0 to (n lsr logcores) - 1 do
       for block_row = 0 to (n lsr (logcores + logblocks)) - 1 do
         let pos = (block_col * step1) + (block_row * step2) in
-        print_s [%message (block_col : int) (block_row : int) (pos : int)];
         for word = 0 to (num_cores * num_blocks) - 1 do
           while not (random_bool ~p_true:wiggle_prob) do
             controller_to_compute.tvalid := Bits.gnd;
@@ -317,7 +265,8 @@ let%expect_test "vitis kernel test" =
     (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
   [%expect {|
-    ("Hardware and software reference results match!" (pass first)) |}]
+    ("Hardware and software reference results match!" (pass first))
+    "Hardware and software reference results match!" |}]
 ;;
 
 let%expect_test "2 blocks" =
@@ -333,5 +282,7 @@ let%expect_test "2 blocks" =
   ignore
     (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
-  [%expect {| ("Hardware and software reference results match!" (pass first)) |}]
+  [%expect {|
+    ("Hardware and software reference results match!" (pass first))
+    "Hardware and software reference results match!" |}]
 ;;
