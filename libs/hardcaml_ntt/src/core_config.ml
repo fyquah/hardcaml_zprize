@@ -8,11 +8,11 @@ module type S = Core_config_intf.S
  *  from the ram output. This pipelining is _in addition_ to [ram_latency]
  *  above, and only affects the datapath.
  *)
-let ram_output_pipelining = 2
+let ram_output_pipelining = 1
 
 (** [ram_latency] dictates the latency of the ram when instantiating the XPM
  * memory.
  *)
-let ram_latency = 3
+let ram_latency = 1
 
 let datapath_latency = ram_latency + ram_output_pipelining + Multiplier.latency
