@@ -5,7 +5,7 @@ set -euo pipefail
 # Make sure all the binaries are built
 mkdir -p ../host/build
 cd ../host/build
-cmake3 ..
+cmake3 .. 
 make -j
 
 cd ../../test

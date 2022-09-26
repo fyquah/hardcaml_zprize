@@ -39,6 +39,7 @@ end
 module Make
   (Adder_i : Twisted_edwards_lib.Adder_intf.S) (R : sig
     val host_precompute : bool
+    val arbitrate : bool
   end) : Test_adder = struct
   module Adder_i = Adder_i
 
@@ -165,8 +166,10 @@ module Make
       Xyzt.iter2 ~f:assign_z inputs.p1 p1;
       Xyt.iter2 ~f:assign_z inputs.p2 p2;
       cycle ();
-      inputs.valid_in := Bits.gnd;
-      cycle ());
+      if R.arbitrate
+      then (
+        inputs.valid_in := Bits.gnd;
+        cycle ()));
     inputs.valid_in := Bits.gnd;
     for _ = 0 to latency do
       cycle ()
@@ -213,6 +216,7 @@ module Test_mixed_add =
     (Twisted_edwards_lib.Mixed_add)
     (struct
       let host_precompute = false
+      let arbitrate = true
     end)
 
 module Test_mixed_add_precompute =
@@ -220,4 +224,13 @@ module Test_mixed_add_precompute =
     (Twisted_edwards_lib.Mixed_add_precompute)
     (struct
       let host_precompute = true
+      let arbitrate = true
+    end)
+
+module Test_mixed_add_precompute_full =
+  Make
+    (Twisted_edwards_lib.Mixed_add_precompute)
+    (struct
+      let host_precompute = true
+      let arbitrate = false
     end)

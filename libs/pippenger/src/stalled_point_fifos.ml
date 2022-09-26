@@ -56,6 +56,9 @@ module Make (Config : Config.S) = struct
     let write_address = Var.reg spec ~width:log_stall_fifo_depth in
     let level = Var.reg spec ~width:(log_stall_fifo_depth + 1) in
     ignore (level.value -- "LEVEL" : Signal.t);
+    let full = Var.reg spec ~width:1 in
+    let not_empty = Var.reg spec ~width:1 in
+    let empty = Var.reg (Reg_spec.override spec ~clear_to:vdd) ~width:1 in
     let push = i.push &: enable in
     let pop = i.pop &: enable in
     let scalar =
@@ -69,19 +72,27 @@ module Make (Config : Config.S) = struct
           }
         ~read_address:read_address.value
     in
-    Always.(
-      compile
-        [ when_
-            (push ^: pop)
-            [ when_ push [ level <-- level.value +:. 1 ]
-            ; when_ pop [ level <-- level.value -:. 1 ]
-            ]
-        ; when_ push [ write_address <-- write_address.value +:. 1 ]
-        ; when_ pop [ read_address <-- read_address.value +:. 1 ]
-        ]);
-    { O_window.empty = level.value ==:. 0
-    ; not_empty = level.value <>:. 0
-    ; full = level.value ==:. stall_fifo_depth
+    let open Always in
+    let update_status level =
+      [ empty <-- (level ==:. 0)
+      ; not_empty <-- (level <>:. 0)
+      ; full <-- (level ==:. stall_fifo_depth)
+      ]
+      |> proc
+    in
+    compile
+      [ update_status level.value
+      ; when_
+          (push ^: pop)
+          [ when_ push [ level <-- level.value +:. 1; update_status (level.value +:. 1) ]
+          ; when_ pop [ level <-- level.value -:. 1; update_status (level.value -:. 1) ]
+          ]
+      ; when_ push [ write_address <-- write_address.value +:. 1 ]
+      ; when_ pop [ read_address <-- read_address.value +:. 1 ]
+      ];
+    { O_window.empty = empty.value
+    ; not_empty = not_empty.value
+    ; full = full.value
     ; read_address = read_address.value
     ; write_address = write_address.value
     ; scalar
