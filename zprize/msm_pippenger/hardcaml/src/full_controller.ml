@@ -57,7 +57,7 @@ struct
     let affine_point_bits = Config.input_point_bits
   end)
 
-  let fifo_capacity = 4
+  let fifo_capacity = 16
 
   let create scope (i : _ I.t) : _ O.t =
     let ctrl0_scalar = Array.slice i.scalar 0 ctrl0_windows in
@@ -94,7 +94,7 @@ struct
         ~rd:fifo1_rd
         ()
     in
-    fifo_ready <== ~:(fifo0.full &: ~:(fifo1.full));
+    fifo_ready <== (~:(fifo0.full) &: ~:(fifo1.full));
     let ctrl0 =
       let scalar_width = width (Signal.of_array ctrl0_scalar) in
       Controller0.hierarchy
