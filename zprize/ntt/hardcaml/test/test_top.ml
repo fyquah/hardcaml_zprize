@@ -256,7 +256,7 @@ let%expect_test "single core" =
          ~wave_width:(-1));
   [%expect
     {|
-    (!cycles 1656)
+    (!cycles 1661)
     ("Hardware and software reference results match!" (pass first)) |}]
 ;;
 
@@ -264,7 +264,7 @@ let%expect_test "8 cores" =
   ignore (run_test ~waves:false ~logn:4 ~logcores:3 ~logblocks:0 : Waveform.t option);
   [%expect
     {|
-    (!cycles 242)
+    (!cycles 247)
     ("Hardware and software reference results match!" (pass first)) |}]
 ;;
 
@@ -272,7 +272,7 @@ let%expect_test "2 cores, 2 blocks" =
   ignore (run_test ~waves:false ~logn:4 ~logcores:1 ~logblocks:1 : Waveform.t option);
   [%expect
     {|
-    (!cycles 476)
+    (!cycles 481)
     ("Hardware and software reference results match!" (pass first)) |}]
 ;;
 
@@ -281,9 +281,7 @@ let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
   [%expect
     {|
     (!cycles 617)
-    "Hardware and software reference results match!"
-    (!cycles 570)
-    "Hardware and software reference results match!" |}]
+    ("Hardware and software reference results match!" (pass first)) |}]
 ;;
 
 let%expect_test "other configurations with twiddles" =
@@ -294,14 +292,14 @@ let%expect_test "other configurations with twiddles" =
   ignore (run_test ~waves:false ~logn:5 ~logcores:3 ~logblocks:1 : Waveform.t option);
   [%expect
     {|
-    (!cycles 1656)
+    (!cycles 1661)
     ("Hardware and software reference results match!" (pass first))
-    (!cycles 1656)
+    (!cycles 1661)
     ("Hardware and software reference results match!" (pass first))
-    (!cycles 1464)
+    (!cycles 1469)
     ("Hardware and software reference results match!" (pass first))
-    (!cycles 1047)
+    (!cycles 1057)
     ("Hardware and software reference results match!" (pass first))
-    (!cycles 484)
+    (!cycles 489)
     ("Hardware and software reference results match!" (pass first)) |}]
 ;;
