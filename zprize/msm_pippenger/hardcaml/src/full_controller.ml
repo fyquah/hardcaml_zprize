@@ -38,8 +38,9 @@ struct
   module I = Main_Controller.I
   module O = Main_Controller.O
 
-  let ctrl0_windows = num_windows / 2
-  let ctrl1_windows = num_windows - ctrl0_windows
+  let ctrl0_windows = num_windows / 3
+  let ctrl1_windows = ctrl0_windows
+  let ctrl2_windows = num_windows - ctrl0_windows - ctrl1_windows
 
   module Controller0 = Controller.Make (struct
     let window_size_bits = last_window_size_bits
@@ -57,15 +58,30 @@ struct
     let affine_point_bits = Config.input_point_bits
   end)
 
+  module Controller2 = Controller.Make (struct
+    let window_size_bits = last_window_size_bits
+    let num_windows = ctrl2_windows
+    let pipeline_depth = Config.pipeline_depth
+    let log_stall_fifo_depth = controller_log_stall_fifo_depth
+    let affine_point_bits = Config.input_point_bits
+  end)
+
   let create scope (i : _ I.t) : _ O.t =
     let ctrl0_scalar = Array.slice i.scalar 0 ctrl0_windows in
     let ctrl1_scalar =
       Array.slice i.scalar ctrl0_windows (ctrl0_windows + ctrl1_windows)
     in
+    let ctrl2_scalar =
+      Array.slice
+        i.scalar
+        (ctrl0_windows + ctrl1_windows)
+        (ctrl0_windows + ctrl1_windows + ctrl2_windows)
+    in
     let spec = Reg_spec.create ~clock:i.clock () in
     let fifo_ready = wire 1 in
     let fifo0_rd = wire 1 in
     let fifo1_rd = wire 1 in
+    let fifo2_rd = wire 1 in
     let fifo0 =
       Fifo.create_showahead_with_extra_reg
         ~overflow_check:true
@@ -92,7 +108,20 @@ struct
         ~rd:fifo1_rd
         ()
     in
-    fifo_ready <== ~:(fifo0.full &: ~:(fifo1.full));
+    let fifo2 =
+      Fifo.create_showahead_with_extra_reg
+        ~overflow_check:true
+        ~underflow_check:true
+        ~scope
+        ~capacity:64
+        ~clock:i.clock
+        ~clear:i.clear
+        ~wr:(i.scalar_valid &: fifo_ready)
+        ~d:(i.last_scalar @: i.affine_point @: Signal.of_array ctrl2_scalar)
+        ~rd:fifo2_rd
+        ()
+    in
+    fifo_ready <== (~:(fifo0.full) &: ~:(fifo1.full));
     let ctrl0 =
       let scalar_width = width (Signal.of_array ctrl0_scalar) in
       Controller0.hierarchy

@@ -273,6 +273,26 @@ module Make (Config : Config.S) = struct
                 ~n:(ram_lookup_latency + ram_read_latency))
         }
     in
+    let half_adder =
+      Mixed_add.hierarchical
+        scope
+        ~config:adder_config
+        { clock
+        ; valid_in =
+            pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
+        ; p1 =
+            Mixed_add.Xyzt.Of_signal.unpack
+              (mux
+                 (pipeline spec ctrl.window ~n:(ram_lookup_latency + ram_read_latency))
+                 port_b_q)
+        ; p2 =
+            Mixed_add.Xyt.Of_signal.(
+              pipeline
+                spec
+                ctrl_affine_point_as_xyt
+                ~n:(ram_lookup_latency + ram_read_latency))
+        }
+    in
     adder_valid_out <== adder.valid_out;
     ignore (adder_valid_out -- "adder_valid_out" : Signal.t);
     adder_p3 <== Mixed_add.Xyzt.Of_signal.pack adder.p3;
