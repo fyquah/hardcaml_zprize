@@ -138,13 +138,13 @@ module Make (Config : Config.S) = struct
       =
       Scalar_transformation.hierarchical
         scope
-        { I.clock
+        { clock
         ; clear
         ; scalar
         ; scalar_valid
         ; last_scalar
         ; input_point
-        ; controller_scalar_and_input_point_ready
+        ; scalar_and_input_point_ready = controller_scalar_and_input_point_ready
         }
     in
     let spec = Reg_spec.create ~clear ~clock () in
