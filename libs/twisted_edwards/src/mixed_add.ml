@@ -263,7 +263,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ; c_C
       ; c_D = pipe c_D
       ; subtract = pipe subtract
-      ; valid = pipe  valid
+      ; valid = pipe valid
       }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
@@ -282,8 +282,7 @@ module Make (Num_bits : Num_bits.S) = struct
     let latency_without_arbitration (config : Config.t) = config.adder_stages
     let latency (config : Config.t) = latency_without_arbitration config
 
-    let create ~config ~scope ~clock { Stage2.c_A; c_B; c_C; c_D; subtract; valid }
-      =
+    let create ~config ~scope ~clock { Stage2.c_A; c_B; c_C; c_D; subtract; valid } =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
