@@ -40,6 +40,7 @@ fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParameters
             match std::env::var("TEST_WRITE_DATA_TO") {
                 Err(_) => (),
                 Ok(dirname) => {
+                    println!("Saving testdata to {}", dirname);
                     // it would be real sad if we run all the data generation above, then it chokes
                     // because dir doesn't exist .... run mkdir -p here
 
@@ -60,6 +61,7 @@ fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParameters
             (batches, points, scalars, arkworks_results)
         },
         Ok(test_data_dir) => {
+            println!("Loading testdata from {}", test_data_dir);
             let points =
                 Vec::<G1Affine>::deserialize(
                     File::open(Path::new(&test_data_dir).join("points.bin")).unwrap()
