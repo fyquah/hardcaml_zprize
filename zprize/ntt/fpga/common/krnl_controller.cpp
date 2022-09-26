@@ -19,7 +19,7 @@ void phase1(
     hls::stream<chunk_t>&   controller_to_compute,
     ap_uint<MEMORY_DWIDTH>* gmem_in,
     ap_uint<MEMORY_DWIDTH>* gmem_out,
-    ap_uint<16>             row_size) {
+    ap_uint<32>             row_size) {
 #pragma HLS INLINE off
 #pragma HLS dataflow
 
@@ -33,28 +33,20 @@ void phase1(
 
   // Phase 1: read transposed, writeback transposed.
 phase1_load:
-  for (ap_uint<16> i = 0; i < row_size / 8; i += NUM_BLOCKS) {
-    for (ap_uint<16> j = 0; j < row_size; j++) {
-      for (ap_uint<16> k = 0; k < NUM_BLOCKS; k++) {
+  for (ap_uint<32> i = 0; i < ntt_size; i++) {
 #pragma HLS pipeline II=1
-        chunk_t v;
+    chunk_t v;
 
-        v.data = gmem_in[i + k + (j * (row_size / 8))];
-        v.user = 0;
-        controller_to_compute.write(v);
-      }
-    }
+    v.data = gmem_in[i];
+    v.user = 0;
+    controller_to_compute.write(v);
   }
 
 phase1_store:
-  for (ap_uint<16> i = 0; i < row_size / 8; i += NUM_BLOCKS) {
-    for (ap_uint<16> j = 0; j < row_size; j++) {
-      for (ap_uint<16> k = 0; k < NUM_BLOCKS; k++) {
+  for (ap_uint<32> i = 0; i < ntt_size; i++) {
 #pragma HLS pipeline II=1
-        chunk_t v = compute_to_controller.read();
-        gmem_out[i + k + (j * (row_size / 8))] = v.data;
-      }
-    }
+    chunk_t v = compute_to_controller.read();
+    gmem_out[i] = v.data;
   }
 }
 
@@ -86,14 +78,10 @@ phase2_load:
   }
 
 phase2_store:
-  for (ap_uint<16> i = 0; i < row_size / 8; i += NUM_BLOCKS) {
-    for (ap_uint<16> j = 0; j < row_size; j++) {
-      for (ap_uint<16> k = 0; k < NUM_BLOCKS; k++) {
+  for (ap_uint<32> i = 0; i < ntt_size; i++) {
 #pragma HLS pipeline II=1
-        chunk_t v = compute_to_controller.read();
-        gmem_out[i + k + (j * (row_size / 8))] = v.data;
-      }
-    }
+    chunk_t v = compute_to_controller.read();
+    gmem_out[i] = v.data;
   }
 }
 
