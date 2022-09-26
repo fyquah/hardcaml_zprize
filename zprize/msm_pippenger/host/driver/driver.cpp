@@ -162,6 +162,7 @@ class Driver {
     // Set the "Kernel 0" Arguments
     OCL_CHECK(err, err = krnl_mm2s.setArg(0, buffer_input));
     OCL_CHECK(err, err = krnl_mm2s.setArg(2, input_size));
+    OCL_CHECK(err, err = krnl_mm2s.setArg(3, true));
 
     // Set the "Kernel 1" Arguments
     OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));

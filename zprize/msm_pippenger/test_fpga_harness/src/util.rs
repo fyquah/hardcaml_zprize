@@ -49,7 +49,7 @@ pub fn generate_points_scalars<G: AffineCurve>(
 pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParameters>>, Vec<G1Affine>) {
     match std::env::var("TEST_LOAD_DATA_FROM") {
         Err(_) =>  {
-            let test_npow = std::env::var("TEST_NPOW").unwrap_or("15".to_string());
+            let test_npow = std::env::var("TEST_NPOW").expect("Must specified either TEST_NPOW or TEST_LOAD_DATA_FROM");
             let npoints_npow = i32::from_str(&test_npow).unwrap();
             let batches = 4;
             let (points, scalars) =
