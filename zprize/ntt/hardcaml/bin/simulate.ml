@@ -104,9 +104,23 @@ let command_ntt =
         let rand_state = Random.State.make [| seed |] in
         Random.set_state rand_state;
         let input_coefs =
+          ignore (logn : int);
+          [| "0xcef967e3e1d0860e"
+           ; "0x44be7570bcd4f9df"
+           ; "0xf4848ed283e858f2"
+           ; "0xa3a3a47eeb6f76f6"
+           ; "0xa12d1d0b69c4108b"
+           ; "0xeb285d19459ef6c3"
+           ; "0x10d812558ad9c103"
+           ; "0xd19d3e319d1b6b4a"
+          |]
+          |> Array.map ~f:(fun x ->
+               x |> Z.of_string |> Hardcaml_ntt_test.Test_ntt_hw.Gf.of_z)
+          (*
           Array.init (1 lsl logn) ~f:(fun _ ->
             let c = Hardcaml_ntt.Gf.Z.random () in
             Hardcaml_ntt.Gf.Z.to_z c |> Hardcaml_ntt_test.Test_ntt_hw.Gf.of_z)
+          *)
         in
         let waves, _result =
           Hardcaml_ntt_test.Test_ntt_hw.inverse_ntt_test

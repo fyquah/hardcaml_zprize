@@ -6,7 +6,16 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
-  let logsync = 2
+  let read_address_pipelining = 3
+  let read_data_pipelining = 3
+  let read_data_tree_mux_stages = 2
+
+  let sync_cycles =
+    Hardcaml_ntt.Core_config.ram_latency
+    + read_data_pipelining
+    + read_address_pipelining
+    + read_data_tree_mux_stages
+  ;;
 
   module State = struct
     type t =
@@ -45,19 +54,21 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let sm = Always.State_machine.create (module State) spec in
     let addr = Var.reg spec ~width:(logn + logblocks + 1) in
     let addr_next = addr.value +:. 1 in
-    let sync = Var.reg spec ~width:logsync in
+    let sync = Var.reg spec ~width:(Int.ceil_log2 sync_cycles) in
     let rd_en = Var.wire ~default:gnd in
     let tvalid = Var.reg spec ~width:1 in
     let tready = i.tready in
     Always.(
       compile
         [ sm.switch
-            [ Start, [ addr <--. 0; when_ i.start [ sm.set_next Preroll ] ]
+            [ Start, [ addr <--. 0; sync <--. 0; when_ i.start [ sm.set_next Preroll ] ]
             ; ( Preroll
               , [ rd_en <-- vdd
                 ; addr <-- addr_next
                 ; sync <-- sync.value +:. 1
-                ; when_ (sync.value ==:. -1) [ tvalid <-- vdd; sm.set_next Stream ]
+                ; when_
+                    (sync.value ==:. sync_cycles - 1)
+                    [ tvalid <-- vdd; sm.set_next Stream ]
                 ] )
             ; ( Stream
               , [ when_
@@ -65,7 +76,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                     [ addr <-- addr_next
                     ; rd_en <-- vdd
                     ; when_
-                        (addr.value ==:. (1 lsl (logn + logblocks)) + (1 lsl logsync) - 1)
+                        (addr.value ==:. (1 lsl (logn + logblocks)) + (sync_cycles - 1))
                         [ tvalid <-- gnd; addr <--. 0; sm.set_next Start ]
                     ]
                 ] )

@@ -5,7 +5,6 @@ module Make (Config : Core_config.S) = struct
   module Var = Always.Variable
 
   let logn = Config.logn
-  let ram_output_pipelining = Core_config.ram_output_pipelining
   let support_4step_twiddle = Config.support_4step_twiddle
 
   module I = struct
@@ -209,10 +208,7 @@ module Make (Config : Core_config.S) = struct
     ; first_stage = first_stage.value
     ; last_stage = last_stage.value
     ; twiddle_stage = twiddle_stage.value
-    ; twiddle_update =
-        { valid = twiddle_update.value
-        ; index = pipeline ~n:(1 + ram_output_pipelining) spec sync_count.value
-        }
+    ; twiddle_update = { valid = twiddle_update.value; index = sync_count.value }
     ; read_write_enable = read_write_enable.value
     ; flip = flip.value
     }

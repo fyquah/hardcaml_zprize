@@ -280,8 +280,10 @@ let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
   ignore (run_test ~waves:false ~logn:5 ~logcores:2 ~logblocks:2 : Waveform.t option);
   [%expect
     {|
-    (!cycles 612)
-    ("Hardware and software reference results match!" (pass first)) |}]
+    (!cycles 617)
+    "Hardware and software reference results match!"
+    (!cycles 570)
+    "Hardware and software reference results match!" |}]
 ;;
 
 let%expect_test "other configurations with twiddles" =
