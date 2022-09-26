@@ -57,6 +57,8 @@ struct
     let affine_point_bits = Config.input_point_bits
   end)
 
+  let fifo_capacity = 4
+
   let create scope (i : _ I.t) : _ O.t =
     let ctrl0_scalar = Array.slice i.scalar 0 ctrl0_windows in
     let ctrl1_scalar =
@@ -71,7 +73,7 @@ struct
         ~overflow_check:true
         ~underflow_check:true
         ~scope
-        ~capacity:64
+        ~capacity:fifo_capacity
         ~clock:i.clock
         ~clear:i.clear
         ~wr:(i.scalar_valid &: fifo_ready)
@@ -84,7 +86,7 @@ struct
         ~overflow_check:true
         ~underflow_check:true
         ~scope
-        ~capacity:64
+        ~capacity:fifo_capacity
         ~clock:i.clock
         ~clear:i.clear
         ~wr:(i.scalar_valid &: fifo_ready)
