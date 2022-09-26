@@ -47,8 +47,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let start = wire 1 in
     let transposer_out_dest = Axi_stream.Dest.Of_signal.wires () in
     let transposer =
-      Transposer.hierarchical
-        ~transposer_depth_in_cycles:(1 lsl logblocks)
+      Transposer.hierarchical (* ~transposer_depth_in_cycles:(1 lsl logblocks) *)
+        ~transposer_depth_in_cycles:1
         scope
         { clock
         ; clear

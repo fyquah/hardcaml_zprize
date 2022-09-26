@@ -56,6 +56,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         scope
         { Store_sm.I.clock = i.clock
         ; clear = i.clear
+        ; first_4step_pass = i.first_4step_pass
         ; tready = i.data_out_dest.tready
         ; start = start_output
         }
