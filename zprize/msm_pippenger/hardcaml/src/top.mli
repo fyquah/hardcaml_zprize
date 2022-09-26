@@ -36,11 +36,12 @@ module Make (Config : Config.S) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
+  val precompute : bool
   val input_point_bits : int
   val result_point_bits : int
   val num_windows : int
   val num_result_points : int
-  val first_window_size_bits : int
+  val last_window_size_bits : int
 
   module O : sig
     type 'a t =
