@@ -1,0 +1,27 @@
+{1 Hardcaml Zprize Submission}
+
+This documentation describes two projects undertaken as part of the Zprize competition in 2022.
+
+{2 Multi-scalar multiplication}
+
+Multiplying millions of BLS12-377 affine points by 253 bit scalars.
+
+- {!Pippenger} implements the controller logic to sequence the MSM computation.
+- {!Elliptic_curve_lib}, {!Field_ops_lib} and {!Twisted_edwards_lib} implement the core elliptic curve arithmetic operations.
+- {!Msm_pippenger} implements the complete MSM computation using the Pippenger bucket method.
+
+{2 Inverse NTT}
+
+Performs the inverse number theoretic transform on quite large inputs.
+
+- {{!page:ntt}Hardcaml_ntt} implements the core components of for the NTT transform.
+- {!Zprize_ntt} implements the top level design.
+
+See {{!page:ntt} here}
+
+{2 Support libraries}
+
+- {!Hardcaml_axi}
+- {!Ark_bls12_377_g1}
+- {!Twisted_edwards_model_lib}
+- {!Field_ops_model}
