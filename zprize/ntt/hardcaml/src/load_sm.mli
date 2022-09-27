@@ -1,3 +1,5 @@
+(** Sequence the loading of coefficients from DRAM into the parallel MTT cores. *)
+
 open Hardcaml
 
 module Make (Config : Hardcaml_ntt.Core_config.S) : sig

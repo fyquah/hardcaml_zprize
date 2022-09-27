@@ -1,3 +1,5 @@
+(** Top-level wrapper with port naming to suit the Vivido Vitis infrastructure. *)
+
 open! Base
 open Hardcaml
 

@@ -1,3 +1,5 @@
+(** Instantiate the parallel NTT cores along with the load and store state machines. *)
+
 open! Base
 open Hardcaml
 
