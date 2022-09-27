@@ -57,4 +57,13 @@ module Make (Config : Msm_pippenger.Config.S) : sig
     -> ?has_t:bool
     -> Twisted_edwards.extended
     -> Weierstrass.affine option
+
+  module Reduced_scalar : sig
+    type t =
+      { scalar : Bits.t
+      ; negative : bool
+      }
+  end
+
+  val perform_scalar_reduction : Bits.t -> Reduced_scalar.t array
 end

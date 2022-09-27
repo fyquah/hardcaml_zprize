@@ -54,6 +54,7 @@ let command_test_vectors =
         let module Top = Msm_pippenger.Top.Make (Config) in
         let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config)
         in
+        let module Config_utils = Msm_pippenger.Config_utils.Make (Config) in
         let input_points =
           Utils.random_inputs ~precompute:Top.precompute ~seed num_points
         in
@@ -93,20 +94,17 @@ let command_test_vectors =
         (* Do the bucket sums like the FPGA will. *)
         let windows =
           Array.init Top.num_windows ~f:(fun window ->
-            Array.init
-              (if window = 0
-              then 1 lsl Top.first_window_size_bits
-              else 1 lsl Config.window_size_bits)
-              ~f:(fun _ ->
-                let identity : Utils.Twisted_edwards.extended =
-                  { x = Z.zero; y = Z.one; t = Z.zero; z = Z.one }
-                in
-                if Top.precompute
-                then Utils.Twisted_edwards.to_fpga_internal_representation identity
-                else identity))
+            Array.init (Config_utils.num_buckets window) ~f:(fun _ ->
+              let identity : Utils.Twisted_edwards.extended =
+                { x = Z.zero; y = Z.one; t = Z.zero; z = Z.one }
+              in
+              if Top.precompute
+              then Utils.Twisted_edwards.to_fpga_internal_representation identity
+              else identity))
         in
         let to_z b = Bits.to_constant b |> Constant.to_z ~signedness:Unsigned in
         Array.iter input_points ~f:(fun input ->
+          let precomputed_scalar_slices = Utils.perform_scalar_reduction input.scalar in
           let p : Utils.Twisted_edwards.affine_with_t =
             { x = to_z input.affine_point_with_t.x
             ; y = to_z input.affine_point_with_t.y
@@ -114,15 +112,10 @@ let command_test_vectors =
             }
           in
           for i = 0 to Top.num_windows - 1 do
-            let upper_bound =
-              if i = 0
-              then (i * Config.window_size_bits) + Top.first_window_size_bits
-              else (i + 1) * Config.window_size_bits
+            let slice = precomputed_scalar_slices.(i).scalar in
+            let bucket =
+              Config_utils.scalar_to_ram_index (module Bits) slice |> Bits.to_int
             in
-            let slice =
-              Bits.(select input.scalar (upper_bound - 1) (i * Config.window_size_bits))
-            in
-            let bucket = Bits.to_int slice in
             let r =
               if Top.precompute
               then Utils.Twisted_edwards.add_unified_precomputed windows.(i).(bucket) p
@@ -140,23 +133,18 @@ let command_test_vectors =
             output_filename
             ~data:
               (Array.map windows ~f:(fun bucket ->
-                 (* Don't do the 0th bucket. *)
-                 List.init
-                   (Array.length bucket - 1)
-                   ~f:(fun i ->
-                     let v = bucket.(Array.length bucket - 1 - i) in
-                     let { Utils.Extended.x; y; z; t } =
-                       let u384_of_z x = Bits.uresize (of_z x) 384 in
-                       { Utils.Extended.t = u384_of_z v.t
-                       ; x = u384_of_z v.x
-                       ; y = u384_of_z v.y
-                       ; z = u384_of_z v.z
-                       }
-                     in
-                     let b_packed = Bits.(uresize (t @: z @: y @: x) (512 * 3)) in
-                     Constant.to_hex_string
-                       ~signedness:Unsigned
-                       (Bits.to_constant b_packed))
+                 List.init (Array.length bucket) ~f:(fun i ->
+                   let v = bucket.(Array.length bucket - 1 - i) in
+                   let { Utils.Extended.x; y; z; t } =
+                     let u384_of_z x = Bits.uresize (of_z x) 384 in
+                     { Utils.Extended.t = u384_of_z v.t
+                     ; x = u384_of_z v.x
+                     ; y = u384_of_z v.y
+                     ; z = u384_of_z v.z
+                     }
+                   in
+                   let b_packed = Bits.(uresize (t @: z @: y @: x) (512 * 3)) in
+                   Constant.to_hex_string ~signedness:Unsigned (Bits.to_constant b_packed))
                  |> String.concat ~sep:"\n")
               |> Array.to_list
               |> String.concat ~sep:"\n"))]

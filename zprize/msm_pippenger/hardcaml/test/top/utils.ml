@@ -171,4 +171,66 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     Twisted_edwards.extended_to_affine extended ~has_t
     |> C.twisted_edwards_affine_to_weierstrass_affine bls12_377_twisted_edwards_params
   ;;
+
+  module Reduced_scalar = struct
+    type t =
+      { scalar : Bits.t
+      ; negative : bool
+      }
+  end
+
+  let check_scalar_reduction scalar (reduced_scalars : Reduced_scalar.t array) =
+    let scalar = Bits.to_int scalar in
+    let open Msm_pippenger.Config_utils.Make (Config) in
+    let v =
+      Array.foldi reduced_scalars ~init:0 ~f:(fun i acc v ->
+        let sign = if v.negative then -1 else 1 in
+        let base = 1 lsl window_bit_offsets.(i) in
+        acc + (sign * Bits.to_int v.scalar * base))
+    in
+    assert (v = scalar)
+  ;;
+
+  let perform_scalar_reduction scalar =
+    assert (Bits.width scalar = Config.scalar_bits);
+    let open Msm_pippenger.Config_utils.Make (Config) in
+    let carry = ref false in
+    let rec loop res =
+      let i = List.length res in
+      if i = num_windows
+      then res
+      else (
+        let size = window_bit_sizes.(i) in
+        let offset = window_bit_offsets.(i) in
+        let orig_slice =
+          Bits.(to_int scalar.:+[offset, Some size]) + if !carry then 1 else 0
+        in
+        let signed_val =
+          if orig_slice >= 1 lsl size
+          then (
+            (* overflow after carry *)
+            assert (orig_slice = 1 lsl size);
+            carry := true;
+            0)
+          else if (* no overflow, check the width *)
+                  orig_slice >= 1 lsl (size - 1)
+          then (
+            carry := true;
+            orig_slice - (1 lsl size))
+          else (
+            carry := false;
+            orig_slice)
+        in
+        let reduced =
+          { Reduced_scalar.scalar =
+              Int.abs signed_val |> Bits.of_int ~width:max_window_size_bits
+          ; negative = signed_val < 0
+          }
+        in
+        loop (reduced :: res))
+    in
+    let ret = loop [] |> List.rev |> Array.of_list in
+    check_scalar_reduction scalar ret;
+    ret
+  ;;
 end

@@ -1,22 +1,21 @@
 open! Base
 open! Hardcaml
 
-module Make (Config : Config.S) = struct
+module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struct
   open Signal
   open Config
-  module Bucket_pipeline = Bucket_pipeline.Make (Config)
+  module Bucket_pipeline = Bucket_pipeline.Make (Config) (Scalar_config)
+  module Stalled_point_fifos = Stalled_point_fifos.Make (Config) (Scalar_config)
+  module Scalar = Scalar.Make (Scalar_config)
 
   let log_num_windows = Int.ceil_log2 num_windows
-
-  module Stalled_point_fifos = Stalled_point_fifos.Make (Config)
 
   module I = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
       ; start : 'a
-      ; scalar : 'a array [@bits window_size_bits] [@length num_windows]
-      ; negatives : 'a array [@length num_windows]
+      ; scalar : 'a Scalar.t array [@length num_windows]
       ; scalar_valid : 'a
       ; last_scalar : 'a
       ; affine_point : 'a [@bits affine_point_bits]
@@ -29,9 +28,8 @@ module Make (Config : Config.S) = struct
       { done_ : 'a
       ; scalar_read : 'a
       ; window : 'a [@bits log_num_windows]
-      ; bucket : 'a [@bits window_size_bits]
+      ; bucket : 'a Scalar.t
       ; adder_affine_point : 'a [@bits affine_point_bits]
-      ; subtract : 'a
       ; bubble : 'a
       ; execute : 'a
       }
@@ -106,8 +104,7 @@ module Make (Config : Config.S) = struct
     let sm = Always.State_machine.create (module State) spec in
     let window = Var.reg spec ~width:log_num_windows in
     let window_next = window.value +:. 1 in
-    let scalar = mux window.value (Array.to_list i.scalar) in
-    let negative = mux window.value (Array.to_list i.negatives) in
+    let scalar = Scalar.Of_signal.mux window.value (Array.to_list i.scalar) in
     let bubble = Var.wire ~default:gnd in
     let push_stalled_point = Var.wire ~default:gnd in
     let pop_stalled_point = Var.wire ~default:gnd in
@@ -171,8 +168,8 @@ module Make (Config : Config.S) = struct
             ; ( Execute_scalar
               , [ executing_scalar <-- vdd
                 ; shift_pipeline <-- vdd
-                ; bubble <-- (is_in_pipeline |: (scalar ==:. 0))
-                ; push_stalled_point <-- (is_in_pipeline &: (scalar <>:. 0))
+                ; bubble <-- (is_in_pipeline |: (scalar.scalar ==:. 0))
+                ; push_stalled_point <-- (is_in_pipeline &: (scalar.scalar <>:. 0))
                 ; window <-- window_next
                 ; sm.set_next Wait_scalar
                 ; on_last_window ~processing_scalars:true
@@ -183,7 +180,7 @@ module Make (Config : Config.S) = struct
                 ; shift_pipeline <-- vdd
                 ; bubble
                   <-- (is_in_pipeline
-                      |: (stalled.scalar_out_valid &: (stalled.scalar_out ==:. 0))
+                      |: (stalled.scalar_out_valid &: (stalled.scalar_out.scalar ==:. 0))
                       |: ~:(stalled.current_window_has_stall))
                 ; pop_stalled_point <-- ~:(bubble.value)
                 ; window <-- window_next
@@ -202,8 +199,8 @@ module Make (Config : Config.S) = struct
          { Bucket_pipeline.I.clock = i.clock
          ; clear = i.clear
          ; window = window.value
-         ; scalar_in = i.scalar
-         ; stalled_scalar = stalled.scalar_out
+         ; scalar_in = Array.map i.scalar ~f:(fun { scalar; _ } -> scalar)
+         ; stalled_scalar = stalled.scalar_out.scalar
          ; stalled_scalar_valid = stalled.scalar_out_valid
          ; process_stalled = executing_stalled
          ; bubble = is_in_pipeline
@@ -217,7 +214,6 @@ module Make (Config : Config.S) = struct
          ; clear = i.clear
          ; push = push_stalled_point.value -- "push"
          ; scalar
-         ; negative
          ; window = window.value
          ; affine_point = i.affine_point
          ; pop = pop_stalled_point.value -- "pop"
@@ -225,9 +221,8 @@ module Make (Config : Config.S) = struct
     { O.done_ = sm.is Start
     ; scalar_read = scalar_read.value
     ; window = window.value
-    ; bucket = mux2 executing_scalar scalar stalled.scalar_out
+    ; bucket = Scalar.Of_signal.mux2 executing_scalar scalar stalled.scalar_out
     ; adder_affine_point = mux2 executing_scalar i.affine_point stalled.affine_point_out
-    ; subtract = mux2 executing_scalar negative stalled.negative_out
     ; bubble = bubble.value
     ; execute = shift_pipeline.value
     }
