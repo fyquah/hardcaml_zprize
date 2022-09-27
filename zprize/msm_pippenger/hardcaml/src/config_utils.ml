@@ -5,11 +5,11 @@ module Make (Config : Config.S) = struct
 
   (* Integer divison so the first window might be slightly larger than the others. *)
   let num_windows = scalar_bits / window_size_bits
-  let last_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
+  let first_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
 
   let window_bit_sizes =
     Array.init num_windows ~f:(fun i ->
-      if i = num_windows - 1 then last_window_size_bits else window_size_bits)
+      if i = 0 then first_window_size_bits else window_size_bits)
   ;;
 
   let window_bit_offsets =
@@ -18,7 +18,7 @@ module Make (Config : Config.S) = struct
       then data
       else compute_offsets (i + 1) (cur_offset :: data) (cur_offset + window_bit_sizes.(i))
     in
-    compute_offsets 0 [] 0 |> Array.of_list
+    compute_offsets 0 [] 0 |> List.rev |> Array.of_list
   ;;
 
   let max_window_size_bits =

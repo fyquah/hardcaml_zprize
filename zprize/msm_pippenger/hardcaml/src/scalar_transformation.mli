@@ -28,5 +28,6 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) : si
     [@@deriving sexp_of, hardcaml]
   end
 
+  val create : Scope.t -> Signal.t I.t -> Signal.t O.t
   val hierarchical : ?instance:string -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end

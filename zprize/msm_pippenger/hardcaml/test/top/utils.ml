@@ -177,18 +177,58 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       { scalar : Bits.t
       ; negative : bool
       }
+    [@@deriving sexp_of]
+  end
+
+  (*module Int_reduced_scalar = struct
+    type t = {
+      scalar : int
+    ; negative : bool
+    } [@@deriving sexp_of]
+
+    let of_reduced_scalar { Reduced_scalar.scalar; negative } : t = 
+      { scalar = Bits.to_int scalar; negative }
+  end*)
+
+  module Z = struct
+    include Z
+
+    let sexp_of_t t = Sexp.Atom ("0x" ^ Z.format "x" t)
   end
 
   let check_scalar_reduction scalar (reduced_scalars : Reduced_scalar.t array) =
-    let scalar = Bits.to_int scalar in
     let open Msm_pippenger.Config_utils.Make (Config) in
     let v =
-      Array.foldi reduced_scalars ~init:0 ~f:(fun i acc v ->
-        let sign = if v.negative then -1 else 1 in
-        let base = 1 lsl window_bit_offsets.(i) in
-        acc + (sign * Bits.to_int v.scalar * base))
+      Array.foldi reduced_scalars ~init:Z.zero ~f:(fun i acc v ->
+        let scalar_val = Bits.to_int v.scalar in
+        assert (scalar_val >= 0);
+        if scalar_val > num_buckets i
+        then raise_s [%message (i : int) (scalar_val : int) (num_buckets i : int)];
+        let sign_ = if v.negative then Z.minus_one else Z.one in
+        let base = window_bit_offsets.(i) in
+        (*print_s [%message (i :int) (scalar_val : int) (sign_ : Z.t) (base : int)];*)
+        let scalar_val = Z.of_int scalar_val in
+        Z.(acc + (sign_ * scalar_val * (one lsl base))))
     in
-    assert (v = scalar)
+    let int_scalar = Bits.to_z ~signedness:Unsigned scalar in
+    if not Z.(equal v int_scalar)
+    then (
+      let split_scalar =
+        Array.map2_exn window_bit_sizes window_bit_offsets ~f:(fun size offset ->
+          Bits.(scalar.:+[offset, Some size]))
+      in
+      Array.iteri
+        (Array.zip_exn split_scalar reduced_scalars)
+        ~f:(fun i (orig, { scalar; negative }) ->
+        let orig = Bits.to_int orig in
+        let reduced_scalar = Bits.to_int scalar in
+        print_s [%message (i : int) (orig : int) (reduced_scalar : int) (negative : bool)]);
+      raise_s
+        [%message
+          (split_scalar : Bits.t array)
+            (reduced_scalars : Reduced_scalar.t array)
+            (v : Z.t)
+            (int_scalar : Z.t)])
   ;;
 
   let perform_scalar_reduction scalar =
@@ -197,14 +237,19 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let carry = ref false in
     let rec loop res =
       let i = List.length res in
-      if i = num_windows
-      then res
+      let size = window_bit_sizes.(i) in
+      let offset = window_bit_offsets.(i) in
+      (*print_s [%message (i : int) (size : int) (offset : int)];*)
+      let orig_slice =
+        Bits.(to_int scalar.:+[offset, Some size]) + if !carry then 1 else 0
+      in
+      if i = num_windows - 1
+      then
+        { Reduced_scalar.scalar = Bits.of_int ~width:max_window_size_bits orig_slice
+        ; negative = false
+        }
+        :: res
       else (
-        let size = window_bit_sizes.(i) in
-        let offset = window_bit_offsets.(i) in
-        let orig_slice =
-          Bits.(to_int scalar.:+[offset, Some size]) + if !carry then 1 else 0
-        in
         let signed_val =
           if orig_slice >= 1 lsl size
           then (
