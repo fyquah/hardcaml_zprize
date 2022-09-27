@@ -1,5 +1,5 @@
 (lang dune 2.9)
-(package 
+(package
   (name zprize)
   (synopsis "Hardcaml Zprize submission")
   (description "MSM and NTT Hardcaml designs for the Zprize competition")
