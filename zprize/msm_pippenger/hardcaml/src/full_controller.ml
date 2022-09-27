@@ -36,7 +36,11 @@ struct
   end)
 
   module I = Main_Controller.I
-  module O = Main_Controller.O
+  module O' = Main_Controller.O
+
+  module O = struct
+    type 'a t = { q : 'a O'.t array [@length 3] } [@@deriving sexp_of, hardcaml]
+  end
 
   let ctrl0_windows = num_windows / 3
   let ctrl1_windows = ctrl0_windows
@@ -121,7 +125,7 @@ struct
         ~rd:fifo2_rd
         ()
     in
-    fifo_ready <== (~:(fifo0.full) &: ~:(fifo1.full));
+    fifo_ready <== (~:(fifo0.full) &: ~:(fifo1.full) &: ~:(fifo2.full));
     let ctrl0 =
       let scalar_width = width (Signal.of_array ctrl0_scalar) in
       Controller0.hierarchy
@@ -158,21 +162,43 @@ struct
         }
     in
     fifo1_rd <== ctrl1.scalar_read;
-    let switch =
-      reg_fb (Reg_spec.create ~clock:i.clock ~clear:i.start ()) ~f:(fun q -> ~:q) ~width:1
+    let ctrl2 =
+      let scalar_width = width (Signal.of_array ctrl2_scalar) in
+      Controller1.hierarchy
+        scope
+        { Controller1.I.clock = i.clock
+        ; clear = i.clear
+        ; start = reg spec i.start
+        ; scalar =
+            sel_bottom fifo2.q scalar_width
+            |> Signal.split_lsb ~part_width:last_window_size_bits
+            |> List.to_array
+        ; scalar_valid = ~:(fifo2.empty)
+        ; last_scalar = msb fifo2.q
+        ; affine_point =
+            select fifo2.q (scalar_width + Config.input_point_bits - 1) scalar_width
+        }
     in
-    { Main_Controller.O.execute = mux2 switch ctrl0.execute ctrl1.execute
-    ; done_ = ctrl0.done_ &: ctrl1.done_
-    ; scalar_read = fifo_ready
-    ; window =
-        (let window_bits = num_bits_to_represent num_windows in
-         mux2
-           switch
-           (uresize ctrl0.window window_bits)
-           (uresize ctrl1.window window_bits +:. Array.length ctrl0_scalar))
-    ; bucket = mux2 switch ctrl0.bucket ctrl1.bucket
-    ; adder_affine_point = mux2 switch ctrl0.adder_affine_point ctrl1.adder_affine_point
-    ; bubble = mux2 switch ctrl0.bubble ctrl1.bubble
+    fifo2_rd <== ctrl2.scalar_read;
+    { O.q =
+        Array.init 3 ~f:(fun index ->
+          { O'.execute = [| ctrl0.execute; ctrl1.execute; ctrl2.execute |].(index)
+          ; done_ = ctrl0.done_ &: ctrl1.done_ &: ctrl2.done_
+          ; scalar_read = fifo_ready
+          ; window =
+              (let window_bits = num_bits_to_represent num_windows in
+               [| uresize ctrl0.window window_bits
+                ; uresize ctrl1.window window_bits
+                ; uresize ctrl2.window window_bits
+               |]).(index)
+          ; bucket = [| ctrl0.bucket; ctrl1.bucket; ctrl2.bucket |].(index)
+          ; adder_affine_point =
+              [| ctrl0.adder_affine_point
+               ; ctrl1.adder_affine_point
+               ; ctrl2.adder_affine_point
+              |].(index)
+          ; bubble = [| ctrl0.bubble; ctrl1.bubble; ctrl2.bubble |].(index)
+          })
     }
   ;;
 

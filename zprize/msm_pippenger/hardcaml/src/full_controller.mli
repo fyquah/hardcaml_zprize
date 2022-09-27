@@ -22,7 +22,7 @@ end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  module O : sig
+  module O' : sig
     type 'a t =
       { done_ : 'a
       ; scalar_read : 'a
@@ -33,6 +33,14 @@ end) : sig
       ; execute : 'a
       }
     [@@deriving sexp_of, hardcaml]
+  end
+
+  val ctrl0_windows : int
+  val ctrl1_windows : int
+  val ctrl2_windows : int
+
+  module O : sig
+    type 'a t = { q : 'a O'.t array } [@@deriving sexp_of, hardcaml]
   end
 
   val hierarchical : Scope.t -> Signal.t Interface.Create_fn(I)(O).t

@@ -144,24 +144,23 @@ module Make (Config : Config.S) = struct
         ; affine_point = Mixed_add.Xyt.Of_signal.pack input_point
         }
     in
-    let ctrl_affine_point_as_xyt =
-      Mixed_add.Xyt.Of_signal.unpack ctrl.adder_affine_point
-    in
-    let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
     ignore (sm.current -- "STATE" : Signal.t);
     let adder_p3 = wire result_point_bits -- "adder_p3" in
+    let half_adder_p3 = wire result_point_bits in
     let window_address =
       Variable.reg spec_with_clear ~width:(num_bits_to_represent num_windows)
     in
     let bucket_address = Variable.reg spec_with_clear ~width:last_window_size_bits in
-    let adder_valid_out = wire 1 in
     let fifo_q_has_space = wire 1 in
     let port_a_q, port_b_q =
       List.init num_windows ~f:(fun window ->
         let address_bits =
           if window = num_windows - 1 then last_window_size_bits else window_size_bits
         in
+        let ctrl_index = num_windows / 3 in
+        let ctrl = ctrl.q.(ctrl_index) in
         let ctrl_window_en = ctrl.window ==:. window in
+        let p3 = if ctrl_index > 2 then half_adder_p3 else adder_p3 in
         (* To support write before read mode in URAM, writes must happen on port
            A and reads on port B. *)
         Dual_port_ram.create
@@ -193,7 +192,7 @@ module Make (Config : Config.S) = struct
                       &: (window_address.value ==:. window)
                       &: fifo_q_has_space)
                      -- "port_a_re")
-               ; data = pipeline ~n:ram_write_latency spec (adder_p3 -- "port_a_d")
+               ; data = pipeline ~n:ram_write_latency spec (p3 -- "port_a_d")
                ; address =
                    sel_bottom
                      (pipeline
@@ -254,6 +253,20 @@ module Make (Config : Config.S) = struct
     List.iteri port_b_q ~f:(fun i port ->
       ignore (port -- ("window" ^ Int.to_string i ^ "$ram_b$q") : Signal.t));
     let adder =
+      let switch =
+        reg_fb (Reg_spec.override spec ~clear:ctrl_start.value) ~width:1 ~f:(fun q -> ~:q)
+      in
+      let adder_valid_in =
+        mux2
+          switch
+          (ctrl.q.(0).execute &: ~:(ctrl.q.(0).bubble))
+          (ctrl.q.(1).execute &: ~:(ctrl.q.(1).bubble))
+      in
+      let p1 = mux2 switch ctrl.q.(0).window ctrl.q.(1).window in
+      let ctrl_affine_point_as_xyt =
+        Mixed_add.Xyt.Of_signal.unpack
+          (mux2 switch ctrl.q.(0).adder_affine_point ctrl.q.(1).adder_affine_point)
+      in
       Mixed_add.hierarchical
         scope
         ~config:adder_config
@@ -262,9 +275,7 @@ module Make (Config : Config.S) = struct
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
         ; p1 =
             Mixed_add.Xyzt.Of_signal.unpack
-              (mux
-                 (pipeline spec ctrl.window ~n:(ram_lookup_latency + ram_read_latency))
-                 port_b_q)
+              (mux (pipeline spec p1 ~n:(ram_lookup_latency + ram_read_latency)) port_b_q)
         ; p2 =
             Mixed_add.Xyt.Of_signal.(
               pipeline
@@ -274,6 +285,11 @@ module Make (Config : Config.S) = struct
         }
     in
     let half_adder =
+      let ctrl = ctrl.q.(2) in
+      let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
+      let ctrl_affine_point_as_xyt =
+        Mixed_add.Xyt.Of_signal.unpack ctrl.adder_affine_point
+      in
       Mixed_add.hierarchical
         scope
         ~config:adder_config
@@ -293,8 +309,7 @@ module Make (Config : Config.S) = struct
                 ~n:(ram_lookup_latency + ram_read_latency))
         }
     in
-    adder_valid_out <== adder.valid_out;
-    ignore (adder_valid_out -- "adder_valid_out" : Signal.t);
+    half_adder_p3 <== Mixed_add.Xyzt.Of_signal.pack half_adder.p3;
     adder_p3 <== Mixed_add.Xyzt.Of_signal.pack adder.p3;
     (* State machine for flow control. *)
     let wait_count =
@@ -329,7 +344,12 @@ module Make (Config : Config.S) = struct
           ; ( Working
             , [ ctrl_start <-- gnd
               ; last_scalar_l <-- (last_scalar_l.value |: last_scalar)
-              ; when_ (last_scalar_l.value &: ctrl.done_) [ done_l <-- vdd ]
+              ; when_
+                  (last_scalar_l.value
+                  &: ctrl.q.(0).done_
+                  &: ctrl.q.(1).done_
+                  &: ctrl.q.(2).done_)
+                  [ done_l <-- vdd ]
               ; when_ done_l.value [ wait_count <-- wait_count.value +:. 1 ]
               ; when_
                   (* After finishing we still need for results to flush from the adder *)
@@ -411,7 +431,7 @@ module Make (Config : Config.S) = struct
     { O.result_point = Mixed_add.Xyzt.Of_signal.unpack (lsbs fifo_q.q)
     ; result_point_valid = ~:(fifo_q.empty)
     ; last_result_point
-    ; scalar_and_input_point_ready = ctrl.scalar_read &: sm.is Working
+    ; scalar_and_input_point_ready = ctrl.q.(0).scalar_read &: sm.is Working
     }
   ;;
 
