@@ -17,8 +17,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
-      ; start : 'a
-      ; first_4step_pass : 'a
+      ; start : 'a (** Start running a pass. *)
+      ; first_4step_pass : 'a (** High is running the first pass. *)
       ; data_in : 'a Axi_stream.Source.t
       ; data_out_dest : 'a Axi_stream.Dest.t
       }
@@ -29,7 +29,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     type 'a t =
       { data_out : 'a Axi_stream.Source.t
       ; data_in_dest : 'a Axi_stream.Dest.t
-      ; done_ : 'a
+      ; done_ : 'a (** Low while processing a pass. *)
       }
     [@@deriving sexp_of, hardcaml ~rtlmangle:true]
   end

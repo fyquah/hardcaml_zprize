@@ -1,3 +1,5 @@
+(* Test bit reversed addressing logic. *)
+
 open! Core
 module Util = Hardcaml_ntt.Util
 

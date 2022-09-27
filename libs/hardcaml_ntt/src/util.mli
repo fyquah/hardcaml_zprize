@@ -1,3 +1,5 @@
+(** Utility functions. *)
+
 open! Base
 
 val reverse : int -> int -> int

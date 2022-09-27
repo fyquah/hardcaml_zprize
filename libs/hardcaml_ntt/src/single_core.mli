@@ -1,3 +1,5 @@
+(** Instantiate a single NTT core design with the associated input/output and internal RAMs. *)
+
 open! Base
 open! Hardcaml
 

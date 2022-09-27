@@ -1,3 +1,5 @@
+(** Software implementations of the algorithms implemented in the hardware. *)
+
 module Make (Gf : Gf_intf.S) : sig
   (** {2 Roots of unity} *)
 
