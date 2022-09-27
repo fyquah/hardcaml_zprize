@@ -157,7 +157,7 @@ module Make (Config : Config.S) = struct
         let address_bits =
           if window = num_windows - 1 then last_window_size_bits else window_size_bits
         in
-        let ctrl_index = num_windows / 3 in
+        let ctrl_index = window / (num_windows / 3) in
         let ctrl = ctrl.q.(ctrl_index) in
         let ctrl_window_en = ctrl.window ==:. window in
         let p3 = if ctrl_index > 2 then half_adder_p3 else adder_p3 in
