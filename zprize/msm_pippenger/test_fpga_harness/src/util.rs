@@ -54,26 +54,30 @@ pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParame
             let now = SystemTime::now();
             let test_npow = std::env::var("TEST_NPOW").expect("Must specified either TEST_NPOW or TEST_LOAD_DATA_FROM");
             let npoints_npow = i32::from_str(&test_npow).unwrap();
-            let batches = 4;
+            let batches = 1;
             let (points, scalars, arkworks_results) =
-                if std::env::var("TEST_TRIVAL_INPUTS") == Ok(String::from("1")) {
+                if std::env::var("TEST_TRIVIAL_INPUTS") == Ok(String::from("1")) {
                     println!("Testing with trivial inputs");
-                    let mut points = Vec::with_capacity(1usize << npoints_npow);
-                    let mut scalars = Vec::with_capacity((1usize << npoints_npow) * batches);
+                    let mut points = Vec::new();
+                    let mut scalars = Vec::new();
                     let mut arkworks_results = Vec::new();
                     let g1_generator = G1Affine::prime_subgroup_generator();
                     for _ in 0..(1usize << npoints_npow) {
                         points.push(g1_generator);
                     }
-                    for i in 0..scalars.len() {
+                    for i in 0..((1usize << npoints_npow) * batches) {
                         scalars.push(
-                            Fp256::<FrParameters>::from(if i % points.len() == 0 { 1 } else { 0 }));
+                            Fp256::<FrParameters>::new(BigInteger256::from(if i % points.len() == 0 { 1 } else { 0 }))
+                            );
                     }
+                    assert!(scalars.len() == batches * points.len());
+                    // println!("scalars= {:?}", scalars);
                     for _ in 0..batches {
                         arkworks_results.push(g1_generator);
                     }
                     (points, scalars, arkworks_results)
                 } else {
+                    println!("Testing with randomly generated inputs");
                     let mut arkworks_results = Vec::new();
                     let (points, scalars) = generate_points_scalars::<G1Affine>(1usize << npoints_npow, batches);
                     for b in 0..batches {

@@ -6,7 +6,9 @@ use ark_bls12_377::{Fr, G1Affine};
 use ark_ec::AffineCurve;
 use ark_ff::PrimeField;
 use ark_std::Zero;
+
 use std::os::raw::c_void;
+use std::time::SystemTime;
 
 #[allow(unused_imports)]
 use blst::*;
@@ -38,6 +40,7 @@ pub struct MultiScalarMultContext {
 pub fn multi_scalar_mult_init<G: AffineCurve>(
     points: &[G]
 ) -> MultiScalarMultContext {
+    let now = SystemTime::now();
     let xclbin = std::env::var("XCLBIN").expect("Need an XCLBIN file");
     let ret = unsafe {
         let context = msm_init(
@@ -48,6 +51,7 @@ pub fn multi_scalar_mult_init<G: AffineCurve>(
         );
         MultiScalarMultContext { context }
     };
+    println!("multi_scalar_mult_init took {:?}", now.elapsed());
 
     ret
 }
