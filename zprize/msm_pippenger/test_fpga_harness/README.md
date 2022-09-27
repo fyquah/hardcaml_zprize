@@ -9,7 +9,7 @@ you don't have to specify `TEST_NPOW`.  (If you do, it will just be ignored)
 CMAKE=cmake3 XCLBIN=<file> TEST_LOAD_DATA_FROM=path/to/load/from cargo test --release
 ```
 
-- `2^26` takes around 10minutes to load (6h to generate)
+- `2^26` takes around 5-10minutes to load (6h to generate)
 - `2^10` takes under 1 second to load
 
 For debugging some driver code, it's usually easier to test on a set of trivial
