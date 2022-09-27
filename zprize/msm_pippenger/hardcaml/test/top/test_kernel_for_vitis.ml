@@ -5,6 +5,7 @@ open Msm_pippenger
 
 module Make (Config : Msm_pippenger.Config.S) = struct
   module Utils = Utils.Make (Config)
+  module Config_utils = Config_utils.Make (Config)
   module Top = Top.Make (Config)
   module Kernel = Kernel_for_vitis.Make (Config)
   module I = Kernel.I
@@ -136,7 +137,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let output_buffer_bits = num_clocks_per_output * 512 in
     let output_buffer = ref (Bits.zero output_buffer_bits) in
     let result_points = ref [] in
-    let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
+    let bucket = ref (Config_utils.num_buckets 0) in
     let window = ref 0 in
     let is_last = ref false in
     let field_bits = Config.field_bits in
@@ -191,16 +192,12 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             := if !bucket = 1
                then (
                  Int.incr window;
-                 let next_window_size_bits =
-                   if !window = 0
-                   then Top.first_window_size_bits
-                   else Config.window_size_bits
-                 in
-                 (1 lsl next_window_size_bits) - 1)
+                 Config_utils.num_buckets !window)
                else !bucket - 1));
       Cyclesim.cycle sim
     done;
     print_s [%message "Got" (List.length !result_points : int)];
+    [%test_result: int] ~expect:Top.num_result_points (List.length !result_points);
     let result =
       { waves = sim_and_waves.waves; points = List.rev !result_points; inputs }
     in

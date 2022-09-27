@@ -13,23 +13,24 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
     type 'a t =
       { clock : 'a
       ; clear : 'a
-      ; scalar : 'a [@bits scalar_bits]
-      ; scalar_valid : 'a
-      ; last_scalar : 'a
-      ; input_point : 'a Xyt.t [@rtl_prefix "i_"]
-      ; scalar_and_input_point_ready : 'a
+      ; scalar : 'a [@bits scalar_bits] [@rtlprefix "i_"]
+      ; scalar_valid : 'a [@rtlprefix "i_"]
+      ; last_scalar : 'a [@rtlprefix "i_"]
+      ; input_point : 'a Xyt.t [@rtlprefix "i_"]
+      ; scalar_and_input_point_ready : 'a [@rtlprefix "i_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
     type 'a t =
-      { scalar : 'a array [@bits max_window_size_bits] [@length num_windows]
-      ; scalar_negatives : 'a array [@length num_windows]
-      ; scalar_valid : 'a
-      ; last_scalar : 'a
-      ; input_point : 'a Xyt.t [@rtl_prefix "o_"]
-      ; scalar_and_input_point_ready : 'a
+      { scalar : 'a array
+           [@bits max_window_size_bits] [@length num_windows] [@rtlprefix "o_"]
+      ; scalar_negatives : 'a array [@length num_windows] [@rtlprefix "o_"]
+      ; scalar_valid : 'a [@rtlprefix "o_"]
+      ; last_scalar : 'a [@rtlprefix "o_"]
+      ; input_point : 'a Xyt.t [@rtlprefix "o_"]
+      ; scalar_and_input_point_ready : 'a [@rtlprefix "o_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -38,10 +39,12 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
     module Scalar_compute = struct
       module T = struct
         type 'a t =
-          { windows : 'a array [@length num_windows]
+          { (* actually use the correct bit widths, just pad with 0s for interface *)
+            windows : 'a array
+               [@bits max_window_size_bits] [@length num_windows] [@rtlprefix "windows$"]
           ; carry : 'a (* not relevant, just carried along *)
           ; last_scalar : 'a
-          ; input_point : 'a Xyt.t
+          ; input_point : 'a Xyt.t [@rtlprefix "xyt$"]
           }
         [@@deriving sexp_of, hardcaml]
       end
@@ -52,7 +55,9 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
 
     module I = struct
       type 'a t =
-        { up_scalar : 'a Scalar_compute.With_valid.t
+        { clock : 'a
+        ; clear : 'a
+        ; up_scalar : 'a Scalar_compute.With_valid.t [@rtlprefix "i_up_scalar$"]
         ; dn_ready : 'a
         }
       [@@deriving sexp_of, hardcaml]
@@ -60,13 +65,13 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
 
     module O = struct
       type 'a t =
-        { dn_scalar : 'a Scalar_compute.With_valid.t
+        { dn_scalar : 'a Scalar_compute.With_valid.t [@rtlprefix "o_dn_scalar$"]
         ; up_ready : 'a
         }
+      [@@deriving sexp_of, hardcaml]
     end
-    [@@deriving sexp_of, hardcaml]
 
-    let create _scope ~clock ~clear ~stage ({ up_scalar; dn_ready } : _ I.t) : _ O.t =
+    let create _scope ~stage ({ clock; clear; up_scalar; dn_ready } : _ I.t) : _ O.t =
       let up_ready = wire 1 in
       let reg_with_handshake v =
         let spec = Reg_spec.create ~clock ~clear () in
@@ -76,22 +81,17 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
       (* compute window and carry widths *)
       let c_prev = window_bit_sizes.(stage - 1) in
       let c_cur = window_bit_sizes.(stage) in
-      let up_prev_carry_value =
-        let prev_carry_width =
-          if stage = 1 then 1 else window_bit_sizes.(stage - 2) - c_prev
-        in
-        sll up_scalar.value.carry prev_carry_width
-      in
       (* first perform the carry on the previous bucket *)
       let up_prev_bucket_with_overflow =
-        Uop.(up_scalar.value.windows.(stage - 1) +: up_prev_carry_value)
+        let v = sel_bottom up_scalar.value.windows.(stage - 1) c_prev in
+        Uop.(v +: up_scalar.value.carry)
       in
       assert (width up_prev_bucket_with_overflow = c_prev + 1);
       (* only a 1 bit overflow *)
       let dn_prev_overflow, dn_prev_bucket_unsigned =
         msb up_prev_bucket_with_overflow, lsbs up_prev_bucket_with_overflow
       in
-      (* if x_{i-1} >= 2^{c-1}, then use (x_{c_1} - 2^c) instead 
+      (* if x_{i-1} >= 2^{c-1}, then use (x_{i-1} - 2^c) instead 
        * assume that carry is small compared to window, so we never have to both overflow and negate
        *)
       let dn_prev_negate = msb dn_prev_bucket_unsigned in
@@ -108,12 +108,19 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
         let windows = registered_up.value.windows in
         windows.(stage - 1)
           <- reg_with_handshake
-               (mux2 dn_prev_negate dn_prev_signed_and_shifted dn_prev_bucket_unsigned);
+               (uresize
+                  (mux2 dn_prev_negate dn_prev_signed_and_shifted dn_prev_bucket_unsigned)
+                  max_window_size_bits);
         { registered_up with value = { registered_up.value with windows; carry } }
       in
       (* we can accept whenever we are currently unoccupied, or we are occupied and being drained *)
       up_ready <== (~:(dn_scalar.valid) |: (dn_scalar.valid &: dn_ready));
       { O.dn_scalar; up_ready }
+    ;;
+
+    let hierarchical ?instance ~stage scope =
+      let module H = Hierarchy.In_scope (I) (O) in
+      H.hierarchical ?instance ~name:"pipeline_stage" ~scope (create ~stage)
     ;;
   end
 
@@ -125,7 +132,7 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
       ; value =
           { Pipeline_stage.Scalar_compute.windows =
               Array.map2_exn window_bit_sizes window_bit_offsets ~f:(fun width offset ->
-                i.scalar.:+[offset, Some width])
+                uresize i.scalar.:+[offset, Some width] max_window_size_bits)
           ; carry = gnd
           ; last_scalar = i.last_scalar
           ; input_point = i.input_point
@@ -137,12 +144,10 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
     let rec construct_pipeline stage up_scalar =
       let dn_ready = wire 1 in
       let cur_stage =
-        Pipeline_stage.create
+        Pipeline_stage.hierarchical
           scope
-          ~clock:i.clock
-          ~clear:i.clear
           ~stage
-          { up_scalar; dn_ready }
+          { clock = i.clock; clear = i.clear; up_scalar; dn_ready }
       in
       let next_up_ready =
         if stage = num_windows - 1
@@ -163,15 +168,10 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
     let output_scalar, output_negatives =
       (* perform the final carry *)
       Array.mapi output.value.windows ~f:(fun i v ->
+        let v = sel_bottom v window_bit_sizes.(i) in
         let signed_val =
-          if i = num_windows - 1
-          then (
-            (* this can never overflow *)
-            let final_carry_value =
-              1 lsl (window_bit_sizes.(i - 1) - window_bit_sizes.(i))
-            in
-            v +:. final_carry_value)
-          else v
+          if i = num_windows - 1 then (* this can never overflow *)
+                                   v +:. 1 else v
         in
         let negative = msb signed_val in
         let unsigned_val = mux2 negative (negate signed_val) signed_val in

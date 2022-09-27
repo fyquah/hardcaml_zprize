@@ -5,6 +5,7 @@ open Msm_pippenger
 
 module Make (Config : Msm_pippenger.Config.S) = struct
   module Utils = Utils.Make (Config)
+  module Config_utils = Config_utils.Make (Config)
   module Top = Top.Make (Config)
   module I = Top.I
   module O = Top.O
@@ -73,7 +74,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     done;
     i.result_point_ready := Bits.vdd;
     reset_cycle_cnt ();
-    let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
+    let bucket = ref (Config_utils.num_buckets 0) in
     let window = ref 0 in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     while !result_point_cnt < Top.num_result_points && !cycle_cnt < timeout do
@@ -103,17 +104,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
           := if !bucket = 1
              then (
                Int.incr window;
-               let next_window_size_bits =
-                 if !window = 0
-                 then Top.first_window_size_bits
-                 else Config.window_size_bits
-               in
-               (1 lsl next_window_size_bits) - 1)
+               Config_utils.num_buckets !window)
              else !bucket - 1);
       Cyclesim.cycle sim;
       Int.incr cycle_cnt
     done;
     print_s [%message "Got" (List.length !result_points : int)];
+    [%test_result: int] ~expect:Top.num_result_points (List.length !result_points);
     reset_cycle_cnt ();
     Cyclesim.cycle sim;
     let result = { waves; points = List.rev !result_points; inputs } in
