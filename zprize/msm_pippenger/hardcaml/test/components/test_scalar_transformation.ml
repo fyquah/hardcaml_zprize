@@ -24,7 +24,7 @@ module Sim = Cyclesim.With_interface (Scalar_transformation.I) (Scalar_transform
 module Waveform = Hardcaml_waveterm.Waveform
 
 let create_sim () =
-  let scope = Scope.create ~flatten_design:true () in
+  let scope = Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true () in
   Sim.create ~config:Cyclesim.Config.trace_all (Scalar_transformation.create scope)
 ;;
 

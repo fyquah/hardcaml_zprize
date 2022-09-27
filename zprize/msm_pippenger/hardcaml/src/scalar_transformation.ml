@@ -13,26 +13,25 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
     type 'a t =
       { clock : 'a
       ; clear : 'a
-      ; scalar : 'a [@bits scalar_bits] [@rtlprefix "i_"]
-      ; scalar_valid : 'a [@rtlprefix "i_"]
-      ; last_scalar : 'a [@rtlprefix "i_"]
-      ; input_point : 'a Xyt.t [@rtlprefix "i_"]
-      ; scalar_and_input_point_ready : 'a [@rtlprefix "i_"]
+      ; scalar : 'a [@bits scalar_bits]
+      ; scalar_valid : 'a
+      ; last_scalar : 'a
+      ; input_point : 'a Xyt.t [@rtlprefix "i$xyt$"]
+      ; scalar_and_input_point_ready : 'a
       }
-    [@@deriving sexp_of, hardcaml]
+    [@@deriving sexp_of, hardcaml ~rtlprefix:"i$"]
   end
 
   module O = struct
     type 'a t =
-      { scalar : 'a array
-           [@bits max_window_size_bits] [@length num_windows] [@rtlprefix "o_"]
-      ; scalar_negatives : 'a array [@length num_windows] [@rtlprefix "o_"]
-      ; scalar_valid : 'a [@rtlprefix "o_"]
-      ; last_scalar : 'a [@rtlprefix "o_"]
-      ; input_point : 'a Xyt.t [@rtlprefix "o_"]
-      ; scalar_and_input_point_ready : 'a [@rtlprefix "o_"]
+      { scalar : 'a array [@bits max_window_size_bits] [@length num_windows]
+      ; scalar_negatives : 'a array [@length num_windows]
+      ; scalar_valid : 'a
+      ; last_scalar : 'a
+      ; input_point : 'a Xyt.t [@rtlprefix "o$xyt$"]
+      ; scalar_and_input_point_ready : 'a
       }
-    [@@deriving sexp_of, hardcaml]
+    [@@deriving sexp_of, hardcaml ~rtlprefix:"o$"]
   end
 
   module Pipeline_stage = struct
@@ -80,7 +79,6 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
       assert (0 < stage && stage < num_windows);
       (* compute window and carry widths *)
       let c_prev = window_bit_sizes.(stage - 1) in
-      let c_cur = window_bit_sizes.(stage) in
       (* first perform the carry on the previous bucket *)
       let up_prev_bucket_with_overflow =
         let v = sel_bottom up_scalar.value.windows.(stage - 1) c_prev in
@@ -96,8 +94,10 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
        *)
       let dn_prev_negate = msb dn_prev_bucket_unsigned in
       let dn_prev_signed_and_shifted =
-        let shift_value = of_int (1 lsl c_prev) ~width:(c_cur + 1) in
-        sel_bottom Sop.(dn_prev_bucket_unsigned -: shift_value) c_prev
+        let v = uresize dn_prev_bucket_unsigned (c_prev + 1) in
+        let shift_value = of_int (1 lsl c_prev) ~width:(c_prev + 1) in
+        let shifted = sel_bottom Sop.(v -: shift_value) c_prev in
+        negate shifted
       in
       let dn_scalar =
         (* just handshake everything, then overwrite the relevant fields *)
@@ -145,6 +145,7 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
       let dn_ready = wire 1 in
       let cur_stage =
         Pipeline_stage.hierarchical
+          ~instance:("pipeline_window_" ^ Printf.sprintf "%02d" stage)
           scope
           ~stage
           { clock = i.clock; clear = i.clear; up_scalar; dn_ready }
