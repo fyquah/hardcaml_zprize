@@ -35,7 +35,7 @@ void phase1(
 
   // Phase 1: read transposed, writeback transposed.
 phase1_load:
-  for (ap_uint<32> i = 0; i < NUM_ROWS * NUM_ROWS; i++) {
+  for (ap_uint<32> i = 0; i < (NUM_ROWS * NUM_ROWS) >> LOGCORES; i++) {
 #pragma HLS pipeline II=1
     chunk_t v;
 
@@ -45,7 +45,7 @@ phase1_load:
   }
 
 phase1_store:
-  for (ap_uint<32> i = 0; i < NUM_ROWS * NUM_ROWS; i++) {
+  for (ap_uint<32> i = 0; i < (NUM_ROWS * NUM_ROWS) >> LOGCORES; i++) {
 #pragma HLS pipeline II=1
     chunk_t v = compute_to_controller.read();
     gmem_out[i] = v.data;
@@ -64,15 +64,16 @@ void phase2(
 
 phase2_load:
   // Phase 2: read linear, writeback transposed
-  for (ap_uint<16> block_col = 0; block_col < (NUM_ROWS >> LOGCORES); block_col++) {
-    for (ap_uint<16> block_row = 0; block_row < (NUM_ROWS >> (LOGCORES + LOGBLOCKS)); block_row++) {
-      for (ap_uint<16> word = 0; word < (NUM_CORES * NUM_BLOCKS); word++) {
+  for (ap_uint<32> block_col = 0; block_col < (NUM_ROWS >> LOGCORES); block_col++) {
+    for (ap_uint<32> block_row = 0; block_row < (NUM_ROWS >> (LOGCORES + LOGBLOCKS)); block_row++) {
+      for (ap_uint<32> word = 0; word < (NUM_CORES * NUM_BLOCKS); word++) {
 #pragma HLS pipeline II=1
 
         chunk_t v;
         v.data = gmem_in[
-          (block_col * (NUM_CORES * NUM_CORES * NUM_BLOCKS))
-            + (block_row * (NUM_ROWS * NUM_CORES * NUM_BLOCKS))
+          (block_col << (LOGCORES + LOGCORES + LOGBLOCKS))
+            + (block_row << (LOGROWS + LOGCORES + LOGBLOCKS))
+            + word
         ];
         v.user = 1;
         controller_to_compute.write(v);
@@ -81,7 +82,7 @@ phase2_load:
   }
 
 phase2_store:
-  for (ap_uint<32> i = 0; i < NUM_ROWS * NUM_ROWS; i++) {
+  for (ap_uint<32> i = 0; i < (NUM_ROWS * NUM_ROWS) >> LOGCORES; i++) {
 #pragma HLS pipeline II=1
     chunk_t v = compute_to_controller.read();
     gmem_out[i] = v.data;

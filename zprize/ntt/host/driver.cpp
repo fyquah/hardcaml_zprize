@@ -1,6 +1,8 @@
 #include <assert.h>
 
 #include "driver.h"
+#include "ntt_preprocessing.h"
+#include "ntt_postprocessing.h"
 
 namespace argpos {
   const uint64_t GMEM_INPUT = 3;
@@ -229,7 +231,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
 
   bench("Evaluate NTT", [&]() {
     bench("Copy to internal page-aligned buffer", [&](){
-        memcpy(buffer->input_data(), in, sizeof(uint64_t) * data_length);
+        ntt_preprocessing(buffer->input_data(), in, row_size);
     });
 
     bench("Copying input points to device", [&]() {
@@ -245,7 +247,15 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
     });
 
     bench("Copy from internal page-aligned buffer", [&]() {
-      memcpy(out, buffer->output_data(), sizeof(uint64_t) * data_length);
+        uint64_t logblocks;
+        if (row_size == (1 << 12)) {
+          logblocks = 3;
+        } else if (row_size == (1 << 6)) {
+          logblocks = 2;
+        } else {
+          assert(false);
+        }
+        ntt_postprocessing(out, buffer->output_data(), row_size, logblocks);
     });
   });
 
@@ -267,7 +277,10 @@ void NttFpgaDriver::simple_evaluate(uint64_t *out, const uint64_t *in, uint64_t 
 }
 
 void NttFpgaDriver::expert__evaluate_on_fpga_blocking(UserBuffer* buffer) {
+  std::cout << "Enqueued phase1 work and waiting" << std::endl;
   enqueue_phase1_work(buffer);
+  OCL_CHECK(err, err = buffer->ev_phase1_work.wait());
+  std::cout << "Enqueued phase2 work and waiting" << std::endl;
   enqueue_phase2_work(buffer);
   OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
 }
