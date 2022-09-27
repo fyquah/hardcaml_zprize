@@ -9,8 +9,12 @@ let rec create_pipe_chain ~reg ~n x =
 
 let create_beat ~clock ~enable ~num_entries valid_in =
   let width = Int.ceil_log2 num_entries in
-  reg_fb (Reg_spec.create ~clock ()) ~width ~enable ~f:(fun fb ->
-    mux2 (fb ==:. num_entries - 1 |: (fb ==:. 0 &: ~:valid_in)) (zero width) @@ (fb +:. 1))
+  (* This allows us to create a beat without needing a clear signal. *)
+  mux2
+    valid_in
+    (zero width)
+    (reg_fb (Reg_spec.create ~clock ()) ~width ~enable ~f:(fun fb ->
+       mux2 valid_in (of_int ~width 1) (fb +:. 1)))
 ;;
 
 let arbitrate ~enable ~clock ~valid ~f inputs =

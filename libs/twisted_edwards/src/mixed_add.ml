@@ -362,7 +362,9 @@ module Make (Num_bits : Num_bits.S) = struct
     + Stage5.latency config
   ;;
 
-  let create ~config scope { I.clock; valid_in; p1; p2 } =
+  let create ~(config : Config.t) scope { I.clock; valid_in; p1; p2 } =
+    if not config.arbitrated_multiplier
+    then failwith "Mixed add only supports arbitrated mode";
     let { Stage5.x3; y3; z3; t3; valid = valid_out } =
       { p1; p2; valid = valid_in }
       |> Stage0.create ~config ~scope ~clock
@@ -373,5 +375,10 @@ module Make (Num_bits : Num_bits.S) = struct
       |> Stage5.create ~config ~scope ~clock
     in
     { O.valid_out; p3 = { x = x3; y = y3; z = z3; t = t3 } }
+  ;;
+
+  let hierarchical ?instance ~config scope =
+    let module H = Hierarchy.In_scope (I) (O) in
+    H.hierarchical ?instance ~name:"mixed_add" ~scope (create ~config)
   ;;
 end

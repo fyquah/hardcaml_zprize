@@ -25,5 +25,11 @@ module type S = sig
 
     val latency : Config.t -> int
     val create : config:Config.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
+
+    val hierarchical
+      :  ?instance:string
+      -> config:Config.t
+      -> Scope.t
+      -> Signal.t Interface.Create_fn(I)(O).t
   end
 end

@@ -20,6 +20,7 @@ test/*run_summary
 test/*.wdb
 test/input.points
 test/output.points
+test/host_msm
 
 # vim stuff
 *.swp

@@ -5,7 +5,6 @@
   core
   core_unix
   core_unix.command_unix
-  custom_rtl
   hardcaml_waveterm.interactive
   msm_pippenger
   msm_pippenger_test_components

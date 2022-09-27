@@ -2,18 +2,26 @@
 
 set -euo pipefail
 
-make -C ../host host.exe
+# Make sure all the binaries are built
+mkdir -p ../host/build
+cd ../host/build
+cmake3 .. 
+make -j
 
-# fyquah: I think vitis requires emconfig.json to be in the same directory as host.exe,
-# so copy both things here.
+cd ../../test
 
+# Copy these files local so Vivado does not complain
 cp ../fpga/build/_x.hw_emu.xilinx_aws-vu9p-f1_shell-v04261818_201920_3/emconfig.json ./
-cp ../host/host.exe ./
+cp ../host/build/driver/host_buckets ./
 
 # xsim requires xrt.ini requires absolute directory for pre-run tcl scripts.
 sed -e "s#CURRENT_DIRECTORY#$PWD#g" xrt.template.ini >xrt.ini
 
-# Run this to get the input and output points file. Make sure the -window and -scalar settings match the FPGA build
-dune exec -- ../hardcaml/bin/tools.exe test-vectors -input input.points -output output.points -num 1024
+# Run this to get the input points file.
+dune exec -- ../hardcaml/bin/tools.exe test-vectors \
+  -num-points 4 \
+  -input-filename input.points \
+  -output-filename output.points \
+  -seed 0
 
-XCL_EMULATION_MODE=hw_emu ./host.exe ../fpga/build/build_dir.hw_emu.xilinx_aws-vu9p-f1_shell-v04261818_201920_3/msm_pippenger.xclbin input.points output.points
+XCL_EMULATION_MODE=hw_emu ./host_buckets ../fpga/build/build_dir.hw_emu.xilinx_aws-vu9p-f1_shell-v04261818_201920_3/msm_pippenger.xclbin input.points output.points
