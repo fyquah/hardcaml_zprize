@@ -141,10 +141,12 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
         uint32_t word = strtol(byteString.c_str(), NULL, 16);
         source_kernel_input_scalars[scalar + (i / 8)] = word;
       }
-      scalar = scalar + (512 / 4);
+      scalar = scalar + ((512 / 8) / 4);
     }
     input_scalars_file.close();
   }
+
+
 
   // OPENCL HOST CODE AREA START
   // Create Program and Kernel
