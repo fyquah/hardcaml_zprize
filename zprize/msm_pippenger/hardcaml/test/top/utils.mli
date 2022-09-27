@@ -66,4 +66,5 @@ module Make (Config : Msm_pippenger.Config.S) : sig
   end
 
   val perform_scalar_reduction : Bits.t -> Reduced_scalar.t array
+  val check_scalar_reduction : Bits.t -> Reduced_scalar.t array -> unit
 end

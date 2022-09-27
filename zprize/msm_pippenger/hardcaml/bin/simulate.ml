@@ -67,6 +67,16 @@ let command_msm_result_to_host =
           (Msm_pippenger_test_components.Test_msm_result_to_host.waveform ())]
 ;;
 
+let command_scalar_transformation =
+  Command.basic
+    ~summary:"Simulate the scalar_transformation block"
+    [%map_open.Command
+      let verify = flag "-verify" no_arg ~doc:" Verify the result" in
+      fun () ->
+        Hardcaml_waveterm_interactive.run
+          (Msm_pippenger_test_components.Test_scalar_transformation.waveform ~verify ())]
+;;
+
 let command_top_small_test =
   Command.basic
     ~summary:"Simulate a smaller MSM at the top level"
@@ -91,6 +101,7 @@ let command_test_cases =
     [ "kernel-back-to-back", command_vitis_kernel_back_to_back
     ; "msm-result-to-host", command_msm_result_to_host
     ; "top-small-test", command_top_small_test
+    ; "scalar-transformation", command_scalar_transformation
     ]
 ;;
 
