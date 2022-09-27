@@ -55,19 +55,39 @@ pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParame
             let test_npow = std::env::var("TEST_NPOW").expect("Must specified either TEST_NPOW or TEST_LOAD_DATA_FROM");
             let npoints_npow = i32::from_str(&test_npow).unwrap();
             let batches = 4;
-            let (points, scalars) =
-                generate_points_scalars::<G1Affine>(1usize << npoints_npow, batches);
-            let mut arkworks_results = Vec::new();
+            let (points, scalars, arkworks_results) =
+                if std::env::var("TEST_TRIVAL_INPUTS") == Ok(String::from("1")) {
+                    println!("Testing with trivial inputs");
+                    let mut points = Vec::with_capacity(1usize << npoints_npow);
+                    let mut scalars = Vec::with_capacity((1usize << npoints_npow) * batches);
+                    let mut arkworks_results = Vec::new();
+                    let g1_generator = G1Affine::prime_subgroup_generator();
+                    for _ in 0..(1usize << npoints_npow) {
+                        points.push(g1_generator);
+                    }
+                    for i in 0..scalars.len() {
+                        scalars.push(
+                            Fp256::<FrParameters>::from(if i % points.len() == 0 { 1 } else { 0 }));
+                    }
+                    for _ in 0..batches {
+                        arkworks_results.push(g1_generator);
+                    }
+                    (points, scalars, arkworks_results)
+                } else {
+                    let mut arkworks_results = Vec::new();
+                    let (points, scalars) = generate_points_scalars::<G1Affine>(1usize << npoints_npow, batches);
+                    for b in 0..batches {
+                        let start = b * points.len();
+                        let end = (b + 1) * points.len();
+                        let arkworks_result =
+                            VariableBaseMSM::multi_scalar_mul(points.as_slice(), unsafe {
+                                std::mem::transmute::<&[_], &[BigInteger256]>(&scalars[start..end])
+                            }).into_affine();
+                        arkworks_results.push(arkworks_result);
+                    }
+                    (points, scalars, arkworks_results)
+                };
 
-            for b in 0..batches {
-                let start = b * points.len();
-                let end = (b + 1) * points.len();
-                let arkworks_result =
-                    VariableBaseMSM::multi_scalar_mul(points.as_slice(), unsafe {
-                        std::mem::transmute::<&[_], &[BigInteger256]>(&scalars[start..end])
-                    }).into_affine();
-                arkworks_results.push(arkworks_result);
-            }
             println!("Generating testdata took {:?}", now.elapsed());
 
             match std::env::var("TEST_WRITE_DATA_TO") {
