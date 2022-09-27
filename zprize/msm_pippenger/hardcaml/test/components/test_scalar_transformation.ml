@@ -48,5 +48,5 @@ let%expect_test "Check some scalars with the model" =
     let _res = model s in
     ());
   print_s [%message "Checked" (List.length test_scalars : int)];
-  [%expect]
+  [%expect{| (Checked ("List.length test_scalars" 819200)) |}]
 ;;
