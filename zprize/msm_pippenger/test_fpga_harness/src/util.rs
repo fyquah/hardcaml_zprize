@@ -20,6 +20,8 @@ use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
 
+use std::time::SystemTime;
+
 pub fn generate_points_scalars<G: AffineCurve>(
     len: usize,
     batch_size: usize
@@ -49,6 +51,7 @@ pub fn generate_points_scalars<G: AffineCurve>(
 pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParameters>>, Vec<G1Affine>) {
     match std::env::var("TEST_LOAD_DATA_FROM") {
         Err(_) =>  {
+            let now = SystemTime::now();
             let test_npow = std::env::var("TEST_NPOW").expect("Must specified either TEST_NPOW or TEST_LOAD_DATA_FROM");
             let npoints_npow = i32::from_str(&test_npow).unwrap();
             let batches = 4;
@@ -65,25 +68,28 @@ pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParame
                     }).into_affine();
                 arkworks_results.push(arkworks_result);
             }
+            println!("Generating testdata took {:?}", now.elapsed());
 
             match std::env::var("TEST_WRITE_DATA_TO") {
                 Err(_) => (),
                 Ok(dirname) => {
                     println!("Saving testdata to {}", dirname);
+                    let now = SystemTime::now();
                     // it would be real sad if we run all the data generation above, then it chokes
                     // because dir doesn't exist .... run mkdir -p here
 
                     let dirname = Path::new(&dirname);
                     std::fs::create_dir_all(&dirname).unwrap();
-                    points.serialize(
+                    points.serialize_unchecked(
                         File::create(dirname.join("points.bin")).unwrap()
                     ).unwrap();
-                    scalars.serialize(
+                    scalars.serialize_unchecked(
                         File::create(dirname.join("scalars.bin")).unwrap()
                     ).unwrap();
-                    arkworks_results.serialize(
+                    arkworks_results.serialize_unchecked(
                         File::create(dirname.join("arkworks_results.bin")).unwrap()
                     ).unwrap();
+                    println!("Saving testdata took {:?}", now.elapsed());
                 }
             }
 
@@ -91,18 +97,20 @@ pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParame
         },
         Ok(test_data_dir) => {
             println!("Loading testdata from {}", test_data_dir);
+            let now = SystemTime::now();
             let points =
-                Vec::<G1Affine>::deserialize(
+                Vec::<G1Affine>::deserialize_unchecked(
                     File::open(Path::new(&test_data_dir).join("points.bin")).unwrap()
                 ).unwrap();
             let scalars =
-                Vec::<Fp256<FrParameters>>::deserialize(
+                Vec::<Fp256<FrParameters>>::deserialize_unchecked(
                     File::open(Path::new(&test_data_dir).join("scalars.bin")).unwrap()
                 ).unwrap();
             let arkworks_results =
-                Vec::<G1Affine>::deserialize(
+                Vec::<G1Affine>::deserialize_unchecked(
                     File::open(Path::new(&test_data_dir).join("arkworks_results.bin")).unwrap()
                 ).unwrap();
+            println!("Loading testdata took {:?}", now.elapsed());
             assert!(scalars.len() % points.len() == 0);
             assert!(scalars.len() >= points.len());
 
