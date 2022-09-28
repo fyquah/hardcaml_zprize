@@ -222,7 +222,9 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         ~f:(fun i (orig, { scalar; negative }) ->
         let orig = Bits.to_int orig in
         let reduced_scalar = Bits.to_int scalar in
-        print_s [%message (i : int) (orig : int) (reduced_scalar : int) (negative : bool)]);
+        print_s
+          [%message
+            (i : int) (orig : Int.Hex.t) (reduced_scalar : Int.Hex.t) (negative : bool)]);
       raise_s
         [%message
           (split_scalar : Bits.t array)

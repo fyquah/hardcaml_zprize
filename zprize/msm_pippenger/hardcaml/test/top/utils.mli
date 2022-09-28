@@ -63,6 +63,7 @@ module Make (Config : Msm_pippenger.Config.S) : sig
       { scalar : Bits.t
       ; negative : bool
       }
+    [@@deriving sexp_of]
   end
 
   val perform_scalar_reduction : Bits.t -> Reduced_scalar.t array

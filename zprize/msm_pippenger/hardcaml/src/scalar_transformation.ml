@@ -70,7 +70,13 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
       [@@deriving sexp_of, hardcaml]
     end
 
-    let create _scope ~stage ({ clock; clear; up_scalar; dn_ready } : _ I.t) : _ O.t =
+    let create scope ~stage ({ clock; clear; up_scalar; dn_ready } : _ I.t) : _ O.t =
+      let ( -- ) = Scope.naming scope in
+      Array.iteri up_scalar.value.windows ~f:(fun i v ->
+        ignore (v -- Printf.sprintf "0_up$0_src$windows$w_%02d" i : Signal.t));
+      ignore (up_scalar.valid -- "0_up$0_src$valid" : Signal.t);
+      ignore (up_scalar.value.carry -- "0_up$0_src$carry" : Signal.t);
+      ignore (dn_ready -- "1_dn$1_dst$ready" : Signal.t);
       let up_ready = wire 1 in
       let reg_with_handshake v =
         let spec = Reg_spec.create ~clock ~clear () in
@@ -97,7 +103,7 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
         let v = uresize dn_prev_bucket_unsigned (c_prev + 1) in
         let shift_value = of_int (1 lsl c_prev) ~width:(c_prev + 1) in
         let shifted = sel_bottom Sop.(v -: shift_value) c_prev in
-        negate shifted
+        shifted
       in
       let dn_scalar =
         (* just handshake everything, then overwrite the relevant fields *)
@@ -113,6 +119,11 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
                   max_window_size_bits);
         { registered_up with value = { registered_up.value with windows; carry } }
       in
+      Array.iteri dn_scalar.value.windows ~f:(fun i v ->
+        ignore (v -- Printf.sprintf "1_dn$0_src$windows$w_%02d" i : Signal.t));
+      ignore (dn_scalar.value.carry -- "1_dn$0_src$carry" : Signal.t);
+      ignore (dn_scalar.valid -- "1_dn$0_src$valid" : Signal.t);
+      ignore (up_ready -- "0_up$1_dst$ready" : Signal.t);
       (* we can accept whenever we are currently unoccupied, or we are occupied and being drained *)
       up_ready <== (~:(dn_scalar.valid) |: (dn_scalar.valid &: dn_ready));
       { O.dn_scalar; up_ready }
@@ -145,7 +156,7 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
       let dn_ready = wire 1 in
       let cur_stage =
         Pipeline_stage.hierarchical
-          ~instance:("pipeline_window_" ^ Printf.sprintf "%02d" stage)
+          ~instance:("stage_" ^ Printf.sprintf "%02d" stage)
           scope
           ~stage
           { clock = i.clock; clear = i.clear; up_scalar; dn_ready }
@@ -170,12 +181,16 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
       (* perform the final carry *)
       Array.mapi output.value.windows ~f:(fun i v ->
         let v = sel_bottom v window_bit_sizes.(i) in
-        let signed_val =
-          if i = num_windows - 1 then (* this can never overflow *)
-                                   v +:. 1 else v
+        let unsigned_val, negative =
+          if i = num_windows - 1
+          then (* this can never overflow *)
+            Uop.(v +: output.value.carry), gnd
+          else (
+            (* CR rayesantharao: can do a bit trick here: (n + mask ) ^ mask (mask = (sra n (w - 1))) *)
+            let negative = msb v in
+            let bucket = mux2 negative (negate v) v in
+            bucket, negative)
         in
-        let negative = msb signed_val in
-        let unsigned_val = mux2 negative (negate signed_val) signed_val in
         uresize unsigned_val max_window_size_bits, negative)
       |> Array.unzip
     in
