@@ -12,7 +12,7 @@ type hex_z = Z.t
 
 let sexp_of_hex_z x = Sexp.Atom (Printf.sprintf "0x%s" (Z.format "x" x))
 
-let barrett_reduction ?(debug = false) ~levels a =
+let barrett_reduction ?(debug = false) ~levels ~num_correction_steps a =
   let a' = sel_bottom a (bits + 2) in
   let q =
     Approx_msb_multiplier_model.approx_msb_multiply ~levels ~w:378 (drop_bottom a bits) m
@@ -27,9 +27,11 @@ let barrett_reduction ?(debug = false) ~levels a =
     sel_bottom Z.(a' - qp) (bits + 2)
   in
   let a_mod_p = ref a_minus_qp in
-  Array.iter [| 8; 4; 2; 1 |] ~f:(fun x ->
-    let candidate = Z.(!a_mod_p - (of_int x * p)) in
-    if Z.(gte candidate zero) then a_mod_p := candidate);
+  Array.iter
+    (Array.rev (Array.init num_correction_steps ~f:(fun i -> 1 lsl i)))
+    ~f:(fun x ->
+      let candidate = Z.(!a_mod_p - (of_int x * p)) in
+      if Z.(gte candidate zero) then a_mod_p := candidate);
   if debug
   then
     print_s
@@ -44,8 +46,8 @@ let generate_z ~lo_incl ~hi_incl =
     (Bigint.gen_incl (Bigint.of_zarith_bigint lo_incl) (Bigint.of_zarith_bigint hi_incl))
 ;;
 
-let test ?debug ~levels a =
-  let obtained = barrett_reduction ?debug ~levels a in
+let test ?debug ~levels ~num_correction_steps a =
+  let obtained = barrett_reduction ?debug ~levels ~num_correction_steps a in
   let expected = Z.(a mod p) in
   if not (Z.equal obtained expected)
   then
@@ -57,15 +59,28 @@ let test ?debug ~levels a =
           ~expected:(Z.format "0x%x" expected)]
 ;;
 
-let test_random ~levels =
+let test_random ~levels ~num_correction_steps =
   Quickcheck.test
     (let%bind.Quickcheck.Generator a = generate_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one) in
      let%bind.Quickcheck.Generator b = generate_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one) in
      Quickcheck.Generator.return Z.(a * b))
     ~trials:100_000
-    ~f:(test ~levels)
+    ~f:(test ~levels ~num_correction_steps)
 ;;
 
+let%expect_test "Quickcheck for 332 config" =
+  test_random
+    ~levels:Approx_msb_multiplier_model.golden_config_332
+    ~num_correction_steps:3
+;;
+
+let%expect_test "Quickcheck for 2222 config" =
+  test_random
+    ~levels:Approx_msb_multiplier_model.golden_config_2222
+    ~num_correction_steps:4
+;;
+
+(*
 let%expect_test "Special values" =
   test
     ~debug:true
@@ -99,10 +114,7 @@ let%expect_test "" =
      (!a_mod_p
       0x302e1ac4dadcc18d65269bb2bfcb095849f5ed17650bf32028a7a8da39e6213fae265c48a17dc7c61aeb1e9ae37e83)) |}]
 ;;
-
-let%expect_test "Compare barret reduction vs actual mod (mixed levels)" =
-  test_random ~levels:Approx_msb_multiplier_model.golden_config
-;;
+   *)
 
 (*
 let%expect_test "Compare barret reduction vs actual mod (only radix 3)" =

@@ -19,12 +19,6 @@ module Level = struct
     }
 end
 
-let calc_k radix w =
-  match radix with
-  | Radix.Radix_2 -> Float.to_int (Float.( * ) (Float.of_int w) 0.43)
-  | Radix.Radix_3 -> Float.to_int (Float.( * ) (Float.of_int w) 0.33)
-;;
-
 let rec estimated_upper_bound_error ~levels ~lo ~w =
   assert (w > 0);
   match levels with
@@ -80,7 +74,7 @@ let estimate_delta_error_2_to_n levels =
   ceil_div (estimated_upper_bound_error ~levels ~w:378 ~lo:0) Z.(one lsl 377)
 ;;
 
-let golden_config =
+let golden_config_2222 =
   let open Level in
   [ { radix = Radix_2; k = (fun _ -> 186) }
   ; { radix = Radix_2; k = (fun _ -> 94) }
@@ -89,10 +83,31 @@ let golden_config =
   ]
 ;;
 
-let%expect_test "Delta error" =
+let golden_config_332 =
+  let open Level in
+  [ { radix = Radix_3; k = (fun _ -> 125) }
+  ; { radix = Radix_3; k = (fun _ -> 42) }
+  ; { radix = Radix_2; k = (fun _ -> 20) }
+  ]
+;;
+
+let%expect_test "Delta error on 332" =
   Stdio.printf
     "Delta error = %s * (2^377)\n"
-    (Z.to_string (estimate_delta_error_2_to_n golden_config));
+    (Z.to_string (estimate_delta_error_2_to_n golden_config_332));
+  [%expect
+    {|
+    w=378 lo=0 k=125
+    w=128 lo=250 k=42
+    w=44 lo=334 k=20
+    Ground multiplier width = 24
+    Delta error = 5 * (2^377) |}]
+;;
+
+let%expect_test "Delta error on 2222" =
+  Stdio.printf
+    "Delta error = %s * (2^377)\n"
+    (Z.to_string (estimate_delta_error_2_to_n golden_config_2222));
   [%expect
     {|
     w=378 lo=0 k=186
@@ -166,9 +181,9 @@ let rec approx_msb_multiply ~(levels : Level.t list) ~w a b =
 let%expect_test "" =
   let a = Z.(p - one) in
   let b = m in
-  let approx = approx_msb_multiply ~levels:golden_config ~w:378 a b in
+  let approx = approx_msb_multiply ~levels:golden_config_332 ~w:378 a b in
   let actual = Z.(a * b) in
   let error = ceil_div Z.(actual - approx) Z.(one lsl 377) in
   Stdio.printf "Error = %s * 2^377\n" (Z.to_string error);
-  [%expect {| Error = 2 * 2^377 |}]
+  [%expect {| Error = 1 * 2^377 |}]
 ;;
