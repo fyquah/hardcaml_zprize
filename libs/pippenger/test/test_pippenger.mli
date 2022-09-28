@@ -17,6 +17,7 @@ end
 
 module Test (Config : Config) : sig
   val random_inputs : int -> Bits.t Msm_input.t array
+  val debug_inputs : int -> Bits.t Msm_input.t array
 
   val test
     :  ?waves:bool

@@ -112,7 +112,24 @@ module Make (Config : Config.S) = struct
     let push_stalled_point = Var.wire ~default:gnd in
     let pop_stalled_point = Var.wire ~default:gnd in
     let is_in_pipeline_reg = Var.reg spec ~width:num_windows in
-    let is_in_pipeline = is_in_pipeline_reg.value.:(0) -- "is_in_pipeline" in
+    ignore (is_in_pipeline_reg.value -- "is_in_pipeline_reg" : Signal.t);
+    let is_in_pipeline =
+      mux2
+        (sm.is Choose_mode)
+        (List.nth_exn pipes.is_in_pipeline 0)
+        is_in_pipeline_reg.value.:(0)
+      -- "is_in_pipeline"
+    in
+    let is_in_pipeline =
+      let optimised = false in
+      if optimised
+      then is_in_pipeline
+      else (
+        let is_in_pipeline =
+          concat_lsb pipes.is_in_pipeline -- "is_in_pipeline_reg" |> bits_lsb
+        in
+        mux window.value is_in_pipeline -- "is_in_pipeline")
+    in
     let shift_pipeline = Var.wire ~default:gnd in
     let scalar_read = Var.wire ~default:gnd in
     let flushing = Var.reg spec ~width:1 in

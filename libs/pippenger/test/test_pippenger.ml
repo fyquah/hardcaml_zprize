@@ -164,6 +164,15 @@ module Test (Config : Config) = struct
       })
   ;;
 
+  let debug_inputs num_scalars =
+    Array.init num_scalars ~f:(fun idx ->
+      { Msm_input.scalar =
+          Array.init Model.num_windows ~f:(fun _ ->
+            Bits.random ~width:Model.window_size_bits)
+      ; affine_point = Bits.of_int ~width:Model.affine_point_bits (idx + 1)
+      })
+  ;;
+
   let of_scalars scalars =
     Array.mapi scalars ~f:(fun idx scalar ->
       { Msm_input.scalar =
@@ -196,14 +205,34 @@ module Test (Config : Config) = struct
   let sum_window (i : Bits.t list array) = Array.map i ~f:(reduce0 ~f:Bits.( +: ))
   let sum_all_windows = Array.map ~f:sum_window
 
-  let print_results (i : Bits.t Msm_input.t array) =
+  let compare_hw_and_sw_buckets hw sw =
+    for window = 0 to Array.length sw - 1 do
+      for bucket = 0 to Array.length sw.(0) - 1 do
+        let hw = hw.(window).(bucket) in
+        let sw = sw.(window).(bucket) in
+        if hw <> sw
+        then
+          print_s
+            [%message
+              "mismatched bucket"
+                (window : int)
+                (bucket : int)
+                (hw : Int.Hex.t)
+                (sw : Int.Hex.t)]
+      done
+    done
+  ;;
+
+  let print_results (i : Bits.t Msm_input.t array) hw_results =
     let buckets = sort_into_buckets i in
     let sums = sum_all_windows buckets in
     let buckets = Array.map buckets ~f:(Array.map ~f:(List.map ~f:Bits.to_int)) in
     let sums = Array.map sums ~f:(Array.map ~f:Bits.to_int) in
+    Array.iter sums ~f:(fun s -> s.(0) <- 0);
     print_s
       [%message
-        "REFERENCE" (buckets : Int.Hex.t list array array) (sums : Int.Hex.t array array)]
+        "REFERENCE" (sums : Int.Hex.t array array) (buckets : Int.Hex.t list array array)];
+    compare_hw_and_sw_buckets hw_results sums
   ;;
 
   let poll ~timeout ~f cycle =
@@ -324,7 +353,7 @@ module Test (Config : Config) = struct
     in
     if verbose
     then (
-      print_results coefs;
+      print_results coefs results;
       print_s
         [%message
           "RESULTS" (final_sum : Int.Hex.t) (expected_sum : Int.Hex.t) (!cycle_num : int)]);
