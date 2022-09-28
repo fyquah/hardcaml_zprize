@@ -203,19 +203,17 @@ module Make (Config : Config.S) = struct
           ~size:(1 lsl address_bits)
           ~port_a:
             (let pre_transform_address =
-               sel_bottom
-                 (pipeline
-                    ~n:ram_lookup_latency
-                    spec
-                    (mux2
-                       (sm.is Read_result)
-                       bucket_address.value
-                       (pipeline
-                          ~n:(ram_read_latency + adder_latency + ram_write_latency)
-                          spec
-                          ctrl.bucket.scalar
-                       -- "ctrl.bucket")))
-                 address_bits
+               pipeline
+                 ~n:ram_lookup_latency
+                 spec
+                 (mux2
+                    (sm.is Read_result)
+                    bucket_address.value
+                    (pipeline
+                       ~n:(ram_read_latency + adder_latency + ram_write_latency)
+                       spec
+                       ctrl.bucket.scalar
+                    -- "ctrl.bucket"))
              in
              let port =
                { Ram_port.write_enable =
@@ -236,7 +234,10 @@ module Make (Config : Config.S) = struct
                       &: fifo_q_has_space)
                      -- "port_a_re")
                ; data = pipeline ~n:ram_write_latency spec (adder_p3 -- "port_a_d")
-               ; address = scalar_to_ram_index (module Signal) pre_transform_address
+               ; address =
+                   sel_bottom
+                     (scalar_to_ram_index (module Signal) pre_transform_address)
+                     address_bits
                }
              in
              Ram_port.(
@@ -251,8 +252,8 @@ module Make (Config : Config.S) = struct
                  spec
                  (mux2
                     (sm.is Read_result)
-                    (sel_bottom bucket_address.value address_bits -- "bucket.address")
-                    (sel_bottom ctrl.bucket.scalar address_bits -- "ctrl.bucket"))
+                    (bucket_address.value -- "bucket.address")
+                    (ctrl.bucket.scalar -- "ctrl.bucket"))
              in
              let port =
                { Ram_port.write_enable =
@@ -269,7 +270,10 @@ module Make (Config : Config.S) = struct
                      spec
                      ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
                ; data = Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram
-               ; address = scalar_to_ram_index (module Signal) pre_transform_address
+               ; address =
+                   sel_bottom
+                     (scalar_to_ram_index (module Signal) pre_transform_address)
+                     address_bits
                }
              in
              Ram_port.(
@@ -322,7 +326,7 @@ module Make (Config : Config.S) = struct
               ; sm.set_next Read_result
               ] )
           ; ( Idle
-            , [ bucket_address <--. 0
+            , [ bucket_address <--. 0 (* CR rayesantharao: will this cause issues? *)
               ; window_address <--. 0
               ; wait_count <--. 0
               ; done_l <--. 0
@@ -353,7 +357,7 @@ module Make (Config : Config.S) = struct
                   fifo_q_has_space
                   [ bucket_address <-- bucket_address.value -:. 1
                   ; when_
-                      (bucket_address.value ==:. 0)
+                      (bucket_address.value ==:. 1)
                       [ window_address <-- window_address.value -- "window_address" +:. 1
                       ; bucket_address <-- num_buckets_mux (window_address.value +:. 1)
                       ; when_

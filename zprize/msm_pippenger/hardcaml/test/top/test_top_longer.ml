@@ -12,7 +12,7 @@ let%expect_test "Test over more inputs" =
   let _result = Test.run_test 64 in
   [%expect
     {|
-    (Expecting (Top.num_result_points 28))
-    (Got ("List.length (!result_points)" 28))
+    (Expecting (Top.num_result_points 19))
+    (Got ("List.length (!result_points)" 19))
     PASS |}]
 ;;
