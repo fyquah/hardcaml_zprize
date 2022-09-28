@@ -127,7 +127,11 @@ module Config = struct
           }
         ]
     ; ground_multiplier =
-        Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
+        Mixed
+          { latency = 2
+          ; lut_only_hamming_weight_threshold = Some 6
+          ; hybrid_hamming_weight_threshold = None
+          }
     }
   ;;
 
@@ -166,7 +170,11 @@ module Config = struct
               }
             ]
         ; ground_multiplier =
-            Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
+            Mixed
+              { latency = 2
+              ; lut_only_hamming_weight_threshold = Some 6
+              ; hybrid_hamming_weight_threshold = None
+              }
         }
     ; subtracter_stages = 3
     ; num_correction_steps =
