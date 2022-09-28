@@ -7,6 +7,21 @@ module Config : sig
         { latency : int
         ; lut_only_hamming_weight_threshold : int
         }
+    | Mixed of
+        { latency : int
+        ; lut_only_hamming_weight_threshold : int option
+            (** Implements the ground multiplier with luts if the hamming
+             * weight of [argb] is less than
+             * lut_only_hamming_weight_threshold]. Skips this optimization if
+             * it's None.
+            *)
+        ; hybrid_hamming_weight_threshold : int option
+            (** Implements the ground multiplier with a hybrid dsp+lut
+             * multiplier if the hamming weight of [argb] is less than
+             * lut_only_hamming_weight_threshold]. Skips this optimization
+             * if it's None.
+            *)
+        }
     | Specialized_43_bit_multiply
   [@@deriving sexp_of]
 
