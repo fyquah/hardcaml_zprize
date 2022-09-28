@@ -13,18 +13,18 @@ type hex_z = Z.t
 let sexp_of_hex_z x = Sexp.Atom (Printf.sprintf "0x%s" (Z.format "x" x))
 
 let barrett_reduction ?(debug = false) ~levels ~num_correction_steps a =
-  let a' = sel_bottom a (bits + 2) in
+  let a' = sel_bottom a (bits + num_correction_steps) in
   let q =
     Approx_msb_multiplier_model.approx_msb_multiply ~levels ~w:378 (drop_bottom a bits) m
     |> Fn.flip drop_bottom bits
     |> Fn.flip sel_bottom bits
   in
-  let qp = sel_bottom Z.(q * p) (bits + 2) in
+  let qp = sel_bottom Z.(q * p) (bits + num_correction_steps) in
   let a_minus_qp =
     (* We use [sel_bottom] here to denote that we are ignoring most of the
      * upper bits.
      *)
-    sel_bottom Z.(a' - qp) (bits + 2)
+    sel_bottom Z.(a' - qp) (bits + num_correction_steps)
   in
   let a_mod_p = ref a_minus_qp in
   Array.iter
