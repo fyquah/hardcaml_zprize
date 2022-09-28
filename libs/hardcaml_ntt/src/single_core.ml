@@ -101,6 +101,7 @@ module With_rams (Config : Core_config.S) = struct
   let logn = Config.logn
   let n = 1 lsl logn
   let datapath_latency = Core_config.datapath_latency
+  let ram_latency = Core_config.ram_latency
 
   module Core = Make (Config)
 
@@ -146,6 +147,7 @@ module With_rams (Config : Core_config.S) = struct
       (Scope.sub_scope scope "ram_in")
       ~build_mode
       ~size:n
+      ~read_latency:ram_latency
       ~clock
       ~clear
       ~flip
@@ -178,6 +180,7 @@ module With_rams (Config : Core_config.S) = struct
         scope
         ~build_mode
         ~size:n
+        ~read_latency:ram_latency
         ~clock
         ~clear
         ~flip
@@ -212,6 +215,7 @@ module With_rams (Config : Core_config.S) = struct
         (Scope.sub_scope scope "ram_out")
         ~build_mode
         ~size:n
+        ~read_latency:ram_latency
         ~clock
         ~clear
         ~flip
@@ -270,7 +274,7 @@ module With_rams (Config : Core_config.S) = struct
       (Core.hierarchy
          ?row
          scope
-         (let first_stage = pipe ~n:1 core.first_stage in
+         (let first_stage = pipe ~n:Core_config.ram_latency core.first_stage in
           { clock = i.clock
           ; clear = i.clear
           ; start = i.start
