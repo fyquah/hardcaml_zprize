@@ -41,6 +41,7 @@ set_property sdx_kernel_type rtl $core
 set_property supported_families { } $core
 set_property auto_family_support_level level_2 $core
 set_param synth.elaboration.rodinMoreOptions "rt::set_parameter synRetiming true"
+
 ipx::create_xgui_files $core
 ipx::update_checksums $core
 ipx::check_integrity -kernel $core
