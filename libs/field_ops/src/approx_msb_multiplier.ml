@@ -4,7 +4,12 @@ open Signal
 open Reg_with_enable
 
 module Config = struct
-  module Level = Karatsuba_ofman_mult.Config.Level
+  module Level = struct
+    type t =
+      { k : int -> int
+      ; for_karatsuba : Karatsuba_ofman_mult.Config.Level.t
+      }
+  end
 
   type t =
     { levels : Level.t list
@@ -14,10 +19,13 @@ module Config = struct
   let latency { levels; ground_multiplier } =
     match levels with
     | [] -> Ground_multiplier.Config.latency ground_multiplier
-    | { radix = _; pre_adder_stages = _; middle_adder_stages = _; post_adder_stages }
+    | { for_karatsuba =
+          { radix = _; pre_adder_stages = _; middle_adder_stages = _; post_adder_stages }
+      ; k = _
+      }
       :: tl ->
       let slowest_multiplier =
-        tl
+        List.map tl ~f:(fun x -> x.for_karatsuba)
         |> Karatsuba_ofman_mult.Config.generate ~ground_multiplier
         |> Karatsuba_ofman_mult.Config.latency
       in
@@ -27,23 +35,16 @@ end
 
 module Input = Multiplier_input
 
-(* CR fyquah: Make this parameterizable, and then actually tune it. *)
-let calc_k radix w =
-  match radix with
-  | Radix.Radix_2 -> Float.to_int (Float.( * ) (Float.of_int w) 0.43)
-  | Radix.Radix_3 -> Float.to_int (Float.( * ) (Float.of_int w) 0.33)
-;;
-
 let split2 ~k x = drop_bottom x k, sel_bottom x k
 let split3 ~k x = drop_bottom x (2 * k), sel_bottom (drop_bottom x k) k, sel_bottom x k
 
 let rec create_recursive
-    ~scope
-    ~clock
-    ~enable
-    ~ground_multiplier
-    ~(levels : Config.Level.t list)
-    (input : Input.t)
+  ~scope
+  ~clock
+  ~enable
+  ~ground_multiplier
+  ~(levels : Config.Level.t list)
+  (input : Input.t)
   =
   match levels with
   | [] ->
@@ -66,23 +67,24 @@ let rec create_recursive
       (input : Input.t)
 
 and create_level
-    ~scope
-    ~clock
-    ~enable
-    ~ground_multiplier
-    ~remaining_levels
-    ~level:
-      { Config.Level.radix
-      ; middle_adder_stages = _
-      ; pre_adder_stages = _
-      ; post_adder_stages
-      }
-    (input : Input.t)
+  ~scope
+  ~clock
+  ~enable
+  ~ground_multiplier
+  ~remaining_levels
+  ~level:
+    { Config.Level.for_karatsuba =
+        { radix; middle_adder_stages = _; pre_adder_stages = _; post_adder_stages }
+    ; k = calc_k
+    }
+  (input : Input.t)
   =
   let spec = Reg_spec.create ~clock () in
   let pipeline ~n x = if is_const x then x else pipeline ~enable spec x ~n in
   let child_karatsuba_config =
-    Karatsuba_ofman_mult.Config.generate ~ground_multiplier remaining_levels
+    Karatsuba_ofman_mult.Config.generate
+      ~ground_multiplier
+      (List.map remaining_levels ~f:(fun l -> l.for_karatsuba))
   in
   let create_recursive input =
     let n =
@@ -110,17 +112,16 @@ and create_level
         ~clock
         a
         (match b with
-        | Const { signal_id = _; constant } ->
-          `Constant (Bits.to_z ~signedness:Unsigned constant)
-        | _ -> `Signal b)
+         | Const { signal_id = _; constant } ->
+           `Constant (Bits.to_z ~signedness:Unsigned constant)
+         | _ -> `Signal b)
   in
   let w = Multiplier_input.width input in
   let w2 = w * 2 in
-  let k = calc_k radix w in
+  let k = calc_k w in
   let pipe_add ~stages items = With_shift.pipe_add ~scope ~enable ~clock ~stages items in
   match radix with
   | Radix.Radix_2 ->
-    let k = calc_k radix w in
     (* ((ta * 2^hw) + ba) * ((tb * 2^hw) + bb)
      * = ((ua * ub) * 2^(2 * hw)) + (((ua * lb) + (ub * la)) * 2^hw) + (la * lb)
      *
@@ -133,83 +134,83 @@ and create_level
      * maximum error this can produce.
      *)
     (match input with
-    | Multiply_by_constant _ -> assert false
-    | Multiply (a, b) ->
-      let ua, la = split2 ~k a in
-      let ub, lb = split2 ~k b in
-      let wu = width ua in
-      let ua_mult_lb = create_recursive (Multiply (ua, uresize lb wu)) in
-      let ub_mult_la = create_recursive (Multiply (ub, uresize la wu)) in
-      let ua_mult_ub = create_full_multiplier ua ub in
-      let result =
-        pipe_add
-          ~stages:post_adder_stages
-          [ With_shift.uresize ua_mult_lb (w2 - k)
-          ; With_shift.uresize ub_mult_la (w2 - k)
-          ; With_shift.uresize (With_shift.create ~shift:k ua_mult_ub) (w2 - k)
-          ]
-        |> With_shift.sll ~by:k
-      in
-      assert (With_shift.width result = w * 2);
-      result
-    | Square _ -> raise_s [%message "Approx MSB squaring specialization not implemented"])
+     | Multiply_by_constant _ -> assert false
+     | Multiply (a, b) ->
+       let ua, la = split2 ~k a in
+       let ub, lb = split2 ~k b in
+       let wu = width ua in
+       let ua_mult_lb = create_recursive (Multiply (ua, uresize lb wu)) in
+       let ub_mult_la = create_recursive (Multiply (ub, uresize la wu)) in
+       let ua_mult_ub = create_full_multiplier ua ub in
+       let result =
+         pipe_add
+           ~stages:post_adder_stages
+           [ With_shift.uresize ua_mult_lb (w2 - k)
+           ; With_shift.uresize ub_mult_la (w2 - k)
+           ; With_shift.uresize (With_shift.create ~shift:k ua_mult_ub) (w2 - k)
+           ]
+         |> With_shift.sll ~by:k
+       in
+       assert (With_shift.width result = w * 2);
+       result
+     | Square _ -> raise_s [%message "Approx MSB squaring specialization not implemented"])
   | Radix_3 ->
     (match input with
-    | Multiply_by_constant _ -> assert false
-    | Multiply (x, y) ->
-      (* See comments in approx_msb_multiplier_model.ml for why this works. It's
-       * similar to the idea in half_width_multiplier.ml
-       *)
-      let k2 = k * 2 in
-      let k3 = k * 3 in
-      let k4 = k * 4 in
-      let x2, x1, x0 = split3 ~k x in
-      let y2, y1, y0 = split3 ~k y in
-      let wx2 = width x2 in
-      assert (width x1 = k);
-      assert (width x0 = k);
-      assert (width y2 = wx2);
-      assert (width y1 = k);
-      assert (width y0 = k);
-      assert (wx2 >= k);
-      assert (wx2 + k + k = w);
-      let x2y2 = create_full_multiplier (uresize x2 wx2) (uresize y2 wx2) in
-      let x2y1 = create_full_multiplier (uresize x2 wx2) (uresize y1 wx2) in
-      let x1y2 = create_full_multiplier (uresize x1 wx2) (uresize y2 wx2) in
-      let x2y0 = create_recursive (Multiply (uresize x2 wx2, uresize y0 wx2)) in
-      let x1y1 =
-        (* CR-someday fyquah: The upcast to wx2 is strictly not necessary.
-         * But we're keeping it for now due to empirical better DSP usage (at
-         * the cost of some LUTs). This is likely due to vivado offloading some
-         * multiplications to LUTs when there are more zeros (due to the
-         * uresize). Revisit this when we implement custom logic to implement
-         * constant multiplication specially.
-         *)
-        create_recursive (Multiply (uresize x1 wx2, uresize y1 wx2))
-      in
-      let x0y2 = create_recursive (Multiply (uresize x0 wx2, uresize y2 wx2)) in
-      let result =
-        pipe_add
-          ~stages:post_adder_stages
-          [ With_shift.create x2y2 ~shift:(k4 - k2)
-          ; With_shift.uresize (With_shift.create x2y1 ~shift:(k3 - k2)) (w2 - k2)
-          ; With_shift.uresize (With_shift.create x1y2 ~shift:(k3 - k2)) (w2 - k2)
-          ; With_shift.uresize x2y0 ((w * 2) - k2)
-          ; With_shift.uresize x1y1 ((w * 2) - k2)
-          ; With_shift.uresize x0y2 ((w * 2) - k2)
-          ]
-      in
-      With_shift.sll result ~by:k2
-    | Square _ ->
-      raise_s [%message "Radix-3 not implemented in approx msb multiplication."])
+     | Multiply_by_constant _ -> assert false
+     | Multiply (x, y) ->
+       (* See comments in approx_msb_multiplier_model.ml for why this works. It's
+        * similar to the idea in half_width_multiplier.ml
+        *)
+       let k2 = k * 2 in
+       let k3 = k * 3 in
+       let k4 = k * 4 in
+       let x2, x1, x0 = split3 ~k x in
+       let y2, y1, y0 = split3 ~k y in
+       let wx2 = width x2 in
+       assert (width x1 = k);
+       assert (width x0 = k);
+       assert (width y2 = wx2);
+       assert (width y1 = k);
+       assert (width y0 = k);
+       assert (wx2 >= k);
+       assert (wx2 + k + k = w);
+       let x2y2 = create_full_multiplier (uresize x2 wx2) (uresize y2 wx2) in
+       let x2y1 = create_full_multiplier (uresize x2 wx2) (uresize y1 wx2) in
+       let x1y2 = create_full_multiplier (uresize x1 wx2) (uresize y2 wx2) in
+       let x2y0 = create_recursive (Multiply (uresize x2 wx2, uresize y0 wx2)) in
+       let x1y1 =
+         (* CR-someday fyquah: The upcast to wx2 is strictly not necessary.
+          * But we're keeping it for now due to empirical better DSP usage (at
+          * the cost of some LUTs). This is likely due to vivado offloading some
+          * multiplications to LUTs when there are more zeros (due to the
+          * uresize). Revisit this when we implement custom logic to implement
+          * constant multiplication specially.
+          *)
+         create_recursive (Multiply (uresize x1 wx2, uresize y1 wx2))
+       in
+       let x0y2 = create_recursive (Multiply (uresize x0 wx2, uresize y2 wx2)) in
+       let result =
+         pipe_add
+           ~stages:post_adder_stages
+           [ With_shift.create x2y2 ~shift:(k4 - k2)
+           ; With_shift.uresize (With_shift.create x2y1 ~shift:(k3 - k2)) (w2 - k2)
+           ; With_shift.uresize (With_shift.create x1y2 ~shift:(k3 - k2)) (w2 - k2)
+           ; With_shift.uresize x2y0 ((w * 2) - k2)
+           ; With_shift.uresize x1y1 ((w * 2) - k2)
+           ; With_shift.uresize x0y2 ((w * 2) - k2)
+           ]
+       in
+       With_shift.sll result ~by:k2
+     | Square _ ->
+       raise_s [%message "Radix-3 not implemented in approx msb multiplication."])
 ;;
 
 let create_with_config
-    ~config:{ Config.levels; ground_multiplier }
-    ~scope
-    ~clock
-    ~enable
-    input
+  ~config:{ Config.levels; ground_multiplier }
+  ~scope
+  ~clock
+  ~enable
+  input
   =
   create_recursive ~levels ~ground_multiplier ~scope ~clock ~enable input
 ;;
@@ -308,9 +309,9 @@ module With_interface_square (M : Width) = struct
   include Interface_1arg (M)
 
   let create
-      ~config:{ Config.levels; ground_multiplier }
-      scope
-      { I.clock; enable; x; in_valid }
+    ~config:{ Config.levels; ground_multiplier }
+    scope
+    { I.clock; enable; x; in_valid }
     =
     let spec = Reg_spec.create ~clock () in
     let y =

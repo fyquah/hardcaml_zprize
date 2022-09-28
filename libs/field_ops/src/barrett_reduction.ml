@@ -41,28 +41,37 @@ module Config = struct
   let for_bls12_377 =
     { approx_msb_multiplier_config =
         { levels =
-            [ { radix = Radix_3
-              ; pre_adder_stages = 1
-              ; (* [middle_adder_stages] here is irrel. *)
-                middle_adder_stages = 1
-              ; (* Adding up to 390 bit results *)
-                post_adder_stages = 5
+            [ { k = (fun w -> Float.to_int (Float.( * ) (Float.of_int w) 0.33))
+              ; for_karatsuba =
+                  { radix = Radix_3
+                  ; pre_adder_stages = 1
+                  ; (* [middle_adder_stages] here is irrel. *)
+                    middle_adder_stages = 1
+                  ; (* Adding up to 390 bit results *)
+                    post_adder_stages = 5
+                  }
               }
-            ; { radix = Radix_3
-              ; pre_adder_stages = 1
-              ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
+            ; { k = (fun w -> Float.to_int (Float.( * ) (Float.of_int w) 0.33))
+              ; for_karatsuba =
+                  { radix = Radix_3
+                  ; pre_adder_stages = 1
+                  ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
                    is sufficient.
                 *)
-                middle_adder_stages = 1
-              ; post_adder_stages = 2
+                    middle_adder_stages = 1
+                  ; post_adder_stages = 2
+                  }
               }
-            ; { radix = Radix_2
-              ; pre_adder_stages = 1
-              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+            ; { k = (fun w -> Float.to_int (Float.( * ) (Float.of_int w) 0.43))
+              ; for_karatsuba =
+                  { radix = Radix_2
+                  ; pre_adder_stages = 1
+                  ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                    is ok.
                 *)
-                middle_adder_stages = 1
-              ; post_adder_stages = 1
+                    middle_adder_stages = 1
+                  ; post_adder_stages = 1
+                  }
               }
             ]
         ; ground_multiplier =
@@ -213,17 +222,17 @@ struct
       let latency = Modulo_subtractor_pipe.latency ~stages + 1 in
       let a_mod_p =
         List.map (List.range 0 4) ~f:(fun i ->
-            let result =
-              Adder_subtractor_pipe.sub
-                ~stages
-                ~scope
-                ~enable
-                ~clock
-                [ a_minus_qp; Signal.of_z ~width:(bits + 2) Z.(of_int i * p) ]
-            in
-            { With_valid.valid = ~:(Adder_subtractor_pipe.O.carry result)
-            ; value = Adder_subtractor_pipe.O.result result
-            })
+          let result =
+            Adder_subtractor_pipe.sub
+              ~stages
+              ~scope
+              ~enable
+              ~clock
+              [ a_minus_qp; Signal.of_z ~width:(bits + 2) Z.(of_int i * p) ]
+          in
+          { With_valid.valid = ~:(Adder_subtractor_pipe.O.carry result)
+          ; value = Adder_subtractor_pipe.O.result result
+          })
         |> List.rev
         |> Signal.priority_select
         |> with_valid_value
