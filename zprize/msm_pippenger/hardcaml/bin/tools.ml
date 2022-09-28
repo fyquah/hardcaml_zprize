@@ -117,14 +117,20 @@ let command_test_vectors =
           in
           for i = 0 to Top.num_windows - 1 do
             let slice = precomputed_scalar_slices.(i).scalar in
+            let subtract = precomputed_scalar_slices.(i).negative in
             let bucket =
               Config_utils.scalar_to_ram_index (module Bits) slice |> Bits.to_int
             in
             let r =
               if Top.precompute
-              then Utils.Twisted_edwards.add_unified_precomputed windows.(i).(bucket) p
+              then
+                Utils.Twisted_edwards.add_unified_precomputed
+                  ~subtract
+                  windows.(i).(bucket)
+                  p
               else
                 Utils.Twisted_edwards.add_unified
+                  ~subtract
                   (force Twisted_edwards_model_lib.Bls12_377_params.twisted_edwards)
                   windows.(i).(bucket)
                   p

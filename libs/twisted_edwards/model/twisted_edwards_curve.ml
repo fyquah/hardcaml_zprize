@@ -144,10 +144,12 @@ let fpga_internal_representation_to_affine (p : extended) : affine =
 let add_unified_precomputed
   ?(subtract = false)
   ({ x = x1; y = y1; z = z1; t = t1 } : extended)
-  ({ x = x_host; y = y_host; t = t_host } : affine_with_t)
+  (p2 : affine_with_t)
   : extended
   =
-  if subtract then failwith "Not implemented";
+  let ({ x = x_host; y = y_host; t = t_host } : affine_with_t) =
+    if subtract then { x = p2.y; y = p2.x; t = modulo_neg p2.t } else p2
+  in
   let open Modulo_ops in
   let c_A = (y1 - x1) * x_host in
   let c_B = (y1 + x1) * y_host in
