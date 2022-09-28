@@ -68,6 +68,16 @@ let test_random ~levels ~num_correction_steps =
     ~f:(test ~levels ~num_correction_steps)
 ;;
 
+let%expect_test "Multiplication constants" =
+  print_s [%message (m : hex_z) (p : hex_z)];
+  [%expect
+    {|
+    ((m
+      0x261508d0cc4060e976c3ca0582ef4f73bbad0de6776b1a06af2d488d85a6d02d0ed687789c42a591f9fd58c5e4daffc)
+     (p
+      0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001)) |}]
+;;
+
 let%expect_test "Quickcheck for 332 config" =
   test_random
     ~levels:Approx_msb_multiplier_model.golden_config_332
