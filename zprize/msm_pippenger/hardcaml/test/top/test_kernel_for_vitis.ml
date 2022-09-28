@@ -13,6 +13,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   module O_rules = Display_rules.With_interface (Kernel.O)
   module Sim = Cyclesim.With_interface (I) (O)
 
+  let precompute = Top.precompute
+
   let create_sim verilator () =
     let scope =
       Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()
@@ -21,7 +23,11 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     if verilator
     then
       let module V = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O) in
-      V.create ~clock_names:[ "clock" ] ~cache_dir:"/tmp/kernel/" ~verbose:true create
+      V.create
+        ~clock_names:[ "clock"; "ap_clk" ]
+        ~cache_dir:"/tmp/kernel/"
+        ~verbose:true
+        create
     else Sim.create ~config:Cyclesim.Config.trace_all create
   ;;
 
@@ -85,7 +91,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
     let sim = sim_and_waves.sim in
     let i, o = Cyclesim.inputs sim, Cyclesim.outputs sim in
-    let inputs = Utils.random_inputs ~seed num_inputs in
+    let inputs = Utils.random_inputs ~precompute ~seed num_inputs in
     Cyclesim.cycle sim;
     i.fpga_to_host_dest.tready := Bits.vdd;
     for idx = 0 to num_inputs - 1 do
@@ -175,7 +181,9 @@ module Make (Config : Msm_pippenger.Config.S) = struct
                      (aligned_field_bits * 2))
             }
           in
-          let affine = Utils.twisted_edwards_extended_to_affine ~has_t:true extended in
+          let affine =
+            Utils.twisted_edwards_extended_to_affine ~precompute ~has_t:true extended
+          in
           result_points
             := { Utils.point = affine; bucket = !bucket; window = !window }
                :: !result_points;

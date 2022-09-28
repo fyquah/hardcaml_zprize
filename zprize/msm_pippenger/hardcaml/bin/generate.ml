@@ -50,7 +50,9 @@ let command_kernel =
         let module Circuit =
           Circuit.With_interface (Kernel_for_vitis.I) (Kernel_for_vitis.O)
         in
-        let scope = Scope.create ~flatten_design:false () in
+        let scope =
+          Scope.create ~flatten_design:false ~auto_label_hierarchical_ports:true ()
+        in
         let circ =
           Circuit.create_exn
             ~name:"krnl_msm_pippenger"

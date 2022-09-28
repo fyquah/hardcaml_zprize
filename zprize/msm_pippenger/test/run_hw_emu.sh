@@ -5,7 +5,7 @@ set -euo pipefail
 # Make sure all the binaries are built
 mkdir -p ../host/build
 cd ../host/build
-cmake3 ..
+cmake3 .. 
 make -j
 
 cd ../../test
@@ -25,4 +25,3 @@ dune exec -- ../hardcaml/bin/tools.exe test-vectors \
   -seed 0
 
 XCL_EMULATION_MODE=hw_emu ./host_buckets ../fpga/build/build_dir.hw_emu.xilinx_aws-vu9p-f1_shell-v04261818_201920_3/msm_pippenger.xclbin input.points output.points
-
