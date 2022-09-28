@@ -155,7 +155,6 @@ let%expect_test "Test over small input size and small number of scalars" =
   print_s [%message (result.points : Test.Utils.window_bucket_point list)];
   [%expect
     {|
-    ("(inputs.(0)).scalar" 001010010)
     (Expecting (Top.num_result_points 11))
     (Got ("List.length (!result_points)" 11))
     PASS
