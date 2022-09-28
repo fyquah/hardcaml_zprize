@@ -18,24 +18,34 @@ let calc_k radix w =
   | Radix.Radix_3 -> Float.to_int (Float.( * ) (Float.of_int w) 0.33)
 ;;
 
-let rec estimated_upper_bound_error ~radices ~hi ~lo =
-  let w = hi - lo + 1 in
+let rec estimated_upper_bound_error ~radices ~depth ~lo ~w =
   assert (w > 0);
   match radices with
-  | [] -> Z.zero
+  | [] ->
+    Stdio.printf "Ground multiplier width = %d\n" w;
+    Z.zero
   | hd :: tl ->
-    let k = calc_k hd w in
+    let k =
+      match hd with
+      | Radix.Radix_2 ->
+        (match depth with
+         | 0 -> 187
+         | 1 -> 94
+         | 2 -> 48
+         | 3 -> 24
+         | _ -> assert false)
+      | Radix.Radix_3 -> calc_k hd w
+    in
+    Stdio.printf "Level %d: w=%d, lo=%d k=%d\n" depth w lo k;
     let k2 = k * 2 in
     (match hd with
      | Radix_2 ->
        (* x1y1 * 2^2k
-        * + (x1y0 + x0y1) * 2^k  <-- partial sum here
+        * + (x1y0 + x0y1) * 2^k  <-- partial multiplication here
         * + x0y0
         *)
-       let w0 = k in
-       let w1 = w - k in
        let child =
-         estimated_upper_bound_error ~radices:tl ~hi:((w1 * w0) + k - 1) ~lo:k
+         estimated_upper_bound_error ~radices:tl ~depth:(depth + 1) ~lo:(lo + k) ~w:(w - k)
        in
        Z.((one lsl k2) + ((one lsl k) * (child + child)))
      | Radix_3 ->
@@ -60,7 +70,13 @@ let rec estimated_upper_bound_error ~radices ~hi ~lo =
        let t0 = Z.((one lsl k2) lsl 0) in
        let t1 = Z.(((one lsl k2) + (one lsl k2)) lsl k) in
        let t2 =
-         let child = estimated_upper_bound_error ~radices:tl ~w:(w - k2) in
+         let child =
+           estimated_upper_bound_error
+             ~radices:tl
+             ~depth:(depth + 1)
+             ~lo:(lo + k2)
+             ~w:(w - k2)
+         in
          Z.((child + child + child) lsl k2)
        in
        Z.(t0 + t1 + t2))
@@ -72,14 +88,21 @@ let ceil_div x b =
 ;;
 
 let estimate_delta_error_2_to_n radices =
-  ceil_div (estimated_upper_bound_error ~radices ~w:378) Z.(one lsl 377)
+  ceil_div (estimated_upper_bound_error ~radices ~w:378 ~lo:0 ~depth:0) Z.(one lsl 377)
 ;;
 
 let%expect_test "Delta error" =
   Stdio.printf
     "Delta error = %s * (2^377)\n"
-    (Z.to_string (estimate_delta_error_2_to_n [ Radix_3; Radix_3; Radix_2 ]));
-  [%expect {| Delta error = 1 * (2^377) |}]
+    (Z.to_string (estimate_delta_error_2_to_n [ Radix_2; Radix_2; Radix_2; Radix_2 ]));
+  [%expect
+    {|
+    Level 0: w=378, lo=0 k=187
+    Level 1: w=191, lo=187 k=94
+    Level 2: w=97, lo=281 k=48
+    Level 3: w=49, lo=329 k=24
+    Ground multiplier width = 25
+    Delta error = 13 * (2^377) |}]
 ;;
 
 let split_top_and_btm ~k a =
