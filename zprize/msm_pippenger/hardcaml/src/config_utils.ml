@@ -33,7 +33,9 @@ module Make (Config : Config.S) = struct
 
   let num_buckets window =
     (* -1 trick -> doesn't apply to last window *)
-    if window = num_windows - 1
+    if window >= num_windows
+    then 0
+    else if window = num_windows - 1
     then (1 lsl window_bit_sizes.(window)) - 1
     else 1 lsl (window_bit_sizes.(window) - 1)
   ;;

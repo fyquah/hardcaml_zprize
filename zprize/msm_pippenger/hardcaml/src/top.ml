@@ -44,14 +44,20 @@ module Make (Config : Config.S) = struct
   let max_window_indices = Array.filter_mapi window_size_bits ~f:(fun i v -> if (v = max_window_size_bits) then Some i else None)
   let is_max_window window = 
     (List.map max_window_indices ~f:(fun ind -> window ==:. ind)) |> reduce ~f:(|:)*)
-  let max_ram_addresses = Array.init num_windows ~f:(fun i -> num_buckets i - 1)
+  (*let max_ram_addresses = Array.init num_windows ~f:(fun i -> num_buckets i - 1)*)
+  let num_buckets_mux v =
+    mux
+      v
+      (List.init num_windows ~f:(fun i ->
+         of_int (num_buckets i) ~width:max_window_size_bits))
+  ;;
 
-  let max_ram_address window =
+  (*let max_ram_address window =
     (* vivado should reduce this for our values? *)
     mux
       window
       Array.(map max_ram_addresses ~f:(of_int ~width:max_window_size_bits) |> to_list)
-  ;;
+  ;;*)
 
   let num_windows = num_windows
   let num_result_points = List.(init num_windows ~f:num_buckets |> fold ~init:0 ~f:( + ))
@@ -194,7 +200,7 @@ module Make (Config : Config.S) = struct
           ~build_mode
           ~clock
           ~clear
-          ~size:num_buckets
+          ~size:(1 lsl address_bits)
           ~port_a:
             (let pre_transform_address =
                sel_bottom
@@ -311,7 +317,7 @@ module Make (Config : Config.S) = struct
       [ sm.switch
           [ (* We initialize the RAM to identity by doing a "fake" ram read in the Read_result state. *)
             ( Init_to_identity
-            , [ bucket_address <--. max_ram_addresses.(0)
+            , [ bucket_address <--. num_buckets 0
               ; window_address <--. 0
               ; sm.set_next Read_result
               ] )
@@ -338,7 +344,7 @@ module Make (Config : Config.S) = struct
                        + ram_write_latency
                        - 1)
                   [ window_address <--. 0
-                  ; bucket_address <--. num_buckets 0 - 1
+                  ; bucket_address <--. num_buckets 0
                   ; sm.set_next Read_result
                   ]
               ] )
@@ -349,7 +355,7 @@ module Make (Config : Config.S) = struct
                   ; when_
                       (bucket_address.value ==:. 0)
                       [ window_address <-- window_address.value -- "window_address" +:. 1
-                      ; bucket_address <-- max_ram_address (window_address.value +:. 1)
+                      ; bucket_address <-- num_buckets_mux (window_address.value +:. 1)
                       ; when_
                           (window_address.value ==:. num_windows - 1)
                           [ bucket_address <--. 0
