@@ -238,8 +238,14 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
         expert__transfer_data_to_fpga_blocking(buffer);
     });
 
-    bench("Doing NTT (phase1 + twiddling + phase2)", [&]() {
-        expert__evaluate_on_fpga_blocking(buffer);
+    bench("Doing NTT (phase1)", [&]() {
+        enqueue_phase1_work(buffer);
+        OCL_CHECK(err, err = buffer->ev_phase1_work.wait());
+    });
+
+    bench("Doing NTT (phase2)", [&]() {
+  enqueue_phase2_work(buffer);
+        OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
     });
 
     bench("Copying final result to host", [&]() {
