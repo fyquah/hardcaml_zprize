@@ -92,7 +92,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
     let sim = sim_and_waves.sim in
     let i, o = Cyclesim.inputs sim, Cyclesim.outputs sim in
-    let inputs = Utils.random_inputs ~precompute ~seed num_inputs in
+    let inputs =
+      Utils.random_inputs
+        ~precompute
+        ~seed
+        num_inputs
+        ~top_window_size:Config_utils.top_window_size
+    in
     Cyclesim.cycle sim;
     i.fpga_to_host_dest.tready := Bits.vdd;
     for idx = 0 to num_inputs - 1 do

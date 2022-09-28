@@ -47,7 +47,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     i.clear := Bits.gnd;
     Cyclesim.cycle sim;
     reset_cycle_cnt ();
-    let inputs = Utils.random_inputs ~precompute ~seed num_inputs in
+    let inputs =
+      Utils.random_inputs
+        ~precompute
+        ~seed
+        num_inputs
+        ~top_window_size:Config_utils.top_window_size
+    in
     Array.iteri inputs ~f:(fun idx input ->
       Top.Mixed_add.Xyt.iter2
         i.input_point

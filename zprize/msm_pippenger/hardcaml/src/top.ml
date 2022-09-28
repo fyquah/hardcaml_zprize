@@ -44,12 +44,13 @@ module Make (Config : Config.S) = struct
   let max_window_indices = Array.filter_mapi window_size_bits ~f:(fun i v -> if (v = max_window_size_bits) then Some i else None)
   let is_max_window window = 
     (List.map max_window_indices ~f:(fun ind -> window ==:. ind)) |> reduce ~f:(|:)*)
+  let max_ram_addresses = Array.init num_windows ~f:(fun i -> num_buckets i - 1)
+
   let max_ram_address window =
     (* vivado should reduce this for our values? *)
     mux
       window
-      (List.init num_windows ~f:(fun i ->
-         of_int (num_buckets i - 1) ~width:max_window_size_bits))
+      Array.(map max_ram_addresses ~f:(of_int ~width:max_window_size_bits) |> to_list)
   ;;
 
   let num_windows = num_windows
@@ -310,7 +311,7 @@ module Make (Config : Config.S) = struct
       [ sm.switch
           [ (* We initialize the RAM to identity by doing a "fake" ram read in the Read_result state. *)
             ( Init_to_identity
-            , [ bucket_address <--. num_buckets 0 - 1
+            , [ bucket_address <--. max_ram_addresses.(0)
               ; window_address <--. 0
               ; sm.set_next Read_result
               ] )
@@ -346,9 +347,9 @@ module Make (Config : Config.S) = struct
                   fifo_q_has_space
                   [ bucket_address <-- bucket_address.value -:. 1
                   ; when_
-                      (bucket_address.value ==:. 1)
+                      (bucket_address.value ==:. 0)
                       [ window_address <-- window_address.value -- "window_address" +:. 1
-                      ; bucket_address <-- max_ram_address window_address.value
+                      ; bucket_address <-- max_ram_address (window_address.value +:. 1)
                       ; when_
                           (window_address.value ==:. num_windows - 1)
                           [ bucket_address <--. 0

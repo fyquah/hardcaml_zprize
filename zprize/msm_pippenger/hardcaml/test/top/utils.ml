@@ -87,7 +87,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     | Some p -> Ark_bls12_377_g1.create ~x:p.x ~y:p.y ~infinity:false
   ;;
 
-  let random_inputs ?(precompute = false) ?(seed = 0) num_inputs =
+  let random_inputs ?(precompute = false) ?(seed = 0) ~top_window_size num_inputs =
     Random.init seed;
     Array.init num_inputs ~f:(fun _ ->
       let affine_point =
@@ -103,7 +103,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             affine_point_with_t
         else affine_point_with_t
       in
-      { Msm_input.scalar = Bits.random ~width:Config.scalar_bits
+      { Msm_input.scalar =
+          ((* ensure the top window is never all 1s - this is true for our actual 253-bit scalar *)
+           let top =
+             Random.int ((1 lsl top_window_size) - 1)
+             |> Bits.of_int ~width:top_window_size
+           in
+           Bits.(top @: random ~width:(Config.scalar_bits - top_window_size)))
       ; affine_point_with_t =
           { x = Bits.of_z ~width:Config.field_bits affine_point_with_t_for_fpga.x
           ; y = Bits.of_z ~width:Config.field_bits affine_point_with_t_for_fpga.y

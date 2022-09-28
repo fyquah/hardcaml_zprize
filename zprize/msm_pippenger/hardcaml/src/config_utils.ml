@@ -12,6 +12,8 @@ module Make (Config : Config.S) = struct
       if i = 0 then first_window_size_bits else window_size_bits)
   ;;
 
+  let top_window_size = window_bit_sizes.(num_windows - 1)
+
   let window_bit_offsets =
     let rec compute_offsets i data cur_offset =
       if i = num_windows
