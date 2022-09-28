@@ -429,6 +429,15 @@ class Xyzt {
   }
 
   void copy_from_rust_type(const g1_affine_t &affine) {
+    if (affine.infinity) {
+      // Special representation for infinity in the twisted edwards curve
+      x.set(ZERO_WORDS);
+      y.set(ONE_WORDS);
+      t.set(ZERO_WORDS);
+      z.set(ONE_WORDS);
+      return;
+    }
+
     // TODO(fyquah): Handle infinities
     x.set((uint64_t *)affine.x.data);
     x.set_div(x, COFACTOR);

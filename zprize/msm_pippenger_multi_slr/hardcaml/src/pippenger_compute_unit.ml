@@ -64,7 +64,7 @@ module Make (C : Pippenger_compute_unit_config.S) = struct
     let num_bits = field_bits
   end)
 
-  let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction
+  let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction_arbitrated
   let adder_latency = Mixed_add.latency adder_config
 
   (* Integer divison so the last window might be slightly larger than the others. *)
@@ -287,7 +287,6 @@ module Make (C : Pippenger_compute_unit_config.S) = struct
         scope
         ~config:adder_config
         { clock
-        ; clear
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
         ; p1 =
