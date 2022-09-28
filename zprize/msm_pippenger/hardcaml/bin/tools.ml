@@ -56,7 +56,11 @@ let command_test_vectors =
         in
         let module Config_utils = Msm_pippenger.Config_utils.Make (Config) in
         let input_points =
-          Utils.random_inputs ~precompute:Top.precompute ~seed num_points
+          Utils.random_inputs
+            ~precompute:Top.precompute
+            ~seed
+            num_points
+            ~top_window_size:Config_utils.top_window_size
         in
         let input_points =
           if set_scalars_to_one
