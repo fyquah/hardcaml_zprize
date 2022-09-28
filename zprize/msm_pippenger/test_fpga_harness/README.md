@@ -1,3 +1,5 @@
+The test harness currently only supports afi-005f604b2e786b217 (precompute + full adder)
+
 # Running Tests
 
 Our AWS box has some testdata of various sizes stored in `~/testdata`
