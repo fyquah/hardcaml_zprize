@@ -66,7 +66,11 @@ module Config = struct
               }
             ]
         ; ground_multiplier =
-            Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
+            Mixed
+              { latency = 2
+              ; hybrid_hamming_weight_threshold = None
+              ; lut_only_hamming_weight_threshold = Some 6
+              }
         }
     ; half_multiplier_config =
         { levels =
@@ -94,7 +98,11 @@ module Config = struct
               }
             ]
         ; ground_multiplier =
-            Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
+            Mixed
+              { latency = 2
+              ; hybrid_hamming_weight_threshold = None
+              ; lut_only_hamming_weight_threshold = Some 6
+              }
         }
     ; subtracter_stages = 3
     }
@@ -213,17 +221,17 @@ struct
       let latency = Modulo_subtractor_pipe.latency ~stages + 1 in
       let a_mod_p =
         List.map (List.range 0 4) ~f:(fun i ->
-            let result =
-              Adder_subtractor_pipe.sub
-                ~stages
-                ~scope
-                ~enable
-                ~clock
-                [ a_minus_qp; Signal.of_z ~width:(bits + 2) Z.(of_int i * p) ]
-            in
-            { With_valid.valid = ~:(Adder_subtractor_pipe.O.carry result)
-            ; value = Adder_subtractor_pipe.O.result result
-            })
+          let result =
+            Adder_subtractor_pipe.sub
+              ~stages
+              ~scope
+              ~enable
+              ~clock
+              [ a_minus_qp; Signal.of_z ~width:(bits + 2) Z.(of_int i * p) ]
+          in
+          { With_valid.valid = ~:(Adder_subtractor_pipe.O.carry result)
+          ; value = Adder_subtractor_pipe.O.result result
+          })
         |> List.rev
         |> Signal.priority_select
         |> with_valid_value
