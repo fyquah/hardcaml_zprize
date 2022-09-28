@@ -32,8 +32,15 @@ module Make (Config : Config.S) = struct
     let num_bits = field_bits
   end)
 
-  let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction_full
-  let adder_latency = Mixed_add.latency adder_config
+  let full_adder_config = force Adder_config.For_bls12_377.with_barrett_reduction_full
+
+  let half_adder_config =
+    force Adder_config.For_bls12_377.with_barrett_reduction_arbitrated
+  ;;
+
+  let full_adder_latency = Mixed_add.latency full_adder_config
+  let half_adder_latency = Mixed_add.latency half_adder_config
+  let adder_latency = max half_adder_latency full_adder_latency
 
   (* Integer divison so the last window might be slightly larger than the others. *)
   let num_windows = scalar_bits / window_size_bits
@@ -152,15 +159,16 @@ module Make (Config : Config.S) = struct
     in
     let bucket_address = Variable.reg spec_with_clear ~width:last_window_size_bits in
     let fifo_q_has_space = wire 1 in
+    let windows_per_ctrl = num_windows / 3 in
     let port_a_q, port_b_q =
       List.init num_windows ~f:(fun window ->
         let address_bits =
           if window = num_windows - 1 then last_window_size_bits else window_size_bits
         in
-        let ctrl_index = window / (num_windows / 3) in
+        let ctrl_index = window / windows_per_ctrl in
         let ctrl = ctrl.q.(ctrl_index) in
-        let ctrl_window_en = ctrl.window ==:. window in
-        let p3 = if ctrl_index > 2 then half_adder_p3 else adder_p3 in
+        let ctrl_window_en = ctrl.window ==:. window - (windows_per_ctrl * ctrl_index) in
+        let p3 = if ctrl_index >= 2 then half_adder_p3 else adder_p3 in
         (* To support write before read mode in URAM, writes must happen on port
            A and reads on port B. *)
         Dual_port_ram.create
@@ -255,21 +263,23 @@ module Make (Config : Config.S) = struct
     let adder =
       let switch =
         reg_fb (Reg_spec.override spec ~clear:ctrl_start.value) ~width:1 ~f:(fun q -> ~:q)
+        -- "switch"
       in
       let adder_valid_in =
         mux2
           switch
           (ctrl.q.(0).execute &: ~:(ctrl.q.(0).bubble))
           (ctrl.q.(1).execute &: ~:(ctrl.q.(1).bubble))
+        -- "full_adder_valid_in"
       in
-      let p1 = mux2 switch ctrl.q.(0).window ctrl.q.(1).window in
+      let p1 = mux2 switch ctrl.q.(0).window (ctrl.q.(1).window +:. windows_per_ctrl) in
       let ctrl_affine_point_as_xyt =
         Mixed_add.Xyt.Of_signal.unpack
           (mux2 switch ctrl.q.(0).adder_affine_point ctrl.q.(1).adder_affine_point)
       in
       Mixed_add.hierarchical
         scope
-        ~config:adder_config
+        ~config:full_adder_config
         { clock
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
@@ -283,23 +293,27 @@ module Make (Config : Config.S) = struct
                 ctrl_affine_point_as_xyt
                 ~n:(ram_lookup_latency + ram_read_latency))
         }
+      |> Mixed_add.O.Of_signal.pipeline ~n:(adder_latency - full_adder_latency) spec
     in
     let half_adder =
       let ctrl = ctrl.q.(2) in
-      let adder_valid_in = ctrl.execute &: ~:(ctrl.bubble) in
+      let adder_valid_in = (ctrl.execute &: ~:(ctrl.bubble)) -- "half_adder_valid_in" in
       let ctrl_affine_point_as_xyt =
         Mixed_add.Xyt.Of_signal.unpack ctrl.adder_affine_point
       in
       Mixed_add.hierarchical
         scope
-        ~config:adder_config
+        ~config:half_adder_config
         { clock
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
         ; p1 =
             Mixed_add.Xyzt.Of_signal.unpack
               (mux
-                 (pipeline spec ctrl.window ~n:(ram_lookup_latency + ram_read_latency))
+                 (pipeline
+                    spec
+                    (ctrl.window +:. (windows_per_ctrl * 2))
+                    ~n:(ram_lookup_latency + ram_read_latency))
                  port_b_q)
         ; p2 =
             Mixed_add.Xyt.Of_signal.(
@@ -308,6 +322,7 @@ module Make (Config : Config.S) = struct
                 ctrl_affine_point_as_xyt
                 ~n:(ram_lookup_latency + ram_read_latency))
         }
+      |> Mixed_add.O.Of_signal.pipeline ~n:(adder_latency - half_adder_latency) spec
     in
     half_adder_p3 <== Mixed_add.Xyzt.Of_signal.pack half_adder.p3;
     adder_p3 <== Mixed_add.Xyzt.Of_signal.pack adder.p3;
