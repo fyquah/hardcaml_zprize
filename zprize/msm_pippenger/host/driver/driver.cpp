@@ -76,6 +76,7 @@ class Driver {
         // receive fpga point
         bucket_sum.import_from_fpga_vector(source_kernel_output +
                                            (NUM_32B_WORDS_PER_OUTPUT * point_idx));
+        bucket_sum.postComputeFPGA();
         ++point_idx;
 
         // do triangle sum update
@@ -239,6 +240,7 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
   for (ssize_t i = 0; i < npoints; i++) {
     // std::cout << rust_points[i] << std::endl;
     points[i].copy_from_rust_type(rust_points[i]);
+    points[i].preComputeFPGA();
     // points[i].println();
   }
   auto *driver = new Driver(points, binaryFile);
