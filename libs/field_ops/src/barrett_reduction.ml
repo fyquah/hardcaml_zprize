@@ -28,68 +28,118 @@ module Config = struct
     { approx_msb_multiplier_config : Approx_msb_multiplier.Config.t
     ; half_multiplier_config : Half_width_multiplier.Config.t
     ; subtracter_stages : int
+    ; num_correction_steps : int
     }
 
   let latency (config : t) =
     (1 * Approx_msb_multiplier.Config.latency config.approx_msb_multiplier_config)
     + (1 * Half_width_multiplier.Config.latency config.half_multiplier_config)
     + config.subtracter_stages
-    + (4 * config.subtracter_stages)
+    + (config.num_correction_steps * config.subtracter_stages)
+  ;;
+
+  let approx_msb_mult_2222 =
+    let open Approx_msb_multiplier.Config in
+    { levels =
+        [ { k = (fun _ -> 186)
+          ; for_karatsuba =
+              { radix = Radix_2
+              ; pre_adder_stages = 1
+              ; (* [middle_adder_stages] here is irrel. *)
+                middle_adder_stages = 1
+              ; (* Adding up to 390 bit results *)
+                post_adder_stages = 5
+              }
+          }
+        ; { k = (fun _ -> 94)
+          ; for_karatsuba =
+              { radix = Radix_2
+              ; pre_adder_stages = 1
+              ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
+                   is sufficient.
+                *)
+                middle_adder_stages = 1
+              ; post_adder_stages = 2
+              }
+          }
+        ; { k = (fun _ -> 48)
+          ; for_karatsuba =
+              { radix = Radix_2
+              ; pre_adder_stages = 1
+              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                   is ok.
+                *)
+                middle_adder_stages = 1
+              ; post_adder_stages = 1
+              }
+          }
+        ; { k = (fun _ -> 24)
+          ; for_karatsuba =
+              { radix = Radix_2
+              ; pre_adder_stages = 1
+              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                     is ok.
+                *)
+                middle_adder_stages = 1
+              ; post_adder_stages = 1
+              }
+          }
+        ]
+    ; ground_multiplier =
+        Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
+    }
+  ;;
+
+  let approx_msb_mult_332 =
+    let open Approx_msb_multiplier.Config in
+    { levels =
+        [ { k = (fun _ -> 125)
+          ; for_karatsuba =
+              { radix = Radix_3
+              ; pre_adder_stages = 1
+              ; (* [middle_adder_stages] here is irrel. *)
+                middle_adder_stages = 1
+              ; (* Adding up to 390 bit results *)
+                post_adder_stages = 5
+              }
+          }
+        ; { k = (fun _ -> 42)
+          ; for_karatsuba =
+              { radix = Radix_3
+              ; pre_adder_stages = 1
+              ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
+                   is sufficient.
+                *)
+                middle_adder_stages = 1
+              ; post_adder_stages = 2
+              }
+          }
+        ; { k = (fun _ -> 20)
+          ; for_karatsuba =
+              { radix = Radix_2
+              ; pre_adder_stages = 1
+              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                   is ok.
+                *)
+                middle_adder_stages = 1
+              ; post_adder_stages = 1
+              }
+          }
+        ]
+    ; ground_multiplier =
+        Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
+    }
   ;;
 
   let for_bls12_377 =
+    let which_msb_mult = `Approx_msb_mult_332 in
     (* See libs/field_ops/model/approx_msb_multiplier_model.ml for the
      * rationale behind the values.
      *)
     { approx_msb_multiplier_config =
-        { levels =
-            [ { k = (fun _ -> 186)
-              ; for_karatsuba =
-                  { radix = Radix_2
-                  ; pre_adder_stages = 1
-                  ; (* [middle_adder_stages] here is irrel. *)
-                    middle_adder_stages = 1
-                  ; (* Adding up to 390 bit results *)
-                    post_adder_stages = 5
-                  }
-              }
-            ; { k = (fun _ -> 94)
-              ; for_karatsuba =
-                  { radix = Radix_2
-                  ; pre_adder_stages = 1
-                  ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
-                       is sufficient.
-                    *)
-                    middle_adder_stages = 1
-                  ; post_adder_stages = 2
-                  }
-              }
-            ; { k = (fun _ -> 48)
-              ; for_karatsuba =
-                  { radix = Radix_2
-                  ; pre_adder_stages = 1
-                  ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
-                       is ok.
-                    *)
-                    middle_adder_stages = 1
-                  ; post_adder_stages = 1
-                  }
-              }
-            ; { k = (fun _ -> 24)
-              ; for_karatsuba =
-                  { radix = Radix_2
-                  ; pre_adder_stages = 1
-                  ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
-                         is ok.
-                      *)
-                    middle_adder_stages = 1
-                  ; post_adder_stages = 1
-                  }
-              }
-            ]
-        ; ground_multiplier =
-            Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
-        }
+        (match which_msb_mult with
+         | `Approx_msb_mult_332 -> approx_msb_mult_332
+         | `Approx_msb_mult_2222 -> approx_msb_mult_2222)
     ; half_multiplier_config =
         { levels =
             [ { radix = Radix_3
@@ -101,16 +151,16 @@ module Config = struct
             ; { radix = Radix_3
               ; pre_adder_stages = 1
               ; (* intermediate results has width of 42 bits. 1 stage pipeline
-                   is sufficient.
-                *)
+                     is sufficient.
+                  *)
                 middle_adder_stages = 1
               ; post_adder_stages = 2
               }
             ; { radix = Radix_2
               ; pre_adder_stages = 1
               ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
-                   is ok.
-                *)
+                     is ok.
+                  *)
                 middle_adder_stages = 1
               ; post_adder_stages = 1
               }
@@ -119,6 +169,10 @@ module Config = struct
             Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
         }
     ; subtracter_stages = 3
+    ; num_correction_steps =
+        (match which_msb_mult with
+         | `Approx_msb_mult_332 -> 3
+         | `Approx_msb_mult_2222 -> 4)
     }
   ;;
 end
@@ -230,7 +284,9 @@ struct
       assert (width a_minus_qp = bits + 2);
       let spec = Reg_spec.create ~clock () in
       let stages = config.subtracter_stages in
-      let correction_factors = [ 4; 2; 1; 0 ] in
+      let correction_factors =
+        List.init config.num_correction_steps ~f:(fun i -> 1 lsl i) |> List.rev
+      in
       let latency =
         Modulo_subtractor_pipe.latency ~stages * List.length correction_factors
       in

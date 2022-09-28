@@ -5,6 +5,7 @@ module Config : sig
     { approx_msb_multiplier_config : Approx_msb_multiplier.Config.t
     ; half_multiplier_config : Half_width_multiplier.Config.t
     ; subtracter_stages : int
+    ; num_correction_steps : int
     }
 
   val latency : t -> int
