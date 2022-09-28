@@ -140,7 +140,7 @@ module Config = struct
   ;;
 
   let for_bls12_377 =
-    let which_msb_mult = `Approx_msb_mult_332 in
+    let which_msb_mult = `Approx_msb_mult_2222 in
     (* See libs/field_ops/model/approx_msb_multiplier_model.ml for the
      * rationale behind the values.
      *)
