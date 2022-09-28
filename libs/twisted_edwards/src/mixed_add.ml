@@ -155,6 +155,7 @@ module Make (Num_bits : Num_bits.S) = struct
       let y2_minus_orig_x2 =
         sub_pipe ~scope ~latency:(Fn.const config.adder_stages) ~config ~clock p2.y p2.x
       in
+      let subtract = pipe subtract in
       let y2_plus_x2 = mux2 subtract y2_minus_orig_x2 y2_plus_orig_x2 in
       let y2_minus_x2 = mux2 subtract y2_plus_orig_x2 y2_minus_orig_x2 in
       let scope = Scope.sub_scope scope "stage0" in
@@ -164,7 +165,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ; y2_minus_x2
       ; p1 = Xyzt.map ~f:pipe p1
       ; p2 = Xyt.map ~f:pipe p2
-      ; subtract = pipe subtract
+      ; subtract
       ; valid = pipe valid
       }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
@@ -291,6 +292,7 @@ module Make (Num_bits : Num_bits.S) = struct
       let c_D_plus_c_C = add_pipe ~scope ~latency ~config ~clock c_D c_C in
       let c_H = add_pipe ~scope ~latency ~config ~clock c_B c_A in
       (* assign based on the sign of t2 *)
+      let subtract = pipe subtract in
       let c_F = mux2 subtract c_D_plus_c_C c_D_minus_c_C in
       let c_G = mux2 subtract c_D_minus_c_C c_D_plus_c_C in
       let scope = Scope.sub_scope scope "stage3" in
