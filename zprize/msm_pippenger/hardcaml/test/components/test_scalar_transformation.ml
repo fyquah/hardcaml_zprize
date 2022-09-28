@@ -77,15 +77,15 @@ let test ?(verify = true) () =
   Cyclesim.cycle sim;
   i.clear := Bits.gnd;
   (* cycle *)
-  let timeout = 1000 in
-  let num_inputs = 20 in
+  let timeout = 100000 in
+  let num_inputs = ref 0 in
   let rec run cycle_cnt tvalid_prev inputs outputs =
     if cycle_cnt > timeout
     then (
       (* timed out or received all the outputs *)
-      print_s [%message "Timed out!" (num_inputs : int) (List.length outputs : int)];
+      print_s [%message "Timed out!" (!num_inputs : int) (List.length outputs : int)];
       List.rev outputs)
-    else if List.length outputs = num_inputs
+    else if List.length outputs = !num_inputs
     then (
       print_s [%message "Completed!"];
       List.rev outputs)
@@ -138,14 +138,16 @@ let test ?(verify = true) () =
       run cycle_cnt Bits.gnd tl outputs)
     else run cycle_cnt tvalid inputs outputs
   in
-  let slice l start len = List.drop (List.take l (start + len)) start in
-  let inputs = slice test_scalars (100 * 2049) 20 in
+  (*let slice l start len = List.drop (List.take l (start + len)) start in
+  let inputs = slice test_scalars (100 * 2049) 20 in*)
+  let inputs = List.filter test_scalars ~f:(fun _ -> Float.(Random.float 1. < 0.01)) in
+  num_inputs := List.length inputs;
   let outputs = run 1 Bits.gnd inputs [] in
   (*print_s [%message (outputs : Reduced_scalar.t array list)];*)
   if verify
   then (
     List.iteri (List.zip_exn inputs outputs) ~f:(fun _idx (i, o) -> model_check i o);
-    print_s [%message "Checked" (num_inputs : int)]);
+    print_s [%message "Checked" (!num_inputs : int)]);
   waves
 ;;
 
@@ -153,5 +155,7 @@ let waveform ?verify () = test ?verify ()
 
 let%expect_test "Drive inputs through transform" =
   let _waves = test () in
-  [%expect]
+  [%expect{|
+    Completed!
+    (Checked (!num_inputs 8103)) |}]
 ;;
