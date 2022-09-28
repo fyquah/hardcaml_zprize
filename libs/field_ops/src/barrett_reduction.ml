@@ -41,7 +41,7 @@ module Config = struct
   let approx_msb_mult_2222 =
     let open Approx_msb_multiplier.Config in
     { levels =
-        [ { k = (fun _ -> 186)
+        [ { k = (fun _ -> 187)
           ; for_karatsuba =
               { radix = Radix_2
               ; pre_adder_stages = 1
