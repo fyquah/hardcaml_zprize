@@ -102,6 +102,7 @@ module Make (Config : Config.S) = struct
     let pipes = Bucket_pipeline.O.Of_signal.wires () in
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
+    ignore (sm.current -- "STATE" : Signal.t);
     let window = Var.reg spec ~width:log_num_windows in
     let window_next = window.value +:. 1 in
     let scalar, scalar_is_zero =
@@ -113,27 +114,11 @@ module Make (Config : Config.S) = struct
     let pop_stalled_point = Var.wire ~default:gnd in
     let is_in_pipeline_reg = Var.reg spec ~width:num_windows in
     ignore (is_in_pipeline_reg.value -- "is_in_pipeline_reg" : Signal.t);
-    let is_in_pipeline =
-      mux2
-        (sm.is Choose_mode)
-        (List.nth_exn pipes.is_in_pipeline 0)
-        is_in_pipeline_reg.value.:(0)
-      -- "is_in_pipeline"
-    in
-    let is_in_pipeline =
-      let optimised = false in
-      if optimised
-      then is_in_pipeline
-      else (
-        let is_in_pipeline =
-          concat_lsb pipes.is_in_pipeline -- "is_in_pipeline_reg" |> bits_lsb
-        in
-        mux window.value is_in_pipeline -- "is_in_pipeline")
-    in
+    let is_in_pipeline = is_in_pipeline_reg.value.:(0) -- "is_in_pipeline" in
     let shift_pipeline = Var.wire ~default:gnd in
     let scalar_read = Var.wire ~default:gnd in
     let flushing = Var.reg spec ~width:1 in
-    ignore (sm.current -- "STATE" : Signal.t);
+    ignore (flushing.value -- "flushing" : Signal.t);
     let on_last_window ~processing_scalars =
       Always.(
         when_
@@ -207,6 +192,7 @@ module Make (Config : Config.S) = struct
                 ; bubble
                   <-- (is_in_pipeline
                       |: (stalled.scalar_out_valid &: reg spec (stalled.scalar_out ==:. 0))
+                         (* XXX aray: Can we get rid of this? *)
                       |: ~:(stalled.current_window_has_stall))
                 ; pop_stalled_point <-- ~:(bubble.value)
                 ; window <-- window_next
@@ -227,8 +213,8 @@ module Make (Config : Config.S) = struct
          ; clear = i.clear
          ; window = window.value
          ; scalar_in = i.scalar
-         ; stalled_scalar = stalled.scalar_out
-         ; stalled_scalar_valid = stalled.scalar_out_valid
+         ; stalled_scalars = stalled.scalars_out
+         ; stalled_scalars_valid = stalled.scalars_out_valid
          ; process_stalled = executing_stalled
          ; bubble = is_in_pipeline
          ; shift = shift_pipeline.value

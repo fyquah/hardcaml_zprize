@@ -256,7 +256,7 @@ module Test (Config : Config) = struct
       print_s [%message (inputs : Int.Hex.t Msm_input.t array)]);
     let sim =
       Sim.create
-        ~config:Cyclesim.Config.trace_all
+        ~config:{ Cyclesim.Config.trace_all with deduplicate_signals = false }
         (Model.create
            (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports ()))
     in
@@ -318,7 +318,7 @@ module Test (Config : Config) = struct
     inputs.scalar_valid <-. 0;
     poll ~timeout:1_000 ~f:(fun () -> Bits.to_bool !(outputs.done_)) cycle;
     (* run to flush pipeline, plus a few cycles *)
-    for _ = 0 to Model.datapath_depth + 10 do
+    for _ = 0 to (Model.datapath_depth * 2) + 10 do
       cycle ()
     done;
     (* Read back windows *)
@@ -392,6 +392,7 @@ let test_fully_stall_window0 =
   Simple_model.of_scalars [| 0x13; 0x23; 0x33; 0x43; 0x53; 0x63; 0x73; 0x83 |]
 ;;
 
+let test_with_twenty_ones = Simple_model.of_scalars [| 0x21; 0x21 |]
 let test = Simple_model.test
 
 let runtest ?(can_stall = false) ?(waves = false) example =

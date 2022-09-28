@@ -28,8 +28,8 @@ module Make (Config : Config.S) : sig
       ; clear : 'a
       ; window : 'a
       ; scalar_in : 'a array
-      ; stalled_scalar : 'a
-      ; stalled_scalar_valid : 'a
+      ; stalled_scalars : 'a array
+      ; stalled_scalars_valid : 'a array
       ; process_stalled : 'a
       ; bubble : 'a
       ; shift : 'a

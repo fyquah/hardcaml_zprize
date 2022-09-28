@@ -70,6 +70,7 @@ let () =
          ; command_test_pippenger "no-stalls" test_no_stalls
          ; command_test_pippenger "with-stalls" test_with_stalls
          ; command_test_pippenger "fully-stall-window0" test_fully_stall_window0
+         ; command_test_pippenger "with-twenty-ones" test_with_twenty_ones
          ; "random", command_random
          ])
 ;;
