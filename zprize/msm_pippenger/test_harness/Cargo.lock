@@ -132,6 +132,7 @@ dependencies = [
  "ark-bls12-377",
  "ark-ec",
  "ark-ff",
+ "ark-serialize",
  "ark-std",
  "blst",
  "cc",
