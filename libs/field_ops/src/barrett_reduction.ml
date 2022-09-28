@@ -34,16 +34,18 @@ module Config = struct
     (1 * Approx_msb_multiplier.Config.latency config.approx_msb_multiplier_config)
     + (1 * Half_width_multiplier.Config.latency config.half_multiplier_config)
     + config.subtracter_stages
-    + config.subtracter_stages
-    + 1
+    + (4 * config.subtracter_stages)
   ;;
 
   let for_bls12_377 =
+    (* See libs/field_ops/model/approx_msb_multiplier_model.ml for the
+     * rationale behind the values.
+     *)
     { approx_msb_multiplier_config =
         { levels =
-            [ { k = (fun w -> Float.to_int (Float.( * ) (Float.of_int w) 0.33))
+            [ { k = (fun _ -> 186)
               ; for_karatsuba =
-                  { radix = Radix_3
+                  { radix = Radix_2
                   ; pre_adder_stages = 1
                   ; (* [middle_adder_stages] here is irrel. *)
                     middle_adder_stages = 1
@@ -51,24 +53,35 @@ module Config = struct
                     post_adder_stages = 5
                   }
               }
-            ; { k = (fun w -> Float.to_int (Float.( * ) (Float.of_int w) 0.33))
+            ; { k = (fun _ -> 94)
               ; for_karatsuba =
-                  { radix = Radix_3
+                  { radix = Radix_2
                   ; pre_adder_stages = 1
                   ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
-                   is sufficient.
-                *)
+                       is sufficient.
+                    *)
                     middle_adder_stages = 1
                   ; post_adder_stages = 2
                   }
               }
-            ; { k = (fun w -> Float.to_int (Float.( * ) (Float.of_int w) 0.43))
+            ; { k = (fun _ -> 48)
               ; for_karatsuba =
                   { radix = Radix_2
                   ; pre_adder_stages = 1
                   ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
-                   is ok.
-                *)
+                       is ok.
+                    *)
+                    middle_adder_stages = 1
+                  ; post_adder_stages = 1
+                  }
+              }
+            ; { k = (fun _ -> 24)
+              ; for_karatsuba =
+                  { radix = Radix_2
+                  ; pre_adder_stages = 1
+                  ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                         is ok.
+                      *)
                     middle_adder_stages = 1
                   ; post_adder_stages = 1
                   }
@@ -213,30 +226,29 @@ struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let with_valid_value { With_valid.valid = _; value } = value
-
     let create ~scope ~clock ~enable ~p ~(config : Config.t) { Stage3.a_minus_qp; valid } =
       assert (width a_minus_qp = bits + 2);
       let spec = Reg_spec.create ~clock () in
       let stages = config.subtracter_stages in
-      let latency = Modulo_subtractor_pipe.latency ~stages + 1 in
+      let correction_factors = [ 4; 2; 1; 0 ] in
+      let latency =
+        Modulo_subtractor_pipe.latency ~stages * List.length correction_factors
+      in
       let a_mod_p =
-        List.map (List.range 0 4) ~f:(fun i ->
+        List.fold correction_factors ~init:a_minus_qp ~f:(fun acc i ->
           let result =
             Adder_subtractor_pipe.sub
               ~stages
               ~scope
               ~enable
               ~clock
-              [ a_minus_qp; Signal.of_z ~width:(bits + 2) Z.(of_int i * p) ]
+              [ acc; Signal.of_z ~width:(bits + 2) Z.(of_int i * p) ]
           in
-          { With_valid.valid = ~:(Adder_subtractor_pipe.O.carry result)
-          ; value = Adder_subtractor_pipe.O.result result
-          })
-        |> List.rev
-        |> Signal.priority_select
-        |> with_valid_value
-        |> reg ~enable spec
+          let borrow = Adder_subtractor_pipe.O.carry result in
+          mux2
+            borrow
+            (Signal.pipeline spec ~n:stages acc)
+            (Adder_subtractor_pipe.O.result result))
       in
       { a_mod_p; valid = pipeline ~enable ~n:latency spec valid }
     ;;
