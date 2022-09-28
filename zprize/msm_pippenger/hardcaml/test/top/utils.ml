@@ -5,6 +5,8 @@ module C = Twisted_edwards_model_lib.Conversions
 module Make (Config : Msm_pippenger.Config.S) = struct
   module Twisted_edwards = Twisted_edwards_model_lib.Twisted_edwards_curve
   module Weierstrass = Twisted_edwards_model_lib.Weierstrass_curve
+  module Config_utils = Msm_pippenger.Config_utils.Make (Config)
+  open Config_utils
 
   module Affine_point = struct
     type 'a t =
@@ -152,7 +154,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       total_result
         := Ark_bls12_377_g1.add
              !total_result
-             (double !cnt2 ~times:(Config.window_size_bits * window_idx)));
+             (double !cnt2 ~times:window_bit_offsets.(window_idx)));
     !total_result
   ;;
 
@@ -203,7 +205,6 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   end
 
   let check_scalar_reduction scalar (reduced_scalars : Reduced_scalar.t array) =
-    let open Msm_pippenger.Config_utils.Make (Config) in
     let v =
       Array.foldi reduced_scalars ~init:Z.zero ~f:(fun i acc v ->
         let scalar_val = Bits.to_int v.scalar in
@@ -241,7 +242,6 @@ module Make (Config : Msm_pippenger.Config.S) = struct
 
   let perform_scalar_reduction scalar =
     assert (Bits.width scalar = Config.scalar_bits);
-    let open Msm_pippenger.Config_utils.Make (Config) in
     let carry = ref false in
     let rec loop res =
       let i = List.length res in
