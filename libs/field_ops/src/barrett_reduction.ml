@@ -69,7 +69,7 @@ module Config = struct
             Mixed
               { latency = 2
               ; hybrid_hamming_weight_threshold = None
-              ; lut_only_hamming_weight_threshold = Some 6
+              ; lut_only_hamming_weight_threshold = Some 1
               }
         }
     ; half_multiplier_config =
@@ -101,7 +101,7 @@ module Config = struct
             Mixed
               { latency = 2
               ; hybrid_hamming_weight_threshold = None
-              ; lut_only_hamming_weight_threshold = Some 6
+              ; lut_only_hamming_weight_threshold = Some 1
               }
         }
     ; subtracter_stages = 3
