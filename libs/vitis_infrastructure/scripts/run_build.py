@@ -116,11 +116,6 @@ def copy_supporting_files(args):
         dst = os.path.join(args.build_dir, os.path.basename(file))
         shutil.copy(file, dst) 
 
-    file = "pre_synth.tcl"
-    if os.path.exists(file):
-        dst = os.path.join(args.build_dir, os.path.basename(file))
-        shutil.copy(file, dst) 
-
 def parse_kernel_type(kernel_type: str) -> KernelType:
     try:
         return { 

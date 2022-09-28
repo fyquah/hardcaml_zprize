@@ -1,8 +1,7 @@
 set core [ipx::current_core]
 
 ipx::associate_bus_interfaces -busif fpga_to_host -clock ap_clk $core
-ipx::associate_bus_interfaces -busif ddr_points_to_fpga -clock ap_clk $core
-ipx::associate_bus_interfaces -busif host_scalars_to_fpga -clock ap_clk $core
+ipx::associate_bus_interfaces -busif host_to_fpga -clock ap_clk $core
 #ipx::associate_bus_interfaces -busif s_axi_control -clock ap_clk $core
 
 #set mem_map    [::ipx::add_memory_map -quiet "s_axi_control" $core]
@@ -18,4 +17,3 @@ ipx::associate_bus_interfaces -busif host_scalars_to_fpga -clock ap_clk $core
 
 #set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]
 
-set_param synth.elaboration.rodinMoreOptions "rt::set_parameter synRetiming true"
