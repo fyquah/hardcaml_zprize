@@ -2,7 +2,8 @@ open! Core
 open Hardcaml
 open Hardcaml_waveterm
 module Config = Pippenger.Config.Zprize
-module Fifo = Pippenger.Stalled_point_fifos.Make (Config)
+module Scalar_config = Pippenger.Scalar.Scalar_config.Zprize
+module Fifo = Pippenger.Stalled_point_fifos.Make (Config) (Scalar_config)
 module Sim = Cyclesim.With_interface (Fifo.I) (Fifo.O)
 
 let ( <-. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
@@ -21,7 +22,7 @@ let test () =
   inputs.clear := Bits.gnd;
   let push ~window ~scalar ~affine_point =
     inputs.window <-. window;
-    inputs.scalar <-. scalar;
+    inputs.scalar.scalar <-. scalar;
     inputs.affine_point <-. affine_point;
     inputs.push <-. 1;
     Cyclesim.cycle sim;
@@ -79,10 +80,10 @@ let%expect_test "" =
     │                  ││────────────────────────────────────────────────┘     └───────────────────────────────────────────│
     │current_window_has││                                                ┌─────────────────────────────────────────┐       │
     │                  ││────────────────────────────────────────────────┘                                         └───────│
-    │negative_out      ││                                                                                                  │
+    │negative          ││                                                                                                  │
     │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
     │                  ││────────────────────────────────────────────────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┬───────│
-    │scalar_out        ││ 0000                                           │0001 │0002 │0003 │0004 │0005 │0006 │0007 │0000   │
+    │scalar            ││ 0000                                           │0001 │0002 │0003 │0004 │0005 │0006 │0007 │0000   │
     │                  ││────────────────────────────────────────────────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴───────│
     │scalar_out_valid  ││                                                ┌─────────────────────────────────────────┐       │
     │                  ││────────────────────────────────────────────────┘                                         └───────│

@@ -1,6 +1,8 @@
 open! Core
 open Hardcaml
 open Hardcaml_waveterm
+module Scalar = Pippenger.Scalar
+module Scalar_config = Scalar.Scalar_config
 
 module type Config = sig
   include Pippenger.Config.S
@@ -8,8 +10,9 @@ module type Config = sig
   val datapath_depth : int
 end
 
-module Model (Config : Config) = struct
+module Model (Config : Config) (Scalar_config : Scalar_config.S) = struct
   include Config
+  include Scalar_config
   open! Signal
 
   let () = Caller_id.set_mode Full_trace
@@ -40,7 +43,8 @@ module Model (Config : Config) = struct
     [@@deriving sexp_of, hardcaml ~rtlprefix:"o$"]
   end
 
-  module Controller = Pippenger.Controller.Make (Config)
+  module Controller = Pippenger.Controller.Make (Config) (Scalar_config)
+  module Scalar = Controller.Scalar
 
   module Pipe = struct
     module I = struct
@@ -90,9 +94,8 @@ module Model (Config : Config) = struct
         { Controller.I.clock = i.clock
         ; clear = i.clear
         ; start = i.start
-        ; scalar = i.scalar
+        ; scalar = Array.map i.scalar ~f:(fun scalar -> { Scalar.scalar; negative = gnd })
         ; scalar_valid = i.scalar_valid
-        ; negatives = Array.init Config.num_windows ~f:(Fn.const gnd)
         ; last_scalar = i.last_scalar
         ; affine_point = i.affine_point
         }
@@ -104,7 +107,10 @@ module Model (Config : Config) = struct
             ~collision_mode:Write_before_read
             ~size:(1 lsl window_size_bits)
             ~read_ports:
-              [| { read_clock = i.clock; read_address = ctrl.bucket; read_enable = vdd }
+              [| { read_clock = i.clock
+                 ; read_address = ctrl.bucket.scalar
+                 ; read_enable = vdd
+                 }
                ; { read_clock = i.clock
                  ; read_address = i.bucket_address
                  ; read_enable = i.bucket_read_enable
@@ -131,7 +137,7 @@ module Model (Config : Config) = struct
          { Pipe.I.clock = i.clock
          ; adder_a = mux2 ctrl.bubble (ones affine_point_bits) ctrl.adder_affine_point
          ; adder_b = mux ctrl.window bucket0
-         ; bucket = ctrl.bucket
+         ; bucket = ctrl.bucket.scalar
          ; window = ctrl.window
          ; valid = ctrl.execute &: ~:(ctrl.bubble)
          });
@@ -150,8 +156,8 @@ module Msm_input = struct
   [@@deriving sexp_of, hardcaml]
 end
 
-module Test (Config : Config) = struct
-  module Model = Model (Config)
+module Test (Config : Config) (Scalar_config : Scalar_config.S) = struct
+  module Model = Model (Config) (Scalar_config)
   module Sim = Cyclesim.With_interface (Model.I) (Model.O)
 
   let ( <-. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
@@ -336,7 +342,6 @@ module Test (Config : Config) = struct
 end
 
 module Config = struct
-  let window_size_bits = 4
   let num_windows = 2
   let affine_point_bits = 16
   let datapath_depth = 8
@@ -344,7 +349,11 @@ module Config = struct
   let log_stall_fifo_depth = 2
 end
 
-module Simple_model = Test (Config)
+module Scalar_config_ = struct
+  let window_size_bits = 4
+end
+
+module Simple_model = Test (Config) (Scalar_config_)
 
 let test_with_stalls =
   Simple_model.of_scalars [| 0x12; 0x21; 0x32; 0xb4; 0x16; 0xac; 0xff; 0x41 |]
