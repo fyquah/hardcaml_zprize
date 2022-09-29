@@ -17,14 +17,26 @@
 #define DDR_BITS 512
 
 // We round up our points to the nearest multiple of the AXI stream / DDR
-#define BYTES_PER_INPUT \
-  (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+// #define BYTES_PER_INPUT \
+//   (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_INPUT_POINT \
+  ((((BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8)
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_INPUT_SCALAR ((((SCALAR_BITS + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8)
 
-#define LOG_MAX_NUM_POINTS_PER_CHUNK 23
+// 20 is arbitrarily chosen, we definitely need it smaller than 24
+#define LOG_MAX_NUM_POINTS_PER_CHUNK 20
 #define MAX_NUM_INPUTS_PER_CHUNK (1ull << LOG_MAX_NUM_POINTS_PER_CHUNK)
 
-#define UINT32_PER_INPUT (BYTES_PER_INPUT / 4)
+#define UINT32_PER_INPUT_POINT (BYTES_PER_INPUT_POINT / 4)
+#define UINT32_PER_INPUT_SCALAR (BYTES_PER_INPUT_SCALAR / 4)
+
+typedef std::vector<uint32_t, aligned_allocator<uint32_t> > aligned_vec32;
+
+static uint32_t
+round_up_to_multiple_of_16(uint32_t x) {
+  return (x + 15) >> 4 << 4;
+}
 
 // Driver class - maintains the set of points
 class Driver {
@@ -98,32 +110,34 @@ class Driver {
     // Allocate Memory in Host Memory
     uint64_t vector_output_size_bytes = sizeof(int) * OUTPUT_SIZE_IN_UINT32;
 
-    std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input(total_num_points() * UINT32_PER_INPUT);
-    std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(OUTPUT_SIZE_IN_UINT32);
-    memset(source_kernel_input.data(), 0, sizeof(uint32_t) * source_kernel_input.size());
+    aligned_vec32 source_kernel_input_points(total_num_points() * UINT32_PER_INPUT_POINT);
+    aligned_vec32 source_kernel_input_scalars(total_num_points() * UINT32_PER_INPUT_SCALAR);
+    aligned_vec32 source_kernel_output(OUTPUT_SIZE_IN_UINT32);
+    memset(source_kernel_input_points.data(), 0, sizeof(uint32_t) * source_kernel_input_points.size());
+    memset(source_kernel_input_scalars.data(), 0, sizeof(uint32_t) * source_kernel_input_scalars.size());
     memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
 
     // Load points from library representation
     {
-      uint32_t *base_ptr = source_kernel_input.data();
-      printf("Bytes per input = 0x%016x", BYTES_PER_INPUT);
-      for (uint64_t i = 0; i < total_num_points(); i++) {
-        const uint64_t NUM_32B_WORDS_PER_SCALAR = 256 / 32;
-        const uint64_t NUM_32B_WORDS_PER_POINT = (256 * 5) / 32;
-        // uint32_t *base_ptr = &source_kernel_input[i * (BYTES_PER_INPUT / 4)];
+      uint32_t *ptr_point = source_kernel_input_points.data();
+      uint32_t *ptr_scalar = source_kernel_input_scalars.data();
 
+      for (uint64_t i = 0; i < total_num_points(); i++) {
         // load the point
-        points[i].copy_to_fpga_buffer(base_ptr);
+        points[i].copy_to_fpga_buffer(ptr_point);
+
         // load the scalar
-        scalars[i].copy_to_fpga_buffer(base_ptr + (1152 / 32));
-        base_ptr += (BYTES_PER_INPUT) / 4;
+        scalars[i].copy_to_fpga_buffer(ptr_scalar);
+
+        ptr_point += (BYTES_PER_INPUT_POINT) / 4;
+        ptr_scalar += (BYTES_PER_INPUT_SCALAR) / 4;
       }
     }
 
     cl_int err;
     cl::CommandQueue q;
     cl::Context context;
-    cl::Kernel krnl_mm2s, krnl_msm_pippenger, krnl_s2mm;
+    cl::Kernel krnl_mm2s_points, krnl_mm2s_scalars, krnl_msm_pippenger, krnl_s2mm;
     // OPENCL HOST CODE AREA START
     // Create Program and Kernel
     auto devices = xcl::get_xil_devices();
@@ -149,7 +163,8 @@ class Driver {
         std::cout << "Failed to program device[" << i << "] with xclbin file!\n";
       } else {
         std::cout << "Device[" << i << "]: program successful!\n";
-        OCL_CHECK(err, krnl_mm2s = cl::Kernel(program, "krnl_mm2s", &err));
+        OCL_CHECK(err, krnl_mm2s_points = cl::Kernel(program, "krnl_mm2s", &err));
+        OCL_CHECK(err, krnl_mm2s_scalars = cl::Kernel(program, "krnl_mm2s", &err));
         OCL_CHECK(err, krnl_msm_pippenger = cl::Kernel(program, "krnl_msm_pippenger", &err));
         OCL_CHECK(err, krnl_s2mm = cl::Kernel(program, "krnl_s2mm", &err));
         valid_device = true;
@@ -162,19 +177,31 @@ class Driver {
     }
 
     // Allocate Buffer in Global Memory
-    std::vector<cl::Buffer> buffer_inputs;
+    std::vector<cl::Buffer> buffer_input_points;
+    std::vector<cl::Buffer> buffer_input_scalars;
+
     for (uint64_t chunk_id = 0; chunk_id < num_input_chunks(); chunk_id++) {
       uint64_t num_points_in_chunk = MAX_NUM_INPUTS_PER_CHUNK;
       if (chunk_id == num_input_chunks() - 1) {
         num_points_in_chunk = num_points_in_last_chunk();
       }
-      uint64_t num_bytes_in_chunk = num_points_in_chunk * BYTES_PER_INPUT;
+      uint64_t num_bytes_in_chunk = num_points_in_chunk * BYTES_PER_INPUT_POINT;
 
-      OCL_CHECK(err, buffer_inputs.emplace_back(context,
-          	                                    CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-          	                                    num_bytes_in_chunk,
-                                                source_kernel_input.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT),
-                                                &err));
+      OCL_CHECK(
+          err,
+          buffer_input_points.emplace_back(context,
+          	                               CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+          	                               num_bytes_in_chunk,
+                                           source_kernel_input_points.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_POINT),
+                                           &err));
+      OCL_CHECK(
+          err,
+          buffer_input_points.emplace_back(context,
+          	                               CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+          	                               num_bytes_in_chunk,
+                                           source_kernel_input_scalars.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
+                                           &err));
+
     }
     OCL_CHECK(err, cl::Buffer buffer_output(context,
                                             CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
@@ -183,10 +210,14 @@ class Driver {
                                             &err));
 
     // Copy input data to device global memory
-    bench("Copying scalars and points to gmem", [&]() {
+    bench("Copying input points and scalars to gmem", [&]() {
         // Trick openCL to know which DDR to stream buffer_inputs to
-        for (auto buffer_input : buffer_inputs) {
-          OCL_CHECK(err, err = krnl_mm2s.setArg(0, buffer_input));
+        for (auto buffer_input : buffer_input_points) {
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input));
+          OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr));
+        }
+        for (auto buffer_input : buffer_input_scalars) {
+          OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(0, buffer_input));
           OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr));
         }
         OCL_CHECK(err, err = q.finish());
@@ -200,14 +231,20 @@ class Driver {
           if (is_last_chunk) {
             num_points_in_chunk = num_points_in_last_chunk();
           }
-          uint32_t num_uint32_in_chunk = num_points_in_chunk * UINT32_PER_INPUT;
 
-          OCL_CHECK(err, err = krnl_mm2s.setArg(0, buffer_inputs[chunk_id]));
-          OCL_CHECK(err, err = krnl_mm2s.setArg(2, num_uint32_in_chunk));
-          OCL_CHECK(err, err = krnl_mm2s.setArg(3, is_last_chunk));
-          OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s));
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input_points[chunk_id]));
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(2, round_up_to_multiple_of_16(
+                                                              num_points_in_chunk * UINT32_PER_INPUT_POINT)));
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(3, is_last_chunk));
+          OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_points));
+
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input_scalars[chunk_id]));
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(2, round_up_to_multiple_of_16(
+                                                              num_points_in_chunk * UINT32_PER_INPUT_SCALAR)));
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(3, is_last_chunk));
+          OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_scalars));
         }
-        std::cout << "Launched writer kernel!" << std::endl;
+        std::cout << "Launched writer kernels!" << std::endl;
 
         // Launch the reader kernel arguments and dispatch them
         OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
