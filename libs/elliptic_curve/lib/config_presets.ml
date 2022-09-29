@@ -58,7 +58,7 @@ module For_bls12_377 = struct
           }
         ; { radix = Radix_2
           ; pre_adder_stages = 1
-          ; middle_adder_stages = 1
+          ; middle_adder_stages = 0
           ; post_adder_stages = 1
           }
         ]

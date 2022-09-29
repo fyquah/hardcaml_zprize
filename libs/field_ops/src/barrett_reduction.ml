@@ -69,7 +69,7 @@ module Config = struct
               ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                    is ok.
                 *)
-                middle_adder_stages = 1
+                middle_adder_stages = 0
               ; post_adder_stages = 1
               }
           }
@@ -80,7 +80,7 @@ module Config = struct
               ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                      is ok.
                 *)
-                middle_adder_stages = 1
+                middle_adder_stages = 0
               ; post_adder_stages = 1
               }
           }
@@ -196,7 +196,7 @@ module Config = struct
           ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                  is ok.
             *)
-            middle_adder_stages = 1
+            middle_adder_stages = 0
           ; post_adder_stages = 1
           }
         ; { radix = Radix_2
@@ -204,7 +204,7 @@ module Config = struct
           ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                  is ok.
             *)
-            middle_adder_stages = 1
+            middle_adder_stages = 0
           ; post_adder_stages = 1
           }
         ]
