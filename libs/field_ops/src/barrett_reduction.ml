@@ -28,27 +28,32 @@ module Config = struct
     { approx_msb_multiplier_config : Approx_msb_multiplier.Config.t
     ; half_multiplier_config : Half_width_multiplier.Config.t
     ; subtracter_stages : int
+    ; num_correction_steps : int
     }
 
   let latency (config : t) =
     (1 * Approx_msb_multiplier.Config.latency config.approx_msb_multiplier_config)
     + (1 * Half_width_multiplier.Config.latency config.half_multiplier_config)
     + config.subtracter_stages
-    + config.subtracter_stages
-    + 1
+    + (config.num_correction_steps * config.subtracter_stages)
   ;;
 
-  let for_bls12_377 =
-    { approx_msb_multiplier_config =
-        { levels =
-            [ { radix = Radix_3
+  let approx_msb_mult_2222 =
+    let open Approx_msb_multiplier.Config in
+    { levels =
+        [ { k = (fun _ -> 187)
+          ; for_karatsuba =
+              { radix = Radix_2
               ; pre_adder_stages = 1
               ; (* [middle_adder_stages] here is irrel. *)
                 middle_adder_stages = 1
               ; (* Adding up to 390 bit results *)
                 post_adder_stages = 5
               }
-            ; { radix = Radix_3
+          }
+        ; { k = (fun _ -> 94)
+          ; for_karatsuba =
+              { radix = Radix_2
               ; pre_adder_stages = 1
               ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
                    is sufficient.
@@ -56,7 +61,10 @@ module Config = struct
                 middle_adder_stages = 1
               ; post_adder_stages = 2
               }
-            ; { radix = Radix_2
+          }
+        ; { k = (fun _ -> 48)
+          ; for_karatsuba =
+              { radix = Radix_2
               ; pre_adder_stages = 1
               ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                    is ok.
@@ -64,27 +72,55 @@ module Config = struct
                 middle_adder_stages = 1
               ; post_adder_stages = 1
               }
-            ]
-        ; ground_multiplier =
-            Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
-        }
-    ; half_multiplier_config =
-        { levels =
-            [ { radix = Radix_3
+          }
+        ; { k = (fun _ -> 24)
+          ; for_karatsuba =
+              { radix = Radix_2
+              ; pre_adder_stages = 1
+              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                     is ok.
+                *)
+                middle_adder_stages = 1
+              ; post_adder_stages = 1
+              }
+          }
+        ]
+    ; ground_multiplier =
+        Mixed
+          { latency = 2
+          ; lut_only_hamming_weight_threshold = Some 6
+          ; hybrid_hamming_weight_threshold = None
+          }
+    }
+  ;;
+
+  let approx_msb_mult_332 =
+    let open Approx_msb_multiplier.Config in
+    { levels =
+        [ { k = (fun _ -> 125)
+          ; for_karatsuba =
+              { radix = Radix_3
               ; pre_adder_stages = 1
               ; (* [middle_adder_stages] here is irrel. *)
                 middle_adder_stages = 1
-              ; post_adder_stages = 5
+              ; (* Adding up to 390 bit results *)
+                post_adder_stages = 5
               }
-            ; { radix = Radix_3
+          }
+        ; { k = (fun _ -> 42)
+          ; for_karatsuba =
+              { radix = Radix_3
               ; pre_adder_stages = 1
-              ; (* intermediate results has width of 42 bits. 1 stage pipeline
+              ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
                    is sufficient.
                 *)
                 middle_adder_stages = 1
               ; post_adder_stages = 2
               }
-            ; { radix = Radix_2
+          }
+        ; { k = (fun _ -> 20)
+          ; for_karatsuba =
+              { radix = Radix_2
               ; pre_adder_stages = 1
               ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                    is ok.
@@ -92,11 +128,114 @@ module Config = struct
                 middle_adder_stages = 1
               ; post_adder_stages = 1
               }
-            ]
-        ; ground_multiplier =
-            Hybrid_dsp_and_luts { latency = 2; lut_only_hamming_weight_threshold = 6 }
-        }
+          }
+        ]
+    ; ground_multiplier =
+        Mixed
+          { latency = 2
+          ; lut_only_hamming_weight_threshold = Some 6
+          ; hybrid_hamming_weight_threshold = None
+          }
+    }
+  ;;
+
+  let lsb_mult_332 =
+    let open Half_width_multiplier.Config in
+    { levels =
+        [ { radix = Radix_3
+          ; pre_adder_stages = 1
+          ; (* [middle_adder_stages] here is irrel. *)
+            middle_adder_stages = 1
+          ; post_adder_stages = 5
+          }
+        ; { radix = Radix_3
+          ; pre_adder_stages = 1
+          ; (* intermediate results has width of 42 bits. 1 stage pipeline
+                 is sufficient.
+            *)
+            middle_adder_stages = 1
+          ; post_adder_stages = 2
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                 is ok.
+            *)
+            middle_adder_stages = 1
+          ; post_adder_stages = 1
+          }
+        ]
+    ; ground_multiplier =
+        Mixed
+          { latency = 2
+          ; lut_only_hamming_weight_threshold = Some 6
+          ; hybrid_hamming_weight_threshold = None
+          }
+    }
+  ;;
+
+  let lsb_mult_2222 =
+    let open Half_width_multiplier.Config in
+    { levels =
+        [ { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; (* [middle_adder_stages] here is irrel. *)
+            middle_adder_stages = 1
+          ; post_adder_stages = 5
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; (* intermediate results has width of 42 bits. 1 stage pipeline
+                 is sufficient.
+            *)
+            middle_adder_stages = 1
+          ; post_adder_stages = 2
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                 is ok.
+            *)
+            middle_adder_stages = 1
+          ; post_adder_stages = 1
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                 is ok.
+            *)
+            middle_adder_stages = 1
+          ; post_adder_stages = 1
+          }
+        ]
+    ; ground_multiplier =
+        Mixed
+          { latency = 2
+          ; lut_only_hamming_weight_threshold = Some 6
+          ; hybrid_hamming_weight_threshold = None
+          }
+    }
+  ;;
+
+  let for_bls12_377 =
+    let which_msb_mult = `Approx_msb_mult_2222 in
+    let which_lsb_mult = `Lsb_mult_2222 in
+    (* See libs/field_ops/model/approx_msb_multiplier_model.ml for the
+     * rationale behind the values.
+     *)
+    { approx_msb_multiplier_config =
+        (match which_msb_mult with
+         | `Approx_msb_mult_332 -> approx_msb_mult_332
+         | `Approx_msb_mult_2222 -> approx_msb_mult_2222)
+    ; half_multiplier_config =
+        (match which_lsb_mult with
+         | `Lsb_mult_332 -> lsb_mult_332
+         | `Lsb_mult_2222 -> lsb_mult_2222)
     ; subtracter_stages = 3
+    ; num_correction_steps =
+        (match which_msb_mult with
+         | `Approx_msb_mult_332 -> 3
+         | `Approx_msb_mult_2222 -> 4)
     }
   ;;
 end
@@ -145,7 +284,12 @@ struct
       let q = q.:[(2 * bits) - 1, bits] in
       assert (width q = bits);
       { q
-      ; a' = pipeline ~enable ~n:latency spec (sel_bottom a (bits + 2))
+      ; a' =
+          pipeline
+            ~enable
+            ~n:latency
+            spec
+            (sel_bottom a (bits + config.num_correction_steps))
       ; valid = pipeline ~enable ~n:latency spec valid
       }
     ;;
@@ -169,7 +313,9 @@ struct
             ~clock
             ~enable
             ~config:config.half_multiplier_config
-            (Multiply_by_constant (uresize q (bits + 2), Bits.of_z ~width:(bits + 2) p))
+            (Multiply_by_constant
+               ( uresize q (bits + config.num_correction_steps)
+               , Bits.of_z ~width:(bits + config.num_correction_steps) p ))
       ; a' = pipeline ~enable ~n:latency spec a'
       ; valid = pipeline ~enable ~n:latency spec valid
       }
@@ -187,8 +333,8 @@ struct
       let spec = Reg_spec.create ~clock () in
       let stages = config.subtracter_stages in
       let latency = Modulo_subtractor_pipe.latency ~stages in
-      assert (width a' = bits + 2);
-      assert (width qp = bits + 2);
+      assert (width a' = bits + config.num_correction_steps);
+      assert (width qp = bits + config.num_correction_steps);
       { a_minus_qp =
           Adder_subtractor_pipe.sub ~stages ~scope ~enable ~clock [ a'; qp ]
           |> Adder_subtractor_pipe.O.result
@@ -204,30 +350,34 @@ struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let with_valid_value { With_valid.valid = _; value } = value
-
     let create ~scope ~clock ~enable ~p ~(config : Config.t) { Stage3.a_minus_qp; valid } =
-      assert (width a_minus_qp = bits + 2);
+      assert (width a_minus_qp = bits + config.num_correction_steps);
       let spec = Reg_spec.create ~clock () in
       let stages = config.subtracter_stages in
-      let latency = Modulo_subtractor_pipe.latency ~stages + 1 in
+      let correction_factors =
+        List.init config.num_correction_steps ~f:(fun i -> 1 lsl i) |> List.rev
+      in
+      let latency =
+        Modulo_subtractor_pipe.latency ~stages * List.length correction_factors
+      in
       let a_mod_p =
-        List.map (List.range 0 4) ~f:(fun i ->
-            let result =
-              Adder_subtractor_pipe.sub
-                ~stages
-                ~scope
-                ~enable
-                ~clock
-                [ a_minus_qp; Signal.of_z ~width:(bits + 2) Z.(of_int i * p) ]
-            in
-            { With_valid.valid = ~:(Adder_subtractor_pipe.O.carry result)
-            ; value = Adder_subtractor_pipe.O.result result
-            })
-        |> List.rev
-        |> Signal.priority_select
-        |> with_valid_value
-        |> reg ~enable spec
+        List.fold correction_factors ~init:a_minus_qp ~f:(fun acc i ->
+          let result =
+            Adder_subtractor_pipe.sub
+              ~stages
+              ~scope
+              ~enable
+              ~clock
+              [ acc
+              ; Signal.of_z ~width:(bits + config.num_correction_steps) Z.(of_int i * p)
+              ]
+          in
+          let borrow = Adder_subtractor_pipe.O.carry result in
+          mux2
+            borrow
+            (Signal.pipeline spec ~n:stages acc)
+            (Adder_subtractor_pipe.O.result result))
+        |> Fn.flip Signal.uresize bits
       in
       { a_mod_p; valid = pipeline ~enable ~n:latency spec valid }
     ;;
