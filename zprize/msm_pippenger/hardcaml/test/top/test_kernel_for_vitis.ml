@@ -312,7 +312,7 @@ let test_back_to_back () =
   let _result1 : Test.result =
     Test.run ~sim ~seed:1 ~timeout:1000 ~verilator:false 8 ()
   in
-  let result2 : Test.result = Test.run ~sim ~seed:2 ~timeout:500 ~verilator:false 8 () in
+  let result2 : Test.result = Test.run ~sim ~seed:2 ~timeout:1000 ~verilator:false 8 () in
   Option.value_exn result2.waves
 ;;
 
