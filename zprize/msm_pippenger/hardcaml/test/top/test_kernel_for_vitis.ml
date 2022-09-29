@@ -28,7 +28,10 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         ~cache_dir:"/tmp/kernel/"
         ~verbose:true
         create
-    else Sim.create ~config:Cyclesim.Config.trace_all create
+    else
+      Sim.create
+        ~config:{ Cyclesim.Config.trace_all with deduplicate_signals = false }
+        create
   ;;
 
   let display_rules =
@@ -347,7 +350,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   let run_test
     ?(waves = false)
     ?(seed = 0)
-    ?(timeout = 10_000)
+    ?(timeout = 11_000)
     ?(verilator = false)
     num_inputs
     =
