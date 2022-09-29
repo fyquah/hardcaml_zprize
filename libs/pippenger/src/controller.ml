@@ -102,17 +102,23 @@ module Make (Config : Config.S) = struct
     let pipes = Bucket_pipeline.O.Of_signal.wires () in
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
+    ignore (sm.current -- "STATE" : Signal.t);
     let window = Var.reg spec ~width:log_num_windows in
     let window_next = window.value +:. 1 in
-    let scalar = mux window.value (Array.to_list i.scalar) in
+    let scalar, scalar_is_zero =
+      let scalar = mux window.value (Array.to_list i.scalar) in
+      scalar, reg spec (scalar ==:. 0)
+    in
     let bubble = Var.wire ~default:gnd in
     let push_stalled_point = Var.wire ~default:gnd in
     let pop_stalled_point = Var.wire ~default:gnd in
-    let is_in_pipeline = mux window.value pipes.is_in_pipeline -- "is_in_pipeline" in
+    let is_in_pipeline_reg = Var.reg spec ~width:num_windows in
+    ignore (is_in_pipeline_reg.value -- "is_in_pipeline_reg" : Signal.t);
+    let is_in_pipeline = is_in_pipeline_reg.value.:(0) -- "is_in_pipeline" in
     let shift_pipeline = Var.wire ~default:gnd in
     let scalar_read = Var.wire ~default:gnd in
     let flushing = Var.reg spec ~width:1 in
-    ignore (sm.current -- "STATE" : Signal.t);
+    ignore (flushing.value -- "flushing" : Signal.t);
     let on_last_window ~processing_scalars =
       Always.(
         when_
@@ -135,7 +141,10 @@ module Make (Config : Config.S) = struct
                 ; when_ i.start [ sm.set_next Choose_mode ]
                 ] )
             ; ( Choose_mode
-              , [ if_
+              , [ (* latch the pipeline control at the start.  This tracks values
+                     for a few cycles longer than necesasry, but reduces the critical path *)
+                  is_in_pipeline_reg <-- concat_lsb pipes.is_in_pipeline
+                ; if_
                     flushing.value
                     [ sm.set_next Execute_stalled
                     ; executing_stalled <-- vdd
@@ -161,6 +170,7 @@ module Make (Config : Config.S) = struct
               , [ bubble <-- vdd
                 ; shift_pipeline <-- vdd
                 ; window <-- window_next
+                ; is_in_pipeline_reg <-- srl is_in_pipeline_reg.value 1
                 ; sm.set_next Wait_bubble
                 ; on_last_window ~processing_scalars:false
                 ] )
@@ -168,9 +178,10 @@ module Make (Config : Config.S) = struct
             ; ( Execute_scalar
               , [ executing_scalar <-- vdd
                 ; shift_pipeline <-- vdd
-                ; bubble <-- (is_in_pipeline |: (scalar ==:. 0))
-                ; push_stalled_point <-- (is_in_pipeline &: (scalar <>:. 0))
+                ; bubble <-- (is_in_pipeline |: scalar_is_zero)
+                ; push_stalled_point <-- (is_in_pipeline &: ~:scalar_is_zero)
                 ; window <-- window_next
+                ; is_in_pipeline_reg <-- srl is_in_pipeline_reg.value 1
                 ; sm.set_next Wait_scalar
                 ; on_last_window ~processing_scalars:true
                 ] )
@@ -180,10 +191,12 @@ module Make (Config : Config.S) = struct
                 ; shift_pipeline <-- vdd
                 ; bubble
                   <-- (is_in_pipeline
-                      |: (stalled.scalar_out_valid &: (stalled.scalar_out ==:. 0))
+                      |: (stalled.scalar_out_valid &: reg spec (stalled.scalar_out ==:. 0))
+                         (* XXX aray: Can we get rid of this? *)
                       |: ~:(stalled.current_window_has_stall))
                 ; pop_stalled_point <-- ~:(bubble.value)
                 ; window <-- window_next
+                ; is_in_pipeline_reg <-- srl is_in_pipeline_reg.value 1
                 ; sm.set_next Wait_stalled
                 ; on_last_window ~processing_scalars:false
                 ] )
@@ -200,8 +213,8 @@ module Make (Config : Config.S) = struct
          ; clear = i.clear
          ; window = window.value
          ; scalar_in = i.scalar
-         ; stalled_scalar = stalled.scalar_out
-         ; stalled_scalar_valid = stalled.scalar_out_valid
+         ; stalled_scalars = stalled.scalars_out
+         ; stalled_scalars_valid = stalled.scalars_out_valid
          ; process_stalled = executing_stalled
          ; bubble = is_in_pipeline
          ; shift = shift_pipeline.value

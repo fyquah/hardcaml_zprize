@@ -57,8 +57,8 @@ module Make (Config : Config.S) = struct
       ; clear : 'a
       ; window : 'a [@bits log_num_windows]
       ; scalar_in : 'a array [@bits window_size_bits] [@length num_windows]
-      ; stalled_scalar : 'a [@bits window_size_bits]
-      ; stalled_scalar_valid : 'a
+      ; stalled_scalars : 'a array [@bits window_size_bits] [@length num_windows]
+      ; stalled_scalars_valid : 'a array [@length num_windows]
       ; process_stalled : 'a
       ; bubble : 'a
       ; shift : 'a
@@ -86,14 +86,14 @@ module Make (Config : Config.S) = struct
                 i.bubble
                 (zero window_size_bits)
                 (mux2
-                   (i.process_stalled &: i.stalled_scalar_valid)
-                   i.stalled_scalar
+                   (i.process_stalled &: i.stalled_scalars_valid.(window_index))
+                   i.stalled_scalars.(window_index)
                    i.scalar_in.(window_index))
           ; shift = i.window ==:. window_index &: i.shift
           ; scalar_match =
               mux2
-                (i.process_stalled &: i.stalled_scalar_valid)
-                i.stalled_scalar
+                (i.process_stalled &: i.stalled_scalars_valid.(window_index))
+                i.stalled_scalars.(window_index)
                 i.scalar_in.(window_index)
           })
     in
