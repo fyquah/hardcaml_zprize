@@ -24,8 +24,7 @@
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_INPUT_SCALAR 32
 
-// 20 is arbitrarily chosen, we definitely need it smaller than 24
-#define LOG_MAX_NUM_POINTS_PER_CHUNK 20
+#define LOG_MAX_NUM_POINTS_PER_CHUNK 23
 #define MAX_NUM_INPUTS_PER_CHUNK (1ull << LOG_MAX_NUM_POINTS_PER_CHUNK)
 
 #define UINT32_PER_INPUT_POINT (BYTES_PER_INPUT_POINT / 4)
@@ -45,8 +44,19 @@ class Driver {
   const std::string binaryFile;
 
  public:
-  Driver(const std::vector<bls12_377_g1::Xyzt> &points, const std::string &binaryFile)
-      : points(points), binaryFile(binaryFile) {}
+  Driver(g1_affine_t *rust_points,
+         ssize_t npoints,
+         const std::string &binaryFile)
+      : points(npoints), binaryFile(binaryFile) {
+
+    std::cout << "Converting affine points into internal format ..." << std::endl;
+    for (ssize_t i = 0; i < npoints; i++) {
+      // std::cout << rust_points[i] << std::endl;
+      points[i].copy_from_rust_type(rust_points[i]);
+      points[i].preComputeFPGA();
+      // points[i].println();
+    }
+  }
 
   const uint64_t NUM_OUTPUT_POINTS = 90091;
   const uint64_t OUTPUT_SIZE_IN_UINT32 = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
@@ -270,16 +280,9 @@ class Driver {
 extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t *rust_points,
                             ssize_t npoints) {
   std::string binaryFile(xclbin, xclbin_len);
-  printf("Initializing with XCLBIN=%s\n", binaryFile.c_str());
+  std::cout << "Initializing with XCLBIN = " <<  binaryFile << std::endl;
   bls12_377_g1::init();
-  std::vector<bls12_377_g1::Xyzt> points(npoints);
-  for (ssize_t i = 0; i < npoints; i++) {
-    // std::cout << rust_points[i] << std::endl;
-    points[i].copy_from_rust_type(rust_points[i]);
-    points[i].preComputeFPGA();
-    // points[i].println();
-  }
-  auto *driver = new Driver(points, binaryFile);
+  auto *driver = new Driver(rust_points, npoints, binaryFile);
   return driver;
 }
 
