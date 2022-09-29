@@ -43,12 +43,8 @@ round_up_to_multiple_of_16(uint32_t x) {
 
 // Driver class - maintains the set of points
 class Driver {
-public:
-  inline uint64_t total_num_points() { return points.size(); }
-
 private:
   std::vector<bls12_377_g1::Xyzt> points;
-  const std::string binaryFile;
 
   aligned_vec32 source_kernel_input_points;
   aligned_vec32 source_kernel_input_scalars;
@@ -65,7 +61,31 @@ private:
   std::vector<cl::Buffer> buffer_input_scalars;
   cl::Buffer buffer_output;
 
-  void load_xclbin(const std::string) {
+public:
+  Driver(g1_affine_t *rust_points,
+         ssize_t npoints)
+      : points(npoints) {
+
+    std::cout << "Converting affine points into internal format ..." << std::endl;
+    for (ssize_t i = 0; i < npoints; i++) {
+      // std::cout << rust_points[i] << std::endl;
+      points[i].copy_from_rust_type(rust_points[i]);
+      points[i].preComputeFPGA();
+      // points[i].println();
+    }
+  }
+
+  inline uint64_t total_num_points() { return points.size(); }
+
+  inline uint64_t num_input_chunks() {
+    return (total_num_points() + MAX_NUM_INPUTS_PER_CHUNK - 1) >> LOG_MAX_NUM_POINTS_PER_CHUNK;
+  }
+
+  inline uint64_t num_points_in_last_chunk() {
+    return total_num_points() - ((num_input_chunks()  - 1) << LOG_MAX_NUM_POINTS_PER_CHUNK);
+  }
+
+  void load_xclbin(const std::string& binaryFile) {
     memset(source_kernel_input_points.data(), 0, sizeof(uint32_t) * source_kernel_input_points.size());
     memset(source_kernel_input_scalars.data(), 0, sizeof(uint32_t) * source_kernel_input_scalars.size());
     memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
@@ -163,31 +183,6 @@ private:
       });
     }
   }
-
-public:
-  Driver(g1_affine_t *rust_points,
-         ssize_t npoints,
-         const std::string &binaryFile)
-      : points(npoints), binaryFile(binaryFile) {
-
-    std::cout << "Converting affine points into internal format ..." << std::endl;
-    for (ssize_t i = 0; i < npoints; i++) {
-      // std::cout << rust_points[i] << std::endl;
-      points[i].copy_from_rust_type(rust_points[i]);
-      points[i].preComputeFPGA();
-      // points[i].println();
-    }
-  }
-
-  inline uint64_t num_input_chunks() {
-    return (total_num_points() + MAX_NUM_INPUTS_PER_CHUNK - 1) >> LOG_MAX_NUM_POINTS_PER_CHUNK;
-  }
-
-  inline uint64_t num_points_in_last_chunk() {
-    return total_num_points() - ((num_input_chunks()  - 1) << LOG_MAX_NUM_POINTS_PER_CHUNK);
-  }
-
-  // inline uint64_t total_input_size_in_uint32_per_msm() { return (BYTES_PER_INPUT * numPoints()) / 4; }
 
   bls12_377_g1::Xyzt postProcess(const uint32_t *source_kernel_output) {
     const uint64_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
@@ -315,10 +310,15 @@ public:
 
 extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t *rust_points,
                             ssize_t npoints) {
-  std::string binaryFile(xclbin, xclbin_len);
-  std::cout << "Initializing with XCLBIN = " <<  binaryFile << std::endl;
   bls12_377_g1::init();
-  auto *driver = new Driver(rust_points, npoints, binaryFile);
+
+  std::cout << "Instantiating msm driver for " << npoints << " points" << std::endl;
+  auto *driver = new Driver(rust_points, npoints);
+
+  std::string binaryFile(xclbin, xclbin_len);
+  std::cout << "Loading XCLBIN=" << binaryFile << " and doing openCL setups:" << std::endl;
+  driver->load_xclbin(binaryFile);
+
   return driver;
 }
 
