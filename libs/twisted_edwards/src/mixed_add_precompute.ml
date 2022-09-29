@@ -272,8 +272,14 @@ module Make (Num_bits : Num_bits.S) = struct
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
-      let c_E = sub_pipe ~ensure_positive:true ~scope ~latency ~config ~clock c_B c_A in
-      let c_F = sub_pipe ~ensure_positive:true ~scope ~latency ~config ~clock c_D c_C in
+      let c_E =
+        sub_pipe ~ensure_positive:true ~scope ~latency ~config ~clock c_B c_A
+        |> Fn.flip sel_bottom (num_bits + num_correction_steps + 2)
+      in
+      let c_F =
+        sub_pipe ~ensure_positive:true ~scope ~latency ~config ~clock c_D c_C
+        |> Fn.flip sel_bottom (num_bits + num_correction_steps + 2)
+      in
       let c_G = add_pipe ~scope ~latency ~config ~clock c_D c_C in
       let c_H = add_pipe ~scope ~latency ~config ~clock c_B c_A in
       let scope = Scope.sub_scope scope "stage2" in
@@ -292,23 +298,33 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let latency (config : Config.t) = (2 * config.adder_stages) + 1
+    let read_latency = 1
+    let latency (config : Config.t) = (2 * config.adder_stages) + read_latency
 
     let reduce ~(build_mode : Build_mode.t) ~(config : Config.t) ~scope ~clock v =
       assert (Z.(equal Field_ops_model.Approx_msb_multiplier_model.p config.p));
       let spec = Reg_spec.create ~clock () in
       (* build the static bram values *)
       let log2_depth = 9 in
-      let read_latency = 1 in
       let mux_list =
         (* we can knock off the top [log2_depth] bits here because we know what they are *)
         let tbl =
           Field_ops_model.Approx_msb_multiplier_model.build_precompute_two log2_depth
         in
         List.init (1 lsl log2_depth) ~f:(fun i ->
-          Hashtbl.find_exn tbl i
-          |> Signal.of_z ~width:(num_bits + log2_depth)
-          |> Fn.flip Signal.drop_top log2_depth)
+          let orig_bits =
+            Hashtbl.find_exn tbl i |> Bits.of_z ~width:(num_bits + log2_depth)
+          in
+          let expected_prefix =
+            (if i = 0 then 0 else i - 1) |> Bits.of_int ~width:log2_depth
+          in
+          [%test_result: Bits.t]
+            (Bits.sel_top orig_bits log2_depth)
+            ~expect:expected_prefix;
+          let truncated_suffix = Bits.drop_top orig_bits log2_depth in
+          truncated_suffix
+          |> Bits.to_z ~signedness:Unsigned
+          |> Signal.of_z ~width:num_bits)
       in
       (* make sure the inputs are good *)
       let num_extra_bits = width v - num_bits in
@@ -327,14 +343,21 @@ module Make (Num_bits : Num_bits.S) = struct
       let coarse_reduction =
         let v = pipeline spec ~n:read_latency (drop_top v num_extra_bits) in
         assert (width v = width bram);
-        sub_pipe
-          ~ensure_positive:false
-          ~scope
-          ~latency:(Fn.const config.adder_stages)
-          ~config
-          ~clock
-          v
-          bram
+        let signed_res =
+          sub_pipe
+            ~ensure_positive:false
+            ~scope
+            ~latency:(Fn.const config.adder_stages)
+            ~config
+            ~clock
+            v
+            bram
+        in
+        let corrected_res = ~:(msb signed_res) @: lsbs signed_res in
+        mux2
+          (rd_idx ==:. 0)
+          (pipeline spec (gnd @: v) ~n:config.adder_stages)
+          corrected_res
       in
       [%test_result: int] (width coarse_reduction) ~expect:(num_bits + 1);
       (* do a fine reduction *)
@@ -352,7 +375,8 @@ module Make (Num_bits : Num_bits.S) = struct
               sub_val
           in
           { With_valid.valid = ~:(msb res); value = lsbs res })
-        |> priority_select_with_default ~default:coarse_reduction
+        |> priority_select_with_default
+             ~default:(pipeline spec coarse_reduction ~n:config.adder_stages)
       in
       uresize fine_reduction num_bits
     ;;
