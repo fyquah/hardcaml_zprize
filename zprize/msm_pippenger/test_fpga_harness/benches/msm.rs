@@ -9,7 +9,7 @@ use ark_ff::BigInteger256;
 use blst_msm::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let (batches, points, scalars, arkworks_results) =
+    let (batches, points, scalars, _arkworks_results) =
         util::generate_or_load_test_data();
     let mut context = multi_scalar_mult_init(points.as_slice());
     let npoints = points.len();
