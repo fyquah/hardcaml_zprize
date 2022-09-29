@@ -22,7 +22,7 @@
 #define BYTES_PER_INPUT_POINT \
   ((((BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8)
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
-#define BYTES_PER_INPUT_SCALAR ((((SCALAR_BITS + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8)
+#define BYTES_PER_INPUT_SCALAR 32
 
 // 20 is arbitrarily chosen, we definitely need it smaller than 24
 #define LOG_MAX_NUM_POINTS_PER_CHUNK 20
@@ -129,8 +129,8 @@ class Driver {
         // load the scalar
         scalars[i].copy_to_fpga_buffer(ptr_scalar);
 
-        ptr_point += (BYTES_PER_INPUT_POINT) / 4;
-        ptr_scalar += (BYTES_PER_INPUT_SCALAR) / 4;
+        ptr_point  += UINT32_PER_INPUT_POINT;
+        ptr_scalar += UINT32_PER_INPUT_SCALAR;
       }
     }
 
@@ -185,20 +185,19 @@ class Driver {
       if (chunk_id == num_input_chunks() - 1) {
         num_points_in_chunk = num_points_in_last_chunk();
       }
-      uint64_t num_bytes_in_chunk = num_points_in_chunk * BYTES_PER_INPUT_POINT;
 
       OCL_CHECK(
           err,
           buffer_input_points.emplace_back(context,
           	                               CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-          	                               num_bytes_in_chunk,
+          	                               num_points_in_chunk * BYTES_PER_INPUT_POINT,
                                            source_kernel_input_points.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_POINT),
                                            &err));
       OCL_CHECK(
           err,
-          buffer_input_points.emplace_back(context,
+          buffer_input_scalars.emplace_back(context,
           	                               CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-          	                               num_bytes_in_chunk,
+          	                               num_points_in_chunk * BYTES_PER_INPUT_SCALAR,
                                            source_kernel_input_scalars.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
                                            &err));
 
@@ -238,10 +237,10 @@ class Driver {
           OCL_CHECK(err, err = krnl_mm2s_points.setArg(3, is_last_chunk));
           OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_points));
 
-          OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input_scalars[chunk_id]));
-          OCL_CHECK(err, err = krnl_mm2s_points.setArg(2, round_up_to_multiple_of_16(
+          OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(0, buffer_input_scalars[chunk_id]));
+          OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(2, round_up_to_multiple_of_16(
                                                               num_points_in_chunk * UINT32_PER_INPUT_SCALAR)));
-          OCL_CHECK(err, err = krnl_mm2s_points.setArg(3, is_last_chunk));
+          OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(3, is_last_chunk));
           OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_scalars));
         }
         std::cout << "Launched writer kernels!" << std::endl;
