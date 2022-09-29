@@ -118,7 +118,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     in
     let scalars =
       let b =
-        Array.map inputs ~f:(fun input -> Bits.uresize input.scalar 256) |> Bits.of_array
+        Array.map inputs ~f:(fun input -> Bits.uresize input.scalar aligned_to)
+        |> Bits.of_array
       in
       Bits.uresize b (Int.round_up (Bits.width b) ~to_multiple_of:axi_bits)
       |> Bits.split_lsb ~part_width:axi_bits
@@ -201,6 +202,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       return data
     in
     let recv_data = Tb.run_with_timeout ~timeout ~simulator:sim ~testbench () in
+    if Option.is_none recv_data then print_s [%message "Simulation timed out!"];
     let result_points = ref [] in
     let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
     let window = ref 0 in
@@ -309,11 +311,11 @@ let test_back_to_back () =
   in
   let module Test = Make (Config) in
   let sim = Test.create ~waves:true ~verilator:false in
-  (* let _result0 = Test.run ~sim ~seed:0 ~timeout:1000 ~verilator:false 8 () in *)
-  (* let _result1 : Test.result = *)
-  (*   Test.run ~sim ~seed:1 ~timeout:1000 ~verilator:false 8 () *)
-  (* in *)
-  let result2 : Test.result = Test.run ~sim ~seed:2 ~timeout:500 ~verilator:false 1 () in
+  let _result0 = Test.run ~sim ~seed:0 ~timeout:1000 ~verilator:false 8 () in
+  let _result1 : Test.result =
+    Test.run ~sim ~seed:1 ~timeout:1000 ~verilator:false 8 ()
+  in
+  let result2 : Test.result = Test.run ~sim ~seed:2 ~timeout:1000 ~verilator:false 8 () in
   Option.value_exn result2.waves
 ;;
 
