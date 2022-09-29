@@ -58,8 +58,8 @@ module Config = struct
                 { radix = Radix_2
                 ; pre_adder_stages = 1
                 ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
-                   is sufficient.
-                *)
+                     is sufficient.
+                  *)
                   middle_adder_stages = 1
                 ; post_adder_stages = 2
                 }
@@ -69,8 +69,8 @@ module Config = struct
                 { radix = Radix_2
                 ; pre_adder_stages = 1
                 ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
-                   is ok.
-                *)
+                     is ok.
+                  *)
                   middle_adder_stages = 0
                 ; post_adder_stages = 1
                 }
@@ -81,7 +81,7 @@ module Config = struct
                 ; pre_adder_stages = 1
                 ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                      is ok.
-                *)
+                  *)
                   middle_adder_stages = 0
                 ; post_adder_stages = 1
                 }
@@ -119,8 +119,8 @@ module Config = struct
                 { radix = Radix_2
                 ; pre_adder_stages = 1
                 ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
-                   is ok.
-                *)
+                     is ok.
+                  *)
                   middle_adder_stages = 0
                 ; post_adder_stages = 1
                 }
@@ -131,7 +131,7 @@ module Config = struct
                 ; pre_adder_stages = 1
                 ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                      is ok.
-                *)
+                  *)
                   middle_adder_stages = 0
                 ; post_adder_stages = 1
                 }
@@ -241,7 +241,7 @@ module Config = struct
             ; pre_adder_stages = 1
             ; (* intermediate results has width of 42 bits. 1 stage pipeline
                  is sufficient.
-            *)
+              *)
               middle_adder_stages = 1
             ; post_adder_stages = 2
             }
@@ -249,7 +249,7 @@ module Config = struct
             ; pre_adder_stages = 1
             ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                  is ok.
-            *)
+              *)
               middle_adder_stages = 0
             ; post_adder_stages = 1
             }
@@ -257,7 +257,7 @@ module Config = struct
             ; pre_adder_stages = 1
             ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                  is ok.
-            *)
+              *)
               middle_adder_stages = 0
             ; post_adder_stages = 1
             }
@@ -281,7 +281,7 @@ module Config = struct
             ; pre_adder_stages = 1
             ; (* intermediate results has width of 42 bits. 1 stage pipeline
                  is sufficient.
-            *)
+              *)
               middle_adder_stages = 1
             ; post_adder_stages = 2
             }
@@ -289,7 +289,7 @@ module Config = struct
             ; pre_adder_stages = 1
             ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                  is ok.
-            *)
+              *)
               middle_adder_stages = 0
             ; post_adder_stages = 1
             }
@@ -297,7 +297,7 @@ module Config = struct
             ; pre_adder_stages = 1
             ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                  is ok.
-            *)
+              *)
               middle_adder_stages = 0
             ; post_adder_stages = 1
             }

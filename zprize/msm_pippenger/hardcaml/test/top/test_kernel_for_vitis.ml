@@ -99,7 +99,6 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let inputs = Utils.random_inputs ~precompute ~seed num_inputs in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     Cyclesim.cycle sim;
-    i.fpga_to_host_dest.tready := Bits.vdd;
     let points =
       Array.map inputs ~f:(fun input ->
         let b =
@@ -132,14 +131,20 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         let%bind _ = Tb_axi_send.cycle Tb_axi_send.input_zero in
         return ())
       else (
-        let%bind o =
-          Tb_axi_send.cycle
-            { Tb_axi_send.input_hold with
-              tvalid = Bits.vdd
-            ; tdata = List.hd_exn data
-            ; tlast = (if List.length data = 1 then Bits.vdd else Bits.gnd)
-            }
+        let rec wait_for_tvalid _ : Tb_axi_send.O_data.t Tb_axi_send.t =
+          (* Hardcoded 20% for tvalid to go low. *)
+          let tvalid = if Random.int 100 > 80 then Bits.gnd else Bits.vdd in
+          let%bind o =
+            Tb_axi_send.cycle
+              { Tb_axi_send.input_hold with
+                tvalid
+              ; tdata = List.hd_exn data
+              ; tlast = (if List.length data = 1 then Bits.vdd else Bits.gnd)
+              }
+          in
+          if Bits.is_vdd tvalid then return o else wait_for_tvalid ()
         in
+        let%bind o = wait_for_tvalid () in
         let rec wait_for_tready (o : Tb_axi_send.O_data.t) =
           if Bits.is_vdd o.before_edge.tready
           then return ()
@@ -151,9 +156,11 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         send_data (List.tl_exn data) o)
     in
     let open! Tb_axi_recv.Let_syntax in
-    let rec recv_data data (output : Tb_axi_recv.O_data.t) : Bits.t list Tb_axi_recv.t =
-      let result = Tb_axi_recv.O_data.after_edge output in
-      if Bits.to_int result.tvalid <> 1
+    let rec recv_data data tready (output : Tb_axi_recv.O_data.t)
+      : Bits.t list Tb_axi_recv.t
+      =
+      let result = Tb_axi_recv.O_data.before_edge output in
+      if not (Bits.is_vdd result.tvalid && Bits.is_vdd tready)
       then wait_for_next_cycle data
       else (
         let data = result.tdata :: data in
@@ -161,8 +168,9 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         then return (List.rev data)
         else wait_for_next_cycle data)
     and wait_for_next_cycle data =
-      let%bind output = Tb_axi_recv.cycle { tready = Bits.vdd } in
-      recv_data data output
+      let tready = if Random.int 100 > 80 then Bits.gnd else Bits.vdd in
+      let%bind output = Tb_axi_recv.cycle { tready } in
+      recv_data data tready output
     in
     let open! Tb.Let_syntax in
     let testbench _ =
@@ -194,7 +202,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
                 Tb_axi_recv.merge_inputs ~parent:parent.fpga_to_host_dest ~child
             })
           ~outputs:(fun parent -> parent.O.fpga_to_host)
-          (recv_data [])
+          (recv_data [] !(i.fpga_to_host_dest.tready))
       in
       let%bind data = Tb.wait_for receive_finished in
       let%bind () = Tb.wait_for send_scalars_finished in
