@@ -41,6 +41,13 @@ round_up_to_multiple_of_16(uint32_t x) {
   return (x + 15) >> 4 << 4;
 }
 
+struct PostProcessingValues {
+  bls12_377_g1::Xyzt accum;
+  bls12_377_g1::Xyzt running;
+  bls12_377_g1::Xyzt bucket_sum;
+  bls12_377_g1::Xyzt final_result;
+};
+
 // Driver class - maintains the set of points
 class Driver {
 private:
@@ -58,6 +65,9 @@ private:
   std::vector<cl::Buffer> buffer_input_points;
   std::vector<cl::Buffer> buffer_input_scalars;
   cl::Buffer buffer_output;
+
+  // preallocated objects to be used for post-processing
+  PostProcessingValues post_processing_values;
 
 public:
   const uint64_t total_num_points;
@@ -84,7 +94,12 @@ public:
       // point.println();
 
       ptr_point += UINT32_PER_INPUT_POINT;
+
+      if ((i + 1) % (1 << 20) == 0) {
+        std::cout << "Converted " << (i + 1) << " points ..." << std::endl;
+      }
     }
+    std::cout << "Done internal format conversion!" << std::endl;
   }
 
   inline uint64_t num_input_chunks() {
@@ -178,14 +193,13 @@ public:
     }
   }
 
-  bls12_377_g1::Xyzt postProcess(const uint32_t *source_kernel_output) {
+  void postProcess(const uint32_t *source_kernel_output) {
     const uint64_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
 
     bls12_377_g1::init();
-    bls12_377_g1::Xyzt final_result;
-    final_result.setToIdentity();
 
-    bls12_377_g1::Xyzt accum, running;
+    post_processing_values.final_result.setToIdentity();
+
     uint64_t bit_offset = 0;
     uint64_t point_idx = 0;
     for (uint64_t window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
@@ -193,23 +207,23 @@ public:
       const auto CUR_NUM_BUCKETS = bls12_377_g1::NUM_BUCKETS(window_idx);
 
       // perform triangle sum
-      bls12_377_g1::Xyzt bucket_sums[CUR_NUM_BUCKETS];
-      accum.setToIdentity();
-      running.setToIdentity();
+      post_processing_values.accum.setToIdentity();
+      post_processing_values.running.setToIdentity();
       for (uint64_t bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1 /* skip bucket 0 */;
            bucket_idx--) {
-        auto &bucket_sum = bucket_sums[bucket_idx];
-
         // receive fpga point
-        bucket_sum.import_from_fpga_vector(source_kernel_output +
-                                           (NUM_32B_WORDS_PER_OUTPUT * point_idx));
-        bucket_sum.postComputeFPGA();
+        post_processing_values.bucket_sum.import_from_fpga_vector(
+            source_kernel_output + (NUM_32B_WORDS_PER_OUTPUT * point_idx));
+        post_processing_values.bucket_sum.postComputeFPGA();
         ++point_idx;
 
         // do triangle sum update
-        bls12_377_g1::triangleSumUpdate(accum, running, bucket_sum);
+        bls12_377_g1::triangleSumUpdate(
+            post_processing_values.accum,
+            post_processing_values.running,
+            post_processing_values.bucket_sum);
       }
-      bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset);
+      bls12_377_g1::finalSumUpdate(post_processing_values.final_result, post_processing_values.accum, bit_offset);
       bit_offset += CUR_WINDOW_LEN;
     }
     if (point_idx != NUM_OUTPUT_POINTS) {
@@ -217,8 +231,7 @@ public:
     }
 
     // final_result.println();
-    final_result.extendedTwistedEdwardsToWeierstrass();
-    return final_result;
+    post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
   }
 
   inline void feed_msm(g1_projective_t *out, biginteger256_t *scalars) {
@@ -296,8 +309,8 @@ public:
     });
 
     bench("Doing on-host postprocessing", [&]() {
-        auto final_result = postProcess(source_kernel_output.data());
-        final_result.copy_to_rust_type(*out);
+        postProcess(source_kernel_output.data());
+        post_processing_values.final_result.copy_to_rust_type(*out);
     });
   }
 };

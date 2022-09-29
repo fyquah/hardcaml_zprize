@@ -118,8 +118,7 @@ class GFq {
     mpz_set(v, other.v);
   }
 
-  ~GFq() { /*mpz_clear(v);*/
-  }
+  ~GFq() { mpz_clear(v); }
 
   // arithmetic
   void divBy2() {
