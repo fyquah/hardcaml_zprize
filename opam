@@ -11,6 +11,7 @@ depends: [
   "ctypes-foreign"
   "hardcaml"
   "hardcaml_circuits"
+  "hardcaml_step_testbench"
   "hardcaml_waveterm"
   "hardcaml_verify"
   "hardcaml_xilinx"
