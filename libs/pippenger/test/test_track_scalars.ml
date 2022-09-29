@@ -45,8 +45,6 @@ let%expect_test "unique values" =
   Waveform.print ~display_width:82 ~display_height:40 ~wave_width:0 waves;
   [%expect
     {|
-    (pos 1)
-    (pos 3)
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────┐
     │clock             ││┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐│
     │                  ││ └┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└│
@@ -110,8 +108,6 @@ let%expect_test "same values in different windows" =
   Waveform.print ~display_width:82 ~display_height:40 ~wave_width:0 waves;
   [%expect
     {|
-    (pos 1)
-    (pos 3)
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────┐
     │clock             ││┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐│
     │                  ││ └┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└│
@@ -179,8 +175,6 @@ let%expect_test "stalls" =
   Waveform.print ~display_width:82 ~display_height:40 ~wave_width:0 waves;
   [%expect
     {|
-    (pos 1)
-    (pos 3)
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────┐
     │clock             ││┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐│
     │                  ││ └┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└│

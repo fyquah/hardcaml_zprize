@@ -5,10 +5,10 @@ module Make (Config : Config.S) = struct
   open Signal
   open Config
   module Bucket_pipeline = Bucket_pipeline.Make (Config)
+  module Stalled_point_fifos = Stalled_point_fifos.Make (Config)
+  module Track_scalars = Track_scalars.Make (Config)
 
   let log_num_windows = Int.ceil_log2 num_windows
-
-  module Stalled_point_fifos = Stalled_point_fifos.Make (Config)
 
   module I = struct
     type 'a t =
@@ -96,26 +96,52 @@ module Make (Config : Config.S) = struct
     ;;
   end
 
+  (* This implements [mux window data] on the 2 cycle schedule of the
+     controller.
+
+     It builds a shift pipeline and outputs the first value combinationally. So,
+     rather than an N deep mux, it is 2 deep. *)
+  let latched_shift_array spec ~load ~shift data =
+    let len = Array.length data in
+    let rec shift_regs n =
+      if n = len
+      then zero (width data.(0))
+      else reg spec ~enable:(load |: shift) (mux2 load data.(n) (shift_regs (n + 1)))
+    in
+    mux2 load data.(0) (shift_regs 0)
+  ;;
+
   let create scope (i : _ I.t) =
     let ( -- ) = Scope.naming scope in
     let stalled = Stalled_point_fifos.O.Of_signal.wires () in
-    let pipes = Bucket_pipeline.O.Of_signal.wires () in
+    let tracker = Track_scalars.O.Of_signal.wires () in
     let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let sm = Always.State_machine.create (module State) spec in
     ignore (sm.current -- "STATE" : Signal.t);
     let window = Var.reg spec ~width:log_num_windows in
     let window_next = window.value +:. 1 in
+    let latch = Var.wire ~default:gnd in
+    let shift_pipeline = Var.wire ~default:gnd in
     let scalar, scalar_is_zero =
-      let scalar = mux window.value (Array.to_list i.scalar) in
+      let scalar =
+        latched_shift_array spec ~load:latch.value ~shift:shift_pipeline.value i.scalar
+      in
+      scalar, reg spec (scalar ==:. 0)
+    in
+    let stalled_scalar, stalled_scalar_is_zero =
+      let scalar =
+        latched_shift_array
+          spec
+          ~load:latch.value
+          ~shift:shift_pipeline.value
+          stalled.scalars_out
+      in
       scalar, reg spec (scalar ==:. 0)
     in
     let bubble = Var.wire ~default:gnd in
     let push_stalled_point = Var.wire ~default:gnd in
     let pop_stalled_point = Var.wire ~default:gnd in
-    let is_in_pipeline_reg = Var.reg spec ~width:num_windows in
-    ignore (is_in_pipeline_reg.value -- "is_in_pipeline_reg" : Signal.t);
-    let is_in_pipeline = is_in_pipeline_reg.value.:(0) -- "is_in_pipeline" in
-    let shift_pipeline = Var.wire ~default:gnd in
+    let is_in_pipeline = reg spec tracker.is_in_pipeline in
     let scalar_read = Var.wire ~default:gnd in
     let flushing = Var.reg spec ~width:1 in
     ignore (flushing.value -- "flushing" : Signal.t);
@@ -143,7 +169,7 @@ module Make (Config : Config.S) = struct
             ; ( Choose_mode
               , [ (* latch the pipeline control at the start.  This tracks values
                      for a few cycles longer than necesasry, but reduces the critical path *)
-                  is_in_pipeline_reg <-- concat_lsb pipes.is_in_pipeline
+                  latch <--. 1
                 ; if_
                     flushing.value
                     [ sm.set_next Execute_stalled
@@ -170,7 +196,6 @@ module Make (Config : Config.S) = struct
               , [ bubble <-- vdd
                 ; shift_pipeline <-- vdd
                 ; window <-- window_next
-                ; is_in_pipeline_reg <-- srl is_in_pipeline_reg.value 1
                 ; sm.set_next Wait_bubble
                 ; on_last_window ~processing_scalars:false
                 ] )
@@ -181,7 +206,6 @@ module Make (Config : Config.S) = struct
                 ; bubble <-- (is_in_pipeline |: scalar_is_zero)
                 ; push_stalled_point <-- (is_in_pipeline &: ~:scalar_is_zero)
                 ; window <-- window_next
-                ; is_in_pipeline_reg <-- srl is_in_pipeline_reg.value 1
                 ; sm.set_next Wait_scalar
                 ; on_last_window ~processing_scalars:true
                 ] )
@@ -191,12 +215,10 @@ module Make (Config : Config.S) = struct
                 ; shift_pipeline <-- vdd
                 ; bubble
                   <-- (is_in_pipeline
-                      |: (stalled.scalar_out_valid &: reg spec (stalled.scalar_out ==:. 0))
-                         (* XXX aray: Can we get rid of this? *)
+                      |: (stalled.scalar_out_valid &: stalled_scalar_is_zero)
                       |: ~:(stalled.current_window_has_stall))
                 ; pop_stalled_point <-- ~:(bubble.value)
                 ; window <-- window_next
-                ; is_in_pipeline_reg <-- srl is_in_pipeline_reg.value 1
                 ; sm.set_next Wait_stalled
                 ; on_last_window ~processing_scalars:false
                 ] )
@@ -205,20 +227,6 @@ module Make (Config : Config.S) = struct
         ]);
     let executing_stalled = executing_stalled.value -- "exec_stalled" in
     let executing_scalar = executing_scalar.value -- "exec_scalar" in
-    Bucket_pipeline.O.Of_signal.assign
-      pipes
-      (Bucket_pipeline.hierarchy
-         scope
-         { Bucket_pipeline.I.clock = i.clock
-         ; clear = i.clear
-         ; window = window.value
-         ; scalar_in = i.scalar
-         ; stalled_scalars = stalled.scalars_out
-         ; stalled_scalars_valid = stalled.scalars_out_valid
-         ; process_stalled = executing_stalled
-         ; bubble = is_in_pipeline
-         ; shift = shift_pipeline.value
-         });
     Stalled_point_fifos.O.Of_signal.assign
       stalled
       (Stalled_point_fifos.hierarchy
@@ -231,10 +239,19 @@ module Make (Config : Config.S) = struct
          ; affine_point = i.affine_point
          ; pop = pop_stalled_point.value -- "pop"
          });
+    Track_scalars.O.Of_signal.assign
+      tracker
+      (Track_scalars.hierarchy
+         scope
+         { Track_scalars.I.clock = i.clock
+         ; scalar = mux2 executing_stalled stalled_scalar scalar
+         ; bubble = is_in_pipeline
+         ; shift = shift_pipeline.value
+         });
     { O.done_ = sm.is Start
     ; scalar_read = scalar_read.value
     ; window = window.value
-    ; bucket = mux2 executing_scalar scalar stalled.scalar_out
+    ; bucket = mux2 executing_scalar scalar stalled_scalar
     ; adder_affine_point = mux2 executing_scalar i.affine_point stalled.affine_point_out
     ; bubble = bubble.value
     ; execute = shift_pipeline.value
@@ -245,4 +262,12 @@ module Make (Config : Config.S) = struct
     let module Hier = Hierarchy.In_scope (I) (O) in
     Hier.hierarchical ~name:"ctrl" ~scope create
   ;;
+
+  module For_synthesis = struct
+    let create scope (i : _ I.t) =
+      let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+      hierarchy scope { (I.map i ~f:(reg spec)) with clock = i.clock; clear = i.clear }
+      |> O.map ~f:(reg spec)
+    ;;
+  end
 end

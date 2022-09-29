@@ -37,9 +37,7 @@ module Make (Config : Config.S) = struct
   let rec get_matches pos pipe =
     if pos >= Array.length pipe - 1
     then []
-    else (
-      Stdio.print_s [%message (pos : int)];
-      pipe.(pos) :: get_matches (pos + num_windows) pipe)
+    else pipe.(pos) :: get_matches (pos + num_windows) pipe
   ;;
 
   let create scope (i : _ I.t) =

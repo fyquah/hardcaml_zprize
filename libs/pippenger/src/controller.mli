@@ -38,4 +38,8 @@ module Make (Config : Config.S) : sig
 
   val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
   val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+
+  module For_synthesis : sig
+    val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  end
 end

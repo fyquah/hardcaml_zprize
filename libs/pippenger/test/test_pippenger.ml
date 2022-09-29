@@ -370,7 +370,7 @@ module Config = struct
   let num_windows = 2
   let affine_point_bits = 16
   let datapath_depth = 8
-  let pipeline_depth = 1 + ((datapath_depth + 1) / 2)
+  let pipeline_depth = (datapath_depth + 1) / 2
   let log_stall_fifo_depth = 2
 end
 
