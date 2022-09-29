@@ -10,6 +10,7 @@ type fn = Elliptic_curve_lib.Ec_fpn_ops_config.fn =
 type t =
   { multiply : fn
   ; reduce : fn
+  ; coarse_reduce : fn
   ; adder_stages : int
   ; subtractor_stages : int
   ; doubler_stages : int
@@ -20,6 +21,14 @@ type t =
   ; arbitrated_multiplier : bool
   }
 
+val coarse_reduce
+  :  t
+  -> scope:Scope.t
+  -> clock:Signal.t
+  -> enable:Signal.t
+  -> Signal.t
+  -> Signal.t
+
 val reduce
   :  t
   -> scope:Scope.t
@@ -28,7 +37,7 @@ val reduce
   -> Signal.t
   -> Signal.t
 
-val multiply_latency : reduce:bool -> t -> int
+val multiply_latency : ?coarse_reduce:bool -> reduce:bool -> t -> int
 
 module For_bls12_377 : sig
   val with_barrett_reduction_arbitrated : t Lazy.t

@@ -27,6 +27,8 @@
 
 open Hardcaml
 
+val latency : stages:int -> int
+
 module Term_and_op : sig
   type 'a t =
     | Add of 'a

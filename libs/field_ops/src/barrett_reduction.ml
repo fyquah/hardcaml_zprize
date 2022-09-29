@@ -29,13 +29,14 @@ module Config = struct
     ; half_multiplier_config : Half_width_multiplier.Config.t
     ; subtracter_stages : int
     ; num_correction_steps : int
+    ; include_fine_reduction : bool
     }
 
   let latency (config : t) =
     (1 * Approx_msb_multiplier.Config.latency config.approx_msb_multiplier_config)
     + (1 * Half_width_multiplier.Config.latency config.half_multiplier_config)
     + config.subtracter_stages
-    + (config.num_correction_steps * config.subtracter_stages)
+    + if config.include_fine_reduction then (config.num_correction_steps * config.subtracter_stages) else 0
   ;;
 
   let approx_msb_mult_2222 =
@@ -236,6 +237,7 @@ module Config = struct
         (match which_msb_mult with
          | `Approx_msb_mult_332 -> 3
          | `Approx_msb_mult_2222 -> 4)
+    ; include_fine_reduction = true
     }
   ;;
 end
@@ -401,20 +403,34 @@ struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~config ~p scope { I.clock; enable; a; valid } =
+  let create
+    ~config
+    ~p
+    scope
+    { I.clock; enable; a; valid }
+    =
     assert (Z.log2up p <= bits);
     let m = Z.((one lsl k) / p) in
     let { Stage4.a_mod_p; valid } =
       let ( -- ) = Scope.naming scope in
-      { Stage0.a; valid }
-      |> Stage1.create ~scope ~clock ~enable ~m ~config
-      |> Stage1.map2 Stage1.port_names ~f:(fun n s -> s -- ("stage1$" ^ n))
-      |> Stage2.create ~scope ~clock ~enable ~p ~config
-      |> Stage2.map2 Stage2.port_names ~f:(fun n s -> s -- ("stage2$" ^ n))
-      |> Stage3.create ~scope ~clock ~enable ~config
-      |> Stage3.map2 Stage3.port_names ~f:(fun n s -> s -- ("stage3$" ^ n))
-      |> Stage4.create ~scope ~clock ~enable ~p ~config
-      |> Stage4.map2 Stage4.port_names ~f:(fun n s -> s -- ("stage4$" ^ n))
+      let pre_fine_reduction =
+        { Stage0.a; valid }
+        |> Stage1.create ~scope ~clock ~enable ~m ~config
+        |> Stage1.map2 Stage1.port_names ~f:(fun n s -> s -- ("stage1$" ^ n))
+        |> Stage2.create ~scope ~clock ~enable ~p ~config
+        |> Stage2.map2 Stage2.port_names ~f:(fun n s -> s -- ("stage2$" ^ n))
+        |> Stage3.create ~scope ~clock ~enable ~config
+        |> Stage3.map2 Stage3.port_names ~f:(fun n s -> s -- ("stage3$" ^ n))
+      in
+      if config.include_fine_reduction
+      then
+        pre_fine_reduction
+        |> Stage4.create ~scope ~clock ~enable ~p ~config
+        |> Stage4.map2 Stage4.port_names ~f:(fun n s -> s -- ("stage4$" ^ n))
+      else
+        { Stage4.valid = pre_fine_reduction.valid
+        ; a_mod_p = pre_fine_reduction.a_minus_qp
+        }
     in
     { O.valid; a_mod_p = uresize a_mod_p bits }
   ;;
@@ -426,15 +442,29 @@ struct
   ;;
 end
 
-let hierarchical ~scope ~config ~p ~clock ~enable { With_valid.valid; value = a } =
+let hierarchical
+  ~scope
+  ~(config : Config.t)
+  ~p
+  ~clock
+  ~enable
+  { With_valid.valid; value = a }
+  =
   let bits = width a in
+  let output_bits = (bits + 1) / 2 in
   let module M =
     With_interface (struct
-      let bits = (bits + 1) / 2
+      let bits =
+        output_bits + if config.include_fine_reduction then 0 else config.num_correction_steps
+      ;;
     end)
   in
   let { M.O.a_mod_p; valid } =
-    M.hierarchical ~config ~p scope { M.I.clock; enable; a; valid }
+    M.hierarchical
+      ~config
+      ~p
+      scope
+      { M.I.clock; enable; a; valid }
   in
   { With_valid.valid; value = a_mod_p }
 ;;

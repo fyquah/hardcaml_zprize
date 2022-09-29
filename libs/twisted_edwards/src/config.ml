@@ -17,6 +17,7 @@ type fn = Ec_fpn_ops_config.fn =
 type t =
   { multiply : fn
   ; reduce : fn
+  ; coarse_reduce : fn
   ; adder_stages : int
   ; subtractor_stages : int
   ; doubler_stages : int
@@ -27,12 +28,24 @@ type t =
   ; arbitrated_multiplier : bool
   }
 
+let coarse_reduce config ~scope ~clock ~enable x =
+  config.coarse_reduce.impl ~scope ~clock ~enable x None
+;;
+
 let reduce config ~scope ~clock ~enable x =
   config.reduce.impl ~scope ~clock ~enable x None
 ;;
 
-let multiply_latency ~reduce (t : t) =
-  t.multiply.latency + if reduce then t.reduce.latency else 0
+let multiply_latency ?(coarse_reduce = false) ~reduce (t : t) =
+  if coarse_reduce then assert (not reduce);
+  let reduce_latency =
+    if coarse_reduce
+    then t.coarse_reduce.latency
+    else if reduce
+    then t.reduce.latency
+    else 0
+  in
+  t.multiply.latency + reduce_latency
 ;;
 
 module For_bls12_377 = struct
@@ -43,6 +56,7 @@ module For_bls12_377 = struct
     in
     { multiply
     ; reduce = barrett_reduce
+    ; coarse_reduce = barrett_reduce_coarse
     ; adder_stages = 3
     ; subtractor_stages = 3
     ; doubler_stages = 3
@@ -61,6 +75,7 @@ module For_bls12_377 = struct
     in
     { multiply
     ; reduce = barrett_reduce
+    ; coarse_reduce = barrett_reduce_coarse
     ; adder_stages = 3
     ; subtractor_stages = 3
     ; doubler_stages = 3

@@ -1,4 +1,5 @@
 open Base
+open Core
 module Radix = Field_ops_lib.Radix
 
 let p = Ark_bls12_377_g1.modulus ()
@@ -116,6 +117,97 @@ let%expect_test "Delta error on 2222" =
     w=50 lo=328 k=24
     Ground multiplier width = 26
     Delta error = 7 * (2^377) |}]
+;;
+
+let build_precompute_two num_bits =
+  let ret = Int.Table.create () in
+  Hashtbl.set ret ~key:0 ~data:Z.zero;
+  let rec loop idx =
+    if idx = 1 lsl num_bits
+    then ()
+    else (
+      let prefix = Z.of_int (idx - 1) in
+      let max_with_prefix = Z.((prefix lsl 377) + ((one lsl 377) - one)) in
+      let mult = Z.(max_with_prefix / p) in
+      let mult_times_p = Z.(mult * p) in
+      let () =
+        let tmp = Z.(mult_times_p + p) in
+        assert (Z.(geq tmp ((prefix + one) lsl 377)))
+      in
+      Hashtbl.set ret ~key:idx ~data:mult_times_p;
+      loop (idx + 1))
+  in
+  loop 0;
+  ret
+;;
+
+let%expect_test "precompute table" =
+  let lookup = build_precompute_two 5 |> Hashtbl.map ~f:(fun v -> Z.(v / p |> to_int)) in
+  print_s [%message (lookup : int Int.Table.t)];
+  [%expect]
+;;
+
+let build_precompute ?(verbose = false) delta_error =
+  let open Hardcaml in
+  let top_bits = Int.ceil_log2 delta_error in
+  let lookup = Int.Table.create () in
+  for i = 0 to (1 lsl top_bits) - 1 do
+    (* CR rahuly: if we really need (1 lsl top_bits), we can just mux the input to the bram and set it to 0 *)
+    (* start from the top, and add the highest multiple of p that we can subtract without going
+     * negative *)
+    let i = (1 lsl top_bits) - i in
+    let ip = Z.(p * of_int i) in
+    let b = Bits.of_z ip ~width:(377 + top_bits) in
+    let top = Bits.sel_top b top_bits in
+    if verbose
+    then print_s [%message (i : int) (top : Bits.t) (i - Bits.to_int top : int)];
+    let _r = Hashtbl.add lookup ~key:(Bits.to_int top + 1) ~data:i in
+    ()
+  done;
+  lookup
+;;
+
+let%expect_test "build a precomputed correction table" =
+  let lookup = build_precompute ~verbose:true 32 in
+  print_s [%message (lookup : int Int.Table.t)];
+  [%expect
+    {|
+    ((i 32) (top 11010) ("i - (Bits.to_int top)" 6))
+    ((i 31) (top 11010) ("i - (Bits.to_int top)" 5))
+    ((i 30) (top 11001) ("i - (Bits.to_int top)" 5))
+    ((i 29) (top 11000) ("i - (Bits.to_int top)" 5))
+    ((i 28) (top 10111) ("i - (Bits.to_int top)" 5))
+    ((i 27) (top 10110) ("i - (Bits.to_int top)" 5))
+    ((i 26) (top 10101) ("i - (Bits.to_int top)" 5))
+    ((i 25) (top 10101) ("i - (Bits.to_int top)" 4))
+    ((i 24) (top 10100) ("i - (Bits.to_int top)" 4))
+    ((i 23) (top 10011) ("i - (Bits.to_int top)" 4))
+    ((i 22) (top 10010) ("i - (Bits.to_int top)" 4))
+    ((i 21) (top 10001) ("i - (Bits.to_int top)" 4))
+    ((i 20) (top 10000) ("i - (Bits.to_int top)" 4))
+    ((i 19) (top 01111) ("i - (Bits.to_int top)" 4))
+    ((i 18) (top 01111) ("i - (Bits.to_int top)" 3))
+    ((i 17) (top 01110) ("i - (Bits.to_int top)" 3))
+    ((i 16) (top 01101) ("i - (Bits.to_int top)" 3))
+    ((i 15) (top 01100) ("i - (Bits.to_int top)" 3))
+    ((i 14) (top 01011) ("i - (Bits.to_int top)" 3))
+    ((i 13) (top 01010) ("i - (Bits.to_int top)" 3))
+    ((i 12) (top 01010) ("i - (Bits.to_int top)" 2))
+    ((i 11) (top 01001) ("i - (Bits.to_int top)" 2))
+    ((i 10) (top 01000) ("i - (Bits.to_int top)" 2))
+    ((i 9) (top 00111) ("i - (Bits.to_int top)" 2))
+    ((i 8) (top 00110) ("i - (Bits.to_int top)" 2))
+    ((i 7) (top 00101) ("i - (Bits.to_int top)" 2))
+    ((i 6) (top 00101) ("i - (Bits.to_int top)" 1))
+    ((i 5) (top 00100) ("i - (Bits.to_int top)" 1))
+    ((i 4) (top 00011) ("i - (Bits.to_int top)" 1))
+    ((i 3) (top 00010) ("i - (Bits.to_int top)" 1))
+    ((i 2) (top 00001) ("i - (Bits.to_int top)" 1))
+    ((i 1) (top 00000) ("i - (Bits.to_int top)" 1))
+    (lookup
+     ((1 1) (2 2) (3 3) (4 4) (5 5) (6 7) (7 8) (8 9) (9 10) (10 11) (11 13)
+      (12 14) (13 15) (14 16) (15 17) (16 19) (17 20) (18 21) (19 22) (20 23)
+      (21 24) (22 26) (23 27) (24 28) (25 29) (26 30) (27 32))) |}]
 ;;
 
 let split_top_and_btm ~k a =

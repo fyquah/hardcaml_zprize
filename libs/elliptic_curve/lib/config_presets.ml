@@ -7,6 +7,10 @@ module For_bls12_377 = struct
   let montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
   let barrett_reduction_config = Barrett_reduction.Config.for_bls12_377
 
+  let barrett_coarse_reduction_config =
+    { Barrett_reduction.Config.for_bls12_377 with include_fine_reduction = false }
+  ;;
+
   let square : Ec_fpn_ops_config.fn =
     let config =
       { Squarer.Config.levels =
@@ -87,8 +91,10 @@ module For_bls12_377 = struct
     { impl; latency }
   ;;
 
-  let barrett_reduce : Ec_fpn_ops_config.fn =
-    let config = barrett_reduction_config in
+  let barrett_reduce_base ~coarse : Ec_fpn_ops_config.fn =
+    let config =
+      if coarse then barrett_coarse_reduction_config else barrett_reduction_config
+    in
     let impl ~scope ~clock ~enable mult_value y =
       assert (Option.is_none y);
       let { With_valid.valid = _; value } =
@@ -106,13 +112,18 @@ module For_bls12_377 = struct
     { impl; latency }
   ;;
 
+  let barrett_reduce = barrett_reduce_base ~coarse:false
+  let barrett_reduce_coarse = barrett_reduce_base ~coarse:true
+
   let ec_fpn_ops_with_montgomery_reduction =
     let reduce = montgomery_reduce in
-    { Ec_fpn_ops_config.multiply; square; reduce; p }
+    let coarse_reduce = montgomery_reduce in
+    { Ec_fpn_ops_config.multiply; square; reduce; coarse_reduce; p }
   ;;
 
   let ec_fpn_ops_with_barrett_reduction =
     let reduce = barrett_reduce in
-    { Ec_fpn_ops_config.multiply; square; reduce; p }
+    let coarse_reduce = barrett_reduce_coarse in
+    { Ec_fpn_ops_config.multiply; square; reduce; coarse_reduce; p }
   ;;
 end

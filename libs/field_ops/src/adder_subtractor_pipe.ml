@@ -2,6 +2,8 @@ open Base
 open Hardcaml
 open Reg_with_enable
 
+let latency ~stages = stages
+
 module Term_and_op = struct
   type 'a t =
     | Add of 'a
@@ -88,32 +90,32 @@ module Make_stage (Comb : Comb.S) = struct
 
   let create_stage_impl prev terms =
     List.fold terms ~init:prev ~f:(fun acc term ->
-        let op, term =
-          match term with
-          | Term_and_op.Add term -> ( +: ), term
-          | Term_and_op.Sub term -> ( -: ), term
-        in
-        let w = width acc in
-        op acc (uresize term w))
+      let op, term =
+        match term with
+        | Term_and_op.Add term -> ( +: ), term
+        | Term_and_op.Sub term -> ( -: ), term
+      in
+      let w = width acc in
+      op acc (uresize term w))
   ;;
 
   let create (prev_stage_output : _ O.t) ~carry_num_bits ~carry_type ~init items : _ O.t =
     assert (not (List.is_empty items));
     let w = width init in
     List.iter items ~f:(fun p ->
-        let term =
-          match p with
-          | Term_and_op.Add p -> p
-          | Term_and_op.Sub p -> p
-        in
-        assert (width term = w));
+      let term =
+        match p with
+        | Term_and_op.Add p -> p
+        | Term_and_op.Sub p -> p
+      in
+      assert (width term = w));
     let partial_sum_and_carry =
       let init = uresize init (w + carry_num_bits) in
       create_stage_impl
         (match (carry_type : Carry_type.t) with
-        | Carry -> init +: uresize prev_stage_output.carry (w + carry_num_bits)
-        | Borrow -> init -: uresize prev_stage_output.carry (w + carry_num_bits)
-        | With_sign_bit -> init +: sresize prev_stage_output.carry (w + carry_num_bits))
+         | Carry -> init +: uresize prev_stage_output.carry (w + carry_num_bits)
+         | Borrow -> init -: uresize prev_stage_output.carry (w + carry_num_bits)
+         | With_sign_bit -> init +: sresize prev_stage_output.carry (w + carry_num_bits))
         items
     in
     let carry = sel_top partial_sum_and_carry carry_num_bits in
@@ -185,22 +187,22 @@ struct
   end
 
   let create
-      ~stages
-      ~ops
-      ~rhs_constant_overrides
-      ~carry_type
-      (_ : Scope.t)
-      { I.clock; enable; lhs; rhs_list }
+    ~stages
+    ~ops
+    ~rhs_constant_overrides
+    ~carry_type
+    (_ : Scope.t)
+    { I.clock; enable; lhs; rhs_list }
     =
     let spec = Reg_spec.create ~clock () in
     let rhs_list =
       List.map2_exn rhs_list rhs_constant_overrides ~f:(fun default override ->
-          Option.map override ~f:(fun x -> Signal.of_constant (Bits.to_constant x))
-          |> Option.value ~default)
+        Option.map override ~f:(fun x -> Signal.of_constant (Bits.to_constant x))
+        |> Option.value ~default)
       |> List.map2_exn ops ~f:(fun op term ->
-             match op with
-             | `Add -> Term_and_op.Add term
-             | `Sub -> Term_and_op.Sub term)
+           match op with
+           | `Add -> Term_and_op.Add term
+           | `Sub -> Term_and_op.Sub term)
     in
     Implementation.create
       ~carry_num_bits
@@ -213,14 +215,14 @@ struct
   ;;
 
   let hierarchical
-      ~instance
-      ~name
-      ~stages
-      ~ops
-      ~rhs_constant_overrides
-      ~carry_type
-      scope
-      i
+    ~instance
+    ~name
+    ~stages
+    ~ops
+    ~rhs_constant_overrides
+    ~carry_type
+    scope
+    i
     =
     let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical
@@ -272,8 +274,8 @@ let mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items =
   let rhs_list = List.map ~f:Term_and_op.term input.rhs_list in
   let rhs_constant_overrides =
     List.map rhs_list ~f:(function
-        | Const { signal_id = _; constant } -> Some constant
-        | _ -> None)
+      | Const { signal_id = _; constant } -> Some constant
+      | _ -> None)
   in
   M.hierarchical
     ~instance
@@ -314,9 +316,9 @@ let mixed_no_carry ?name ?instance ~stages ~scope ~enable ~clock ~init items =
   match stages with
   | 1 ->
     List.fold ~init items ~f:(fun acc item ->
-        match item with
-        | Term_and_op.Add x -> Signal.( +: ) acc x
-        | Term_and_op.Sub x -> Signal.( -: ) acc x)
+      match item with
+      | Term_and_op.Add x -> Signal.( +: ) acc x
+      | Term_and_op.Sub x -> Signal.( -: ) acc x)
     |> reg ~enable (Reg_spec.create ~clock ())
   | _ -> mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items |> O.result
 ;;
