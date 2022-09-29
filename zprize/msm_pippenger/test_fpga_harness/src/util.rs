@@ -54,7 +54,7 @@ pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParame
             let now = SystemTime::now();
             let test_npow = std::env::var("TEST_NPOW").expect("Must specified either TEST_NPOW or TEST_LOAD_DATA_FROM");
             let npoints_npow = i32::from_str(&test_npow).unwrap();
-            let batches = 1;
+            let batches = 4;
             let (points, scalars, arkworks_results) =
                 if std::env::var("TEST_TRIVIAL_INPUTS") == Ok(String::from("1")) {
                     println!("Testing with trivial inputs");
