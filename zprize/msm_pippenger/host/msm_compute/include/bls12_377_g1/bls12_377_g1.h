@@ -13,6 +13,7 @@
 
 namespace bls12_377_g1 {
 
+const int SCALAR_NUM_BITS = 253;
 const int NUM_BITS = 377;
 const int NUM_64B_WORDS = (NUM_BITS + 63) / 64;
 const int NUM_32B_WORDS = (NUM_BITS + 31) / 32;
