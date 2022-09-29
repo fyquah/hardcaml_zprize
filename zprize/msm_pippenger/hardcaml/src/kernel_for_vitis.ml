@@ -80,6 +80,7 @@ module Make (Config : Config.S) = struct
       Axi512.Stream.Register.O.Of_signal.wires ()
     in
     let host_to_msm__host_to_fpga_dest = Axi512.Stream.Dest.Of_signal.wires () in
+    let msm_result_to_host_registers = Axi512.Stream.Register.O.Of_signal.wires () in
     (* Add pipelining to the inputs going into merge_axi_stream, since timing
      * is quite tight there.
      *)
@@ -177,13 +178,25 @@ module Make (Config : Config.S) = struct
             }
         ; result_point_valid = top.result_point_valid
         ; last_result_point = top.last_result_point
-        ; fpga_to_host_dest
+        ; fpga_to_host_dest = msm_result_to_host_registers.up_dest
         }
     in
     result_point_ready <== msm_result_to_host.result_point_ready;
+    (* Additional stage of pipelining on output to the host. *)
+    Axi512.Stream.Register.O.Of_signal.( <== )
+      msm_result_to_host_registers
+      (axis_pipeline_512
+         ~instance:"msm_result_to_host_registers"
+         ~n:1
+         scope
+         { clock
+         ; clear
+         ; up = msm_result_to_host.fpga_to_host
+         ; dn_dest = fpga_to_host_dest
+         });
     { O.host_scalars_to_fpga_dest = host_scalars_to_fpga_registers.up_dest
     ; ddr_points_to_fpga_dest = ddr_points_to_fpga_registers.up_dest
-    ; fpga_to_host = msm_result_to_host.fpga_to_host
+    ; fpga_to_host = msm_result_to_host_registers.dn
     }
   ;;
 
