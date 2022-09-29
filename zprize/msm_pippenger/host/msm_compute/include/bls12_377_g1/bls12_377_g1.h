@@ -469,8 +469,8 @@ class Xyzt {
     temp.y.set_div(y, z);
     temp.z.set(ONE_WORDS);
     temp.t.set(ZERO_WORDS);
-    temp.println_hex();
-    temp.dump();
+    // temp.println_hex();
+    // temp.dump();
     // printf("\nPARAMS\n");
     // print_params();
     x.copy_to_rust_type(projective.x);
