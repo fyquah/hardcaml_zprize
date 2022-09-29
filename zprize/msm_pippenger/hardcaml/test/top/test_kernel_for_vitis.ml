@@ -118,8 +118,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         Array.map inputs ~f:(fun input -> Bits.uresize input.scalar aligned_to)
         |> Bits.of_array
       in
-      let b = Bits.uresize b (Int.round_up (Bits.width b) ~to_multiple_of:axi_bits) in
-      Bits.split_lsb ~part_width:axi_bits b
+      Bits.uresize b (Int.round_up (Bits.width b) ~to_multiple_of:axi_bits)
+      |> Bits.split_lsb ~part_width:axi_bits
     in
     cycle_cnt := 0;
     let rec send_data data _ : unit Tb_axi_send.t =
@@ -312,7 +312,7 @@ let test_back_to_back () =
   let _result1 : Test.result =
     Test.run ~sim ~seed:1 ~timeout:1000 ~verilator:false 8 ()
   in
-  let result2 : Test.result = Test.run ~sim ~seed:2 ~timeout:1000 ~verilator:false 8 () in
+  let result2 : Test.result = Test.run ~sim ~seed:2 ~timeout:500 ~verilator:false 8 () in
   Option.value_exn result2.waves
 ;;
 
