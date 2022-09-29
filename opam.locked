@@ -39,6 +39,7 @@ depends: [
   "fpath" {= "0.7.3"}
   "hardcaml" {= "v0.15.0"}
   "hardcaml_circuits" {= "v0.15.0"}
+  "hardcaml_step_testbench" {= "v0.15.0"}
   "hardcaml_verify" {= "v0.15.0"}
   "hardcaml_verilator" {= "v0.15.0"}
   "hardcaml_waveterm" {= "v0.15.0"}
