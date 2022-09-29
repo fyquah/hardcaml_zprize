@@ -160,21 +160,21 @@ public:
       OCL_CHECK(
           err,
           buffer_input_points.emplace_back(context,
-            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
             num_points_in_chunk * BYTES_PER_INPUT_POINT,
             source_kernel_input_points.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_POINT),
             &err));
       OCL_CHECK(
           err,
           buffer_input_scalars.emplace_back(context,
-            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
             num_points_in_chunk * BYTES_PER_INPUT_SCALAR,
             source_kernel_input_scalars.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
             &err));
 
     }
     OCL_CHECK(err,  buffer_output = cl::Buffer(context,
-                                               CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
+                                               CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY,
                                                OUTPUT_SIZE_IN_BYTES,
                                                source_kernel_output.data(),
                                                &err));
@@ -253,10 +253,13 @@ public:
         //   ptr_scalar += UINT32_PER_INPUT_SCALAR;
         // }
 
-        // TODO(fyquah): Annotate to compiler about alignment
-
+        // We known source_kernel_inputs.scalrs.data() is 8192 aligned, because
+        // we set it up as such. But we no thing about scalars, since that's
+        // directly from rust.
+        void *dst = __builtin_assume_aligned(
+            (void*) source_kernel_input_scalars.data(), 8192);
         memcpy(
-            source_kernel_input_scalars.data(),
+            dst,
             (void*) scalars,
             UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * total_num_points
         );
