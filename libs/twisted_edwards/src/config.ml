@@ -29,7 +29,6 @@ type t =
   }
 
 let coarse_reduce config ~scope ~clock ~enable x =
-  print_s [%message "coarse_reduce"];
   config.coarse_reduce.impl ~scope ~clock ~enable x None
 ;;
 
@@ -45,7 +44,6 @@ module Reduce = struct
 end
 
 let multiply_latency ~(reduce : Reduce.t) (t : t) =
-  print_s [%message (t.reduce.latency : int) (t.coarse_reduce.latency : int)];
   let reduce_latency =
     match reduce with
     | None -> 0
