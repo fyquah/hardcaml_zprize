@@ -1,4 +1,5 @@
-The test harness currently only supports afi-005f604b2e786b217 (precompute + full adder)
+The test harness currently only supports afi-0c117aa4642bded48
+(msm-1x-full-precompute-merge-axi-streams)
 
 # Running Tests
 
