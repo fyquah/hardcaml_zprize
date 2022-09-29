@@ -144,7 +144,13 @@ let build_precompute_two num_bits =
 let%expect_test "precompute table" =
   let lookup = build_precompute_two 5 |> Hashtbl.map ~f:(fun v -> Z.(v / p |> to_int)) in
   print_s [%message (lookup : int Int.Table.t)];
-  [%expect]
+  [%expect
+    {|
+    (lookup
+     ((0 0) (1 1) (2 2) (3 3) (4 4) (5 5) (6 7) (7 8) (8 9) (9 10) (10 11)
+      (11 13) (12 14) (13 15) (14 16) (15 17) (16 19) (17 20) (18 21) (19 22)
+      (20 23) (21 24) (22 26) (23 27) (24 28) (25 29) (26 30) (27 32) (28 33)
+      (29 34) (30 35) (31 36))) |}]
 ;;
 
 let build_precompute ?(verbose = false) delta_error =

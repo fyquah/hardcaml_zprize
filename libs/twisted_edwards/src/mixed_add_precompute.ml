@@ -57,6 +57,14 @@ module Make (Num_bits : Num_bits.S) = struct
     let wy = width y1 in
     let wx = width x1 in
     let scope = Scope.sub_scope scope "arbed_multiply" in
+    let final_pipelining =
+      latency_without_arbitration config
+      - Config.multiply_latency
+          ~coarse_reduce:(not include_fine_reduction)
+          ~reduce:include_fine_reduction
+          config
+    in
+    assert (final_pipelining >= 0);
     Arbitrate.arbitrate2
       (x1 @: y1, x2 @: y2)
       ~enable
@@ -67,15 +75,7 @@ module Make (Num_bits : Num_bits.S) = struct
         let x = sel_top input wx in
         config.multiply.impl ~scope ~clock ~enable x (Some y)
         |> reduce config ~scope ~clock ~enable
-        |> pipeline
-             (Reg_spec.create ~clock ())
-             ~enable
-             ~n:
-               (latency_without_arbitration config
-               - Config.multiply_latency
-                   ~coarse_reduce:include_fine_reduction
-                   ~reduce:(not include_fine_reduction)
-                   config))
+        |> pipeline (Reg_spec.create ~clock ()) ~enable ~n:final_pipelining)
   ;;
 
   let multiply
@@ -102,14 +102,15 @@ module Make (Num_bits : Num_bits.S) = struct
          ~n:
            (latency_without_arbitration config
            - Config.multiply_latency
-               ~coarse_reduce:include_fine_reduction
-               ~reduce:(not include_fine_reduction)
+               ~coarse_reduce:(not include_fine_reduction)
+               ~reduce:include_fine_reduction
                config)
   ;;
 
   let concat_result { Adder_subtractor_pipe.O.carry; result } = carry @: result
 
   let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
+    assert (width a = width b);
     let spec = Reg_spec.create ~clock () in
     let stages = config.adder_stages in
     Adder_subtractor_pipe.add
@@ -125,11 +126,12 @@ module Make (Num_bits : Num_bits.S) = struct
     if n = 0 then x else pipeline spec ~n ~enable:vdd x
   ;;
 
-  let sub_pipe ?(could_be_negative = true) ~scope ~latency ~(config : Config.t) ~clock a b
-    =
+  let sub_pipe ?(ensure_positive = true) ~scope ~latency ~(config : Config.t) ~clock a b =
+    assert (width a = width b);
+    let width = width a in
     let spec = Reg_spec.create ~clock () in
     let stages = config.subtractor_stages in
-    (if could_be_negative
+    (if ensure_positive
     then
       Adder_subtractor_pipe.mixed
         ~scope
@@ -137,7 +139,7 @@ module Make (Num_bits : Num_bits.S) = struct
         ~enable:vdd
         ~stages
         ~init:a
-        [ Sub b; Add (Signal.of_z config.p ~width:253) ]
+        [ Sub b; Add (Signal.of_z config.p ~width) ]
     else Adder_subtractor_pipe.sub ~scope ~clock ~enable:vdd ~stages [ a; b ])
     |> concat_result
     |> fun x ->
@@ -175,9 +177,10 @@ module Make (Num_bits : Num_bits.S) = struct
       in
       let y1_minus_x1 =
         sub_pipe ~scope ~latency:(Fn.const config.adder_stages) ~config ~clock p1.y p1.x
+        |> Fn.flip sel_bottom (num_bits + 1)
       in
-      (*assert(width y1_plus_x1 = width config.p + 1);
-      assert(width y1_minus_x1 = width config.p + 1);*)
+      [%test_result: int] (width y1_plus_x1) ~expect:(num_bits + 1);
+      [%test_result: int] (width y1_minus_x1) ~expect:(num_bits + 1);
       let scope = Scope.sub_scope scope "stage0" in
       { y1_plus_x1
       ; y1_minus_x1
@@ -191,10 +194,10 @@ module Make (Num_bits : Num_bits.S) = struct
 
   module Stage1 = struct
     type 'a t =
-      { c_A : 'a [@bits num_bits]
-      ; c_B : 'a [@bits num_bits]
-      ; c_C : 'a [@bits num_bits]
-      ; c_D : 'a [@bits num_bits]
+      { c_A : 'a
+      ; c_B : 'a
+      ; c_C : 'a
+      ; c_D : 'a
       ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -208,9 +211,15 @@ module Make (Num_bits : Num_bits.S) = struct
     ;;
 
     let create ~config ~scope ~clock { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; valid } =
+      [%test_result: int] (width y1_plus_x1) ~expect:(num_bits + 1);
+      [%test_result: int] (width y1_minus_x1) ~expect:(num_bits + 1);
+      [%test_result: int] (width p2.x) ~expect:num_bits;
+      [%test_result: int] (width p2.y) ~expect:num_bits;
       let include_fine_reduction = false in
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
+      let x2 = uresize p2.x (num_bits + 1) in
+      let y2 = uresize p2.y (num_bits + 1) in
       let c_A, c_B =
         if config.arbitrated_multiplier
         then
@@ -221,8 +230,8 @@ module Make (Num_bits : Num_bits.S) = struct
             ~clock
             ~valid
             ~latency_without_arbitration
-            (y1_minus_x1, p2.x)
-            (y1_plus_x1, p2.y)
+            (y1_minus_x1, x2)
+            (y1_plus_x1, y2)
         else
           ( multiply
               ~include_fine_reduction
@@ -230,14 +239,14 @@ module Make (Num_bits : Num_bits.S) = struct
               ~config
               ~scope
               ~clock
-              (y1_minus_x1, p2.x)
+              (y1_minus_x1, x2)
           , multiply
               ~include_fine_reduction
               ~latency_without_arbitration
               ~config
               ~scope
               ~clock
-              (y1_plus_x1, p2.y) )
+              (y1_plus_x1, y2) )
       in
       let c_C =
         multiply
@@ -256,10 +265,10 @@ module Make (Num_bits : Num_bits.S) = struct
 
   module Stage2 = struct
     type 'a t =
-      { c_E : 'a [@bits num_bits]
-      ; c_F : 'a [@bits num_bits]
-      ; c_G : 'a [@bits num_bits]
-      ; c_H : 'a [@bits num_bits]
+      { c_E : 'a
+      ; c_F : 'a
+      ; c_G : 'a
+      ; c_H : 'a
       ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -268,6 +277,14 @@ module Make (Num_bits : Num_bits.S) = struct
     let latency (config : Config.t) = latency_without_arbitration config
 
     let create ~config ~scope ~clock { Stage1.c_A; c_B; c_C; c_D; valid } =
+      (* CR rahul: need to get this correctly from the config *)
+      let num_correction_steps = 4 in
+      [%test_result: int] (width c_A) ~expect:(num_bits + num_correction_steps + 1);
+      [%test_result: int] (width c_B) ~expect:(num_bits + num_correction_steps + 1);
+      [%test_result: int] (width c_C) ~expect:(num_bits + num_correction_steps);
+      [%test_result: int] (width c_D) ~expect:num_bits;
+      let c_C = uresize c_C (num_bits + num_correction_steps + 1) in
+      let c_D = uresize c_D (num_bits + num_correction_steps + 1) in
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
@@ -293,12 +310,10 @@ module Make (Num_bits : Num_bits.S) = struct
 
     let latency_without_arbitration (config : Config.t) = (2 * config.adder_stages) + 1
     let latency (config : Config.t) = latency_without_arbitration config
-    let simulation = true
 
-    let reduce ~(config : Config.t) ~scope ~clock v =
+    let reduce ~(build_mode : Build_mode.t) ~(config : Config.t) ~scope ~clock v =
       let p = Field_ops_model.Approx_msb_multiplier_model.p in
       assert (Z.(equal p config.p));
-      let wp = 377 in
       let spec = Reg_spec.create ~clock () in
       (* build the static bram values *)
       let log2_depth = 9 in
@@ -310,35 +325,42 @@ module Make (Num_bits : Num_bits.S) = struct
         in
         List.init (1 lsl log2_depth) ~f:(fun i ->
           Hashtbl.find_exn tbl i
-          |> Signal.of_z ~width:(wp + log2_depth)
+          |> Signal.of_z ~width:(num_bits + log2_depth)
           |> Fn.flip Signal.drop_top log2_depth)
       in
       (* make sure the inputs are good *)
-      let num_bits = width v - wp in
-      assert (num_bits <= log2_depth);
-      print_s [%message "reduce" (num_bits : int)];
+      let num_extra_bits = width v - num_bits in
+      assert (num_extra_bits <= log2_depth);
       (* do a coarse reduction from [0,512M] to [0,4M) - in our particular case, it's
        * actually just [0, 3M) *)
-      let rd_idx = uresize (sel_top v num_bits) log2_depth in
+      let rd_idx = uresize (sel_top v num_extra_bits) log2_depth in
       let bram =
-        if simulation
-        then mux rd_idx mux_list |> pipeline spec ~n:read_latency
-        else (* CR rahul: do an init bram here *)
+        match build_mode with
+        | Simulation -> mux rd_idx mux_list |> pipeline spec ~n:read_latency
+        | Synthesis ->
+          (* CR rahul: do an init bram here *)
           Signal.gnd
       in
       let coarse_reduction =
-        let v = pipeline spec ~n:read_latency (drop_top v num_bits) in
+        let v = pipeline spec ~n:read_latency (drop_top v num_extra_bits) in
         assert (width v = width bram);
-        vdd
-        @: sub_pipe ~scope ~latency:(Fn.const config.adder_stages) ~config ~clock v bram
+        sub_pipe
+          ~ensure_positive:false
+          ~scope
+          ~latency:(Fn.const config.adder_stages)
+          ~config
+          ~clock
+          v
+          bram
       in
-      assert (width coarse_reduction = wp + 1);
+      [%test_result: int] (width coarse_reduction) ~expect:(num_bits + 1);
       (* do a fine reduction *)
       let fine_reduction =
         List.map [ 2; 1 ] ~f:(fun i ->
-          let sub_val = Signal.of_z Z.(of_int i * p) ~width:(wp + 1) in
+          let sub_val = Signal.of_z Z.(of_int i * p) ~width:(num_bits + 1) in
           let res =
             sub_pipe
+              ~ensure_positive:false
               ~scope
               ~latency:(Fn.const config.adder_stages)
               ~config
@@ -349,17 +371,17 @@ module Make (Num_bits : Num_bits.S) = struct
           { With_valid.valid = ~:(msb res); value = lsbs res })
         |> priority_select_with_default ~default:coarse_reduction
       in
-      uresize fine_reduction wp
+      uresize fine_reduction num_bits
     ;;
 
-    let create ~config ~scope ~clock { Stage2.c_E; c_F; c_G; c_H; valid } =
+    let create ~build_mode ~config ~scope ~clock { Stage2.c_E; c_F; c_G; c_H; valid } =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
-      let c_E = reduce c_E ~config ~scope ~clock in
-      let c_F = reduce c_F ~config ~scope ~clock in
-      let c_G = reduce c_G ~config ~scope ~clock in
-      let c_H = reduce c_H ~config ~scope ~clock in
+      let c_E = reduce c_E ~build_mode ~config ~scope ~clock in
+      let c_F = reduce c_F ~build_mode ~config ~scope ~clock in
+      let c_G = reduce c_G ~build_mode ~config ~scope ~clock in
+      let c_H = reduce c_H ~build_mode ~config ~scope ~clock in
       let scope = Scope.sub_scope scope "stage2_reduce" in
       { c_E; c_F; c_G; c_H; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
@@ -461,21 +483,26 @@ module Make (Num_bits : Num_bits.S) = struct
     + output_pipes
   ;;
 
-  let create ~config scope { I.clock; valid_in; p1; p2 } =
+  let create
+    ?(build_mode = Build_mode.Simulation)
+    ~config
+    scope
+    { I.clock; valid_in; p1; p2 }
+    =
     let { Stage3.x3; y3; z3; t3; valid = valid_out } =
       { p1; p2; valid = valid_in }
       |> Stage0.create ~config ~scope ~clock
       |> Stage1.create ~config ~scope ~clock
       |> Stage2.create ~config ~scope ~clock
-      |> Stage2_reduce.create ~config ~scope ~clock
+      |> Stage2_reduce.create ~build_mode ~config ~scope ~clock
       |> Stage3.create ~config ~scope ~clock
       |> Stage3.Of_signal.pipeline ~n:output_pipes (Reg_spec.create ~clock ())
     in
     { O.valid_out; p3 = { x = x3; y = y3; z = z3; t = t3 } }
   ;;
 
-  let hierarchical ?instance ~config scope =
+  let hierarchical ?build_mode ?instance ~config scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ?instance ~name:"adder_precompute" ~scope (create ~config)
+    H.hierarchical ?instance ~name:"adder_precompute" ~scope (create ?build_mode ~config)
   ;;
 end

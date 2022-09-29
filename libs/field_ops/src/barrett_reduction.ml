@@ -36,7 +36,10 @@ module Config = struct
     (1 * Approx_msb_multiplier.Config.latency config.approx_msb_multiplier_config)
     + (1 * Half_width_multiplier.Config.latency config.half_multiplier_config)
     + config.subtracter_stages
-    + if config.include_fine_reduction then (config.num_correction_steps * config.subtracter_stages) else 0
+    +
+    if config.include_fine_reduction
+    then config.num_correction_steps * config.subtracter_stages
+    else 0
   ;;
 
   let approx_msb_mult_2222 =
@@ -244,6 +247,7 @@ end
 
 module With_interface (M : sig
   val bits : int
+  val output_bits : int
 end) =
 struct
   include M
@@ -269,7 +273,8 @@ struct
     [@@deriving sexp_of, hardcaml]
 
     let create ~scope ~clock ~enable ~m ~(config : Config.t) { Stage0.a; valid } =
-      assert (width a = bits * 2);
+      let expected_width = 2 * bits in
+      [%test_result: int] (width a) ~expect:expected_width;
       let latency =
         Approx_msb_multiplier.Config.latency config.approx_msb_multiplier_config
       in
@@ -397,18 +402,13 @@ struct
 
   module O = struct
     type 'a t =
-      { a_mod_p : 'a [@bits bits]
+      { a_mod_p : 'a [@bits output_bits]
       ; valid : 'a [@rtlprefix "out_"]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create
-    ~config
-    ~p
-    scope
-    { I.clock; enable; a; valid }
-    =
+  let create ~config ~p scope { I.clock; enable; a; valid } =
     assert (Z.log2up p <= bits);
     let m = Z.((one lsl k) / p) in
     let { Stage4.a_mod_p; valid } =
@@ -432,7 +432,8 @@ struct
         ; a_mod_p = pre_fine_reduction.a_minus_qp
         }
     in
-    { O.valid; a_mod_p = uresize a_mod_p bits }
+    assert (width a_mod_p = output_bits);
+    { O.valid; a_mod_p }
   ;;
 
   let hierarchical ~config ~p scope i =
@@ -451,20 +452,20 @@ let hierarchical
   { With_valid.valid; value = a }
   =
   let bits = width a in
-  let output_bits = (bits + 1) / 2 in
+  let n = (bits + 1) / 2 in
+  let output_padding =
+    if config.include_fine_reduction then 0 else config.num_correction_steps
+  in
+  Core.print_s [%message (n : int) (output_padding : int)];
   let module M =
     With_interface (struct
-      let bits =
-        output_bits + if config.include_fine_reduction then 0 else config.num_correction_steps
-      ;;
+      let bits = n
+      let output_bits = n + output_padding
     end)
   in
   let { M.O.a_mod_p; valid } =
-    M.hierarchical
-      ~config
-      ~p
-      scope
-      { M.I.clock; enable; a; valid }
+    M.hierarchical ~config ~p scope { M.I.clock; enable; a; valid }
   in
+  Core.print_s [%message "built barret reduction" (config.include_fine_reduction : bool)];
   { With_valid.valid; value = a_mod_p }
 ;;

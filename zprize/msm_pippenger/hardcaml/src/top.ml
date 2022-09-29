@@ -257,6 +257,7 @@ module Make (Config : Config.S) = struct
       Mixed_add.hierarchical
         scope
         ~config:adder_config
+        ~build_mode
         { clock
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)

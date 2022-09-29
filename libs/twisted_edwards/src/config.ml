@@ -29,6 +29,7 @@ type t =
   }
 
 let coarse_reduce config ~scope ~clock ~enable x =
+  print_s [%message "coarse_reduce"];
   config.coarse_reduce.impl ~scope ~clock ~enable x None
 ;;
 
@@ -38,6 +39,7 @@ let reduce config ~scope ~clock ~enable x =
 
 let multiply_latency ?(coarse_reduce = false) ~reduce (t : t) =
   if coarse_reduce then assert (not reduce);
+  print_s [%message (t.reduce.latency : int) (t.coarse_reduce.latency : int)];
   let reduce_latency =
     if coarse_reduce
     then t.coarse_reduce.latency

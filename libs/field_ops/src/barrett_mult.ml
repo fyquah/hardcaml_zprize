@@ -13,7 +13,12 @@ end) =
 struct
   open M
   module Karatsuba_ofman_mult = Karatsuba_ofman_mult.With_interface (M)
-  module Barrett_reduction = Barrett_reduction.With_interface (M)
+
+  module Barrett_reduction = Barrett_reduction.With_interface (struct
+    include M
+
+    let output_bits = bits
+  end)
 
   module I = struct
     type 'a t =

@@ -15,8 +15,10 @@ end
 
 module With_interface (M : sig
   val bits : int
+  val output_bits : int
 end) : sig
   val bits : int
+  val output_bits : int
 
   module I : sig
     type 'a t =
@@ -36,19 +38,8 @@ end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create
-    :  config:Config.t
-    -> p:Z.t
-    -> Scope.t
-    -> Signal.t I.t
-    -> Signal.t O.t
-
-  val hierarchical
-    :  config:Config.t
-    -> p:Z.t
-    -> Scope.t
-    -> Signal.t I.t
-    -> Signal.t O.t
+  val create : config:Config.t -> p:Z.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
+  val hierarchical : config:Config.t -> p:Z.t -> Scope.t -> Signal.t I.t -> Signal.t O.t
 end
 
 val hierarchical
