@@ -118,7 +118,7 @@ AFI-id | AFI-gid | Notes
  afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering
  afi-064af6a9ebb4349d9 | agfi-0275df76295dbc8c1 | same as above, but with tlast set via C++
  afi-005f604b2e786b217 | agfi-0a8eb87970600ea78 | msm-1x-full-precompute-adder
-
+ afi-0c117aa4642bded48 | agfi-074c9451b3f89d392 | msm-1x-full-precompute-merge-axi-streams
 # Running `host_buckets.exe`
 
 `host_buckets.exe` is a debug application that pumps test vectors into the
