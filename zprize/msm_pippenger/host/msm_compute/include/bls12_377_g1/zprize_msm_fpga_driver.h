@@ -53,6 +53,8 @@ class ZprizeMsmFpgaDriver {
     final_result.setToIdentity();
 
     bls12_377_g1::Xyzt accum, running;
+    bls12_377_g1::GeneralUnifiedAddIntoTemps temps;
+
     int bit_offset = 0;
     for (int window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
       const auto CUR_WINDOW_LEN = bls12_377_g1::NUM_WINDOW_BITS(window_idx);
@@ -64,16 +66,16 @@ class ZprizeMsmFpgaDriver {
       for (size_t pt_idx = 0; pt_idx < numPoints(); pt_idx++) {
         const uint64_t bucket = scalars[pt_idx].getSlice(bit_offset, CUR_WINDOW_LEN);
         assert(bucket < (uint64_t)CUR_NUM_BUCKETS);
-        bucket_sums[bucket].generalUnifiedAddInto(points[pt_idx]);
+        bucket_sums[bucket].generalUnifiedAddInto(points[pt_idx], temps);
       }
 
       // perform triangle sum
       accum.setToIdentity();
       running.setToIdentity();
       for (int bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1; bucket_idx--) {
-        bls12_377_g1::triangleSumUpdate(accum, running, bucket_sums[bucket_idx]);
+        bls12_377_g1::triangleSumUpdate(accum, running, bucket_sums[bucket_idx], temps);
       }
-      bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset);
+      bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset, temps);
       bit_offset += CUR_WINDOW_LEN;
     }
 

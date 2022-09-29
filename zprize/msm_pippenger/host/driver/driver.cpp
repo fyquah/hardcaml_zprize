@@ -41,6 +41,14 @@ round_up_to_multiple_of_16(uint32_t x) {
   return (x + 15) >> 4 << 4;
 }
 
+struct PostProcessingValues {
+  bls12_377_g1::Xyzt accum;
+  bls12_377_g1::Xyzt running;
+  bls12_377_g1::Xyzt bucket_sum;
+  bls12_377_g1::Xyzt final_result;
+  bls12_377_g1::GeneralUnifiedAddIntoTemps temps;
+};
+
 // Driver class - maintains the set of points
 class Driver {
 private:
@@ -58,6 +66,9 @@ private:
   std::vector<cl::Buffer> buffer_input_points;
   std::vector<cl::Buffer> buffer_input_scalars;
   cl::Buffer buffer_output;
+
+  // preallocated objects to be used for post-processing
+  PostProcessingValues post_processing_values;
 
 public:
   const uint64_t total_num_points;
@@ -84,7 +95,12 @@ public:
       // point.println();
 
       ptr_point += UINT32_PER_INPUT_POINT;
+
+      if ((i + 1) % (1 << 20) == 0) {
+        std::cout << "Converted " << (i + 1) << " points ..." << std::endl;
+      }
     }
+    std::cout << "Done internal format conversion!" << std::endl;
   }
 
   inline uint64_t num_input_chunks() {
@@ -144,21 +160,21 @@ public:
       OCL_CHECK(
           err,
           buffer_input_points.emplace_back(context,
-            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
             num_points_in_chunk * BYTES_PER_INPUT_POINT,
             source_kernel_input_points.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_POINT),
             &err));
       OCL_CHECK(
           err,
           buffer_input_scalars.emplace_back(context,
-            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
             num_points_in_chunk * BYTES_PER_INPUT_SCALAR,
             source_kernel_input_scalars.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
             &err));
 
     }
     OCL_CHECK(err,  buffer_output = cl::Buffer(context,
-                                               CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
+                                               CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY,
                                                OUTPUT_SIZE_IN_BYTES,
                                                source_kernel_output.data(),
                                                &err));
@@ -178,14 +194,13 @@ public:
     }
   }
 
-  bls12_377_g1::Xyzt postProcess(const uint32_t *source_kernel_output) {
+  void postProcess(const uint32_t *source_kernel_output) {
     const uint64_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
 
     bls12_377_g1::init();
-    bls12_377_g1::Xyzt final_result;
-    final_result.setToIdentity();
 
-    bls12_377_g1::Xyzt accum, running;
+    post_processing_values.final_result.setToIdentity();
+
     uint64_t bit_offset = 0;
     uint64_t point_idx = 0;
     for (uint64_t window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
@@ -193,23 +208,30 @@ public:
       const auto CUR_NUM_BUCKETS = bls12_377_g1::NUM_BUCKETS(window_idx);
 
       // perform triangle sum
-      bls12_377_g1::Xyzt bucket_sums[CUR_NUM_BUCKETS];
-      accum.setToIdentity();
-      running.setToIdentity();
+      post_processing_values.accum.setToIdentity();
+      post_processing_values.running.setToIdentity();
       for (uint64_t bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1 /* skip bucket 0 */;
            bucket_idx--) {
-        auto &bucket_sum = bucket_sums[bucket_idx];
-
         // receive fpga point
-        bucket_sum.import_from_fpga_vector(source_kernel_output +
-                                           (NUM_32B_WORDS_PER_OUTPUT * point_idx));
-        bucket_sum.postComputeFPGA();
+        post_processing_values.bucket_sum.import_from_fpga_vector(
+            source_kernel_output + (NUM_32B_WORDS_PER_OUTPUT * point_idx));
+        post_processing_values.bucket_sum.postComputeFPGA();
         ++point_idx;
 
         // do triangle sum update
-        bls12_377_g1::triangleSumUpdate(accum, running, bucket_sum);
+        bls12_377_g1::triangleSumUpdate(
+            post_processing_values.accum,
+            post_processing_values.running,
+            post_processing_values.bucket_sum,
+            post_processing_values.temps
+            );
       }
-      bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset);
+      bls12_377_g1::finalSumUpdate(
+          post_processing_values.final_result,
+          post_processing_values.accum,
+          bit_offset,
+          post_processing_values.temps
+          );
       bit_offset += CUR_WINDOW_LEN;
     }
     if (point_idx != NUM_OUTPUT_POINTS) {
@@ -217,8 +239,7 @@ public:
     }
 
     // final_result.println();
-    final_result.extendedTwistedEdwardsToWeierstrass();
-    return final_result;
+    post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
   }
 
   inline void feed_msm(g1_projective_t *out, biginteger256_t *scalars) {
@@ -232,10 +253,13 @@ public:
         //   ptr_scalar += UINT32_PER_INPUT_SCALAR;
         // }
 
-        // TODO(fyquah): Annotate to compiler about alignment
-
+        // We known source_kernel_inputs.scalrs.data() is 8192 aligned, because
+        // we set it up as such. But we no thing about scalars, since that's
+        // directly from rust.
+        void *dst = __builtin_assume_aligned(
+            (void*) source_kernel_input_scalars.data(), 8192);
         memcpy(
-            source_kernel_input_scalars.data(),
+            dst,
             (void*) scalars,
             UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * total_num_points
         );
@@ -296,8 +320,8 @@ public:
     });
 
     bench("Doing on-host postprocessing", [&]() {
-        auto final_result = postProcess(source_kernel_output.data());
-        final_result.copy_to_rust_type(*out);
+        postProcess(source_kernel_output.data());
+        post_processing_values.final_result.copy_to_rust_type(*out);
     });
   }
 };
