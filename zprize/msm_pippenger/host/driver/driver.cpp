@@ -44,8 +44,6 @@ round_up_to_multiple_of_16(uint32_t x) {
 // Driver class - maintains the set of points
 class Driver {
 private:
-  std::vector<bls12_377_g1::Xyzt> points;
-
   aligned_vec32 source_kernel_input_points;
   aligned_vec32 source_kernel_input_scalars;
   aligned_vec32 source_kernel_output;
@@ -62,27 +60,35 @@ private:
   cl::Buffer buffer_output;
 
 public:
-  Driver(g1_affine_t *rust_points,
-         ssize_t npoints)
-      : points(npoints) {
+  const uint64_t total_num_points;
 
+  Driver(g1_affine_t *rust_points, ssize_t npoints)
+    : total_num_points(npoints),
+      source_kernel_input_points(npoints * UINT32_PER_INPUT_POINT),
+      source_kernel_input_scalars(npoints * UINT32_PER_INPUT_SCALAR),
+      source_kernel_output(OUTPUT_SIZE_IN_UINT32)
+  {
     std::cout << "Converting affine points into internal format ..." << std::endl;
+    bls12_377_g1::Xyzt point;
+    uint32_t *ptr_point = source_kernel_input_points.data();
+
     for (ssize_t i = 0; i < npoints; i++) {
       // std::cout << rust_points[i] << std::endl;
-      points[i].copy_from_rust_type(rust_points[i]);
-      points[i].preComputeFPGA();
-      // points[i].println();
+      point.copy_from_rust_type(rust_points[i]);
+      point.preComputeFPGA();
+      point.copy_to_fpga_buffer(ptr_point);
+      // point.println();
+
+      ptr_point += UINT32_PER_INPUT_POINT;
     }
   }
 
-  inline uint64_t total_num_points() { return points.size(); }
-
   inline uint64_t num_input_chunks() {
-    return (total_num_points() + MAX_NUM_INPUTS_PER_CHUNK - 1) >> LOG_MAX_NUM_POINTS_PER_CHUNK;
+    return (total_num_points + MAX_NUM_INPUTS_PER_CHUNK - 1) >> LOG_MAX_NUM_POINTS_PER_CHUNK;
   }
 
   inline uint64_t num_points_in_last_chunk() {
-    return total_num_points() - ((num_input_chunks()  - 1) << LOG_MAX_NUM_POINTS_PER_CHUNK);
+    return total_num_points - ((num_input_chunks()  - 1) << LOG_MAX_NUM_POINTS_PER_CHUNK);
   }
 
   void load_xclbin(const std::string& binaryFile) {
@@ -128,10 +134,6 @@ public:
       exit(EXIT_FAILURE);
     }
 
-    source_kernel_input_points.resize(points.size() * UINT32_PER_INPUT_POINT);
-    source_kernel_input_scalars.resize(points.size() * UINT32_PER_INPUT_SCALAR);
-    source_kernel_output.resize(OUTPUT_SIZE_IN_UINT32);
-
     // Allocate openCL Buffers
     for (uint64_t chunk_id = 0; chunk_id < num_input_chunks(); chunk_id++) {
       uint64_t num_points_in_chunk = MAX_NUM_INPUTS_PER_CHUNK;
@@ -163,14 +165,6 @@ public:
 
     // Load points into the FPGA 
     {
-      uint32_t *ptr_point = source_kernel_input_points.data();
-
-      for (uint64_t i = 0; i < total_num_points(); i++) {
-        // load the point
-        points[i].copy_to_fpga_buffer(ptr_point);
-        ptr_point += UINT32_PER_INPUT_POINT;
-      }
-
       bench("Copying input points to gmem", [&]() {
           cl_int err;
 
@@ -231,7 +225,7 @@ public:
     bench("memcpy-ing scalars to special memory region", [&]() {
         // uint32_t *ptr_scalar = source_kernel_input_scalars.data();
 
-        // for (uint64_t i = 0; i < total_num_points(); i++) {
+        // for (uint64_t i = 0; i < total_num_points; i++) {
         //   // load the scalar
         //   scalars[i].copy_to_fpga_buffer(ptr_scalar);
 
@@ -243,7 +237,7 @@ public:
         memcpy(
             source_kernel_input_scalars.data(),
             (void*) scalars,
-            UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * total_num_points()
+            UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * total_num_points
         );
     });
 
@@ -325,10 +319,10 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
 extern "C" void msm_mult(Driver *driver, g1_projective_t *out, uint64_t batch_size,
                          biginteger256_t *scalars) {
   for (uint64_t i = 0; i < batch_size; i++) {
-    printf("Running MSM (Batch %lu) with [%lu] input points\n", i, driver->total_num_points());
+    printf("Running MSM (Batch %lu) with [%lu] input points\n", i, driver->total_num_points);
     printf("Number of input chunks = %lu\n", driver->num_input_chunks());
     printf("Number of points in last chunk = 0x%016x\n", driver->num_points_in_last_chunk());
 
-    driver->feed_msm(out + i, scalars + (i * driver->total_num_points()));
+    driver->feed_msm(out + i, scalars + (i * driver->total_num_points));
   }
 }
