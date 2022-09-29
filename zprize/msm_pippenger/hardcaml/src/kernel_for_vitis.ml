@@ -71,7 +71,11 @@ module Make (Config : Config.S) = struct
     let merge_axi_streams__host_scalars_to_fpga_dest =
       Axi512.Stream.Dest.Of_signal.wires ()
     in
+    let merge_axi_streams_to_host_to_msm_registers =
+      Axi512.Stream.Register.O.Of_signal.wires ()
+    in
     let host_to_msm__host_to_fpga_dest = Axi512.Stream.Dest.Of_signal.wires () in
+    (* TODO(fyquah): Pipelining host_scalars_to_fpga *)
     (* Add pipelining to the inputs going into merge_axi_stream, since timing
      * is quite tight there.
      *)
@@ -93,7 +97,7 @@ module Make (Config : Config.S) = struct
         ; clear
         ; host_scalars_to_fpga
         ; ddr_points_to_fpga = ddr_points_to_fpga_registers.dn
-        ; host_to_fpga_dest = host_to_msm__host_to_fpga_dest
+        ; host_to_fpga_dest = merge_axi_streams_to_host_to_msm_registers.up_dest
         }
     in
     Axi512.Stream.Dest.Of_signal.( <== )
@@ -102,12 +106,25 @@ module Make (Config : Config.S) = struct
     Axi512.Stream.Dest.Of_signal.( <== )
       merge_axi_streams__host_scalars_to_fpga_dest
       merge_axi_streams.host_scalars_to_fpga_dest;
+    (* Register output stream from merge axi streams before pumping it into
+     * the host_to_msm module.
+     *)
+    Axi512.Stream.Register.O.Of_signal.( <== )
+      merge_axi_streams_to_host_to_msm_registers
+      (axis_pipeline_512
+         ~n:1
+         scope
+         { clock
+         ; clear
+         ; up = merge_axi_streams.host_to_fpga
+         ; dn_dest = host_to_msm__host_to_fpga_dest
+         });
     let host_to_msm =
       Host_to_msm.hierarchical
         scope
         { clock
         ; clear
-        ; host_to_fpga = merge_axi_streams.host_to_fpga
+        ; host_to_fpga = merge_axi_streams_to_host_to_msm_registers.dn
         ; scalar_and_input_point_ready
         }
     in
