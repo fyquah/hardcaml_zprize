@@ -3,15 +3,6 @@ open Hardcaml
 open Field_ops_lib
 
 module For_bls12_377 = struct
-  module Which_config = struct
-    type t =
-      | Heavy_pipelining
-      | Medium_pipelining
-    [@@deriving enumerate]
-
-    let t = Heavy_pipelining
-  end
-
   let p = Ark_bls12_377_g1.modulus ()
   let montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
   let barrett_reduction_config = Barrett_reduction.Config.for_bls12_377

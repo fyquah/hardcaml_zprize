@@ -24,15 +24,6 @@ open Signal
 open Reg_with_enable
 
 module Config = struct
-  module Which_config = struct
-    type t =
-      | Heavy_pipelining
-      | Medium_pipelining
-    [@@deriving enumerate]
-
-    let t = Heavy_pipelining
-  end
-
   type t =
     { approx_msb_multiplier_config : Approx_msb_multiplier.Config.t
     ; half_multiplier_config : Half_width_multiplier.Config.t

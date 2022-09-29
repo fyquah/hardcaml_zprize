@@ -104,6 +104,20 @@ let test test_type (test_cases : (Z.t Xyzt.t * Z.t Xyt.t) list) =
 
 let test_random test_type = test test_type random_test_cases
 
+let%expect_test "Latency of half adder" =
+  Stdio.printf
+    "%d"
+    (Test_mixed_add.Adder.latency
+       (Lazy.force Config.For_bls12_377.with_barrett_reduction_arbitrated))
+;;
+
+let%expect_test "Latency of full adder" =
+  Stdio.printf
+    "%d"
+    (Test_mixed_add.Adder.latency
+       (Lazy.force Config.For_bls12_377.with_barrett_reduction_full))
+;;
+
 let%expect_test "Test on some test cases (without host precompute)" =
   test_random Mixed_add;
   [%expect {| (Ok ()) |}]
