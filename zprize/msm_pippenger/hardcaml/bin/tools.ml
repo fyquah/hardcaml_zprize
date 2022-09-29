@@ -22,9 +22,9 @@ let command_test_vectors =
           ~doc:
             " Override the number of scalar bits used in the algorithm, to simulate a \
              smaller number of window RAMs"
-      and window_bits_arg =
+      and num_windows_arg =
         flag
-          "-window-bits"
+          "-num-windows"
           (optional int)
           ~doc:
             " Override the number of window bits used in the algorithm, to simulate a \
@@ -47,7 +47,7 @@ let command_test_vectors =
           include Msm_pippenger.Config.Bls12_377
 
           let scalar_bits = Option.value scalar_bits_arg ~default:scalar_bits
-          let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
+          let num_windows = Option.value num_windows_arg ~default:num_windows
         end
         in
         let module Utils = Msm_pippenger_test_top.Utils.Make (Config) in

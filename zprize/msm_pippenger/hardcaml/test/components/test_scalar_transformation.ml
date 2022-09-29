@@ -48,7 +48,7 @@ let test_scalars =
     ~f:(fun i ->
       let base_scalar = Bits.of_int ~width:window_bit_sizes.(0) i in
       List.init 100 ~f:(fun _ ->
-        let top_width = window_bit_sizes.(num_windows - 1) in
+        let top_width = window_bit_sizes.(Config.num_windows - 1) in
         let top =
           Random.int_incl 0 ((1 lsl top_width) - 2) |> Bits.of_int ~width:top_width
         in
@@ -155,7 +155,7 @@ let waveform ?verify () = test ?verify ()
 
 let%expect_test "Drive inputs through transform" =
   let _waves = test () in
-  [%expect{|
+  [%expect {|
     Completed!
     (Checked (!num_inputs 8103)) |}]
 ;;

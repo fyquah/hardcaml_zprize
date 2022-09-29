@@ -251,7 +251,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       let orig_slice =
         Bits.(to_int scalar.:+[offset, Some size]) + if !carry then 1 else 0
       in
-      if i = num_windows - 1
+      if i = Config.num_windows - 1
       then
         { Reduced_scalar.scalar = Bits.of_int ~width:max_window_size_bits orig_slice
         ; negative = false

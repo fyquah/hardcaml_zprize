@@ -4,12 +4,12 @@ module Make (Config : Config.S) = struct
   open Config
 
   (* Integer divison so the first window might be slightly larger than the others. *)
-  let num_windows = scalar_bits / window_size_bits
-  let first_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
+  let lower_window_size = scalar_bits / num_windows
+  let num_higher_windows = scalar_bits - (lower_window_size * num_windows)
 
   let window_bit_sizes =
     Array.init num_windows ~f:(fun i ->
-      if i = 0 then first_window_size_bits else window_size_bits)
+      if i < num_higher_windows then lower_window_size + 1 else lower_window_size)
   ;;
 
   let top_window_size = window_bit_sizes.(num_windows - 1)
