@@ -72,7 +72,7 @@ module Make (Num_bits : Num_bits.S) = struct
              ~enable
              ~n:
                (latency_without_arbitration config
-               - Config.multiply_latency ~reduce:true config))
+               - Config.multiply_latency ~reduce:Fine config))
   ;;
 
   let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
@@ -177,7 +177,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
@@ -224,7 +224,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
@@ -292,7 +292,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1

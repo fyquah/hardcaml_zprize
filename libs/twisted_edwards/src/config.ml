@@ -37,15 +37,20 @@ let reduce config ~scope ~clock ~enable x =
   config.reduce.impl ~scope ~clock ~enable x None
 ;;
 
-let multiply_latency ?(coarse_reduce = false) ~reduce (t : t) =
-  if coarse_reduce then assert (not reduce);
+module Reduce = struct
+  type t =
+    | None
+    | Coarse
+    | Fine
+end
+
+let multiply_latency ~(reduce : Reduce.t) (t : t) =
   print_s [%message (t.reduce.latency : int) (t.coarse_reduce.latency : int)];
   let reduce_latency =
-    if coarse_reduce
-    then t.coarse_reduce.latency
-    else if reduce
-    then t.reduce.latency
-    else 0
+    match reduce with
+    | None -> 0
+    | Coarse -> t.coarse_reduce.latency
+    | Fine -> t.reduce.latency
   in
   t.multiply.latency + reduce_latency
 ;;

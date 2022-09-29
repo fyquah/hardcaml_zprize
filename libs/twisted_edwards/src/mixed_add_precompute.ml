@@ -40,6 +40,23 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
+  let multiply ~(config : Config.t) ~scope ~clock ~latency ~include_fine_reduction (x, y) =
+    let enable = vdd in
+    assert (width x = width y);
+    let scope = Scope.sub_scope scope "multiply" in
+    let reduce = if include_fine_reduction then Config.reduce else Config.coarse_reduce in
+    let final_pipelining =
+      latency config
+      - Config.multiply_latency
+          ~reduce:(if include_fine_reduction then Fine else Coarse)
+          config
+    in
+    assert (final_pipelining >= 0);
+    config.multiply.impl ~scope ~clock ~enable x (Some y)
+    |> reduce config ~scope ~clock ~enable
+    |> pipeline (Reg_spec.create ~clock ()) ~enable ~n:final_pipelining
+  ;;
+
   let arbitrate_multiply
     ~include_fine_reduction
     ~(config : Config.t)
@@ -50,21 +67,12 @@ module Make (Num_bits : Num_bits.S) = struct
     (x1, y1)
     (x2, y2)
     =
-    let reduce = if include_fine_reduction then Config.reduce else Config.coarse_reduce in
     let enable = vdd in
     assert (width y1 = width y2);
     assert (width x1 = width x2);
     let wy = width y1 in
     let wx = width x1 in
     let scope = Scope.sub_scope scope "arbed_multiply" in
-    let final_pipelining =
-      latency_without_arbitration config
-      - Config.multiply_latency
-          ~coarse_reduce:(not include_fine_reduction)
-          ~reduce:include_fine_reduction
-          config
-    in
-    assert (final_pipelining >= 0);
     Arbitrate.arbitrate2
       (x1 @: y1, x2 @: y2)
       ~enable
@@ -73,38 +81,13 @@ module Make (Num_bits : Num_bits.S) = struct
       ~f:(fun input ->
         let y = sel_bottom input wy in
         let x = sel_top input wx in
-        config.multiply.impl ~scope ~clock ~enable x (Some y)
-        |> reduce config ~scope ~clock ~enable
-        |> pipeline (Reg_spec.create ~clock ()) ~enable ~n:final_pipelining)
-  ;;
-
-  let multiply
-    ~(config : Config.t)
-    ~scope
-    ~clock
-    ~latency_without_arbitration
-    ~include_fine_reduction
-    (x1, y1)
-    =
-    let reduce = if include_fine_reduction then Config.reduce else Config.coarse_reduce in
-    let enable = vdd in
-    assert (width y1 = width y1);
-    let wy = width y1 in
-    let wx = width x1 in
-    let scope = Scope.sub_scope scope "multiply" in
-    let y = sel_bottom y1 wy in
-    let x = sel_top x1 wx in
-    config.multiply.impl ~scope ~clock ~enable x (Some y)
-    |> reduce config ~scope ~clock ~enable
-    |> pipeline
-         (Reg_spec.create ~clock ())
-         ~enable
-         ~n:
-           (latency_without_arbitration config
-           - Config.multiply_latency
-               ~coarse_reduce:(not include_fine_reduction)
-               ~reduce:include_fine_reduction
-               config)
+        multiply
+          ~config
+          ~scope
+          ~clock
+          ~latency:latency_without_arbitration
+          ~include_fine_reduction
+          (x, y))
   ;;
 
   let concat_result { Adder_subtractor_pipe.O.carry; result } = carry @: result
@@ -166,8 +149,7 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let latency_without_arbitration (config : Config.t) = config.adder_stages
-    let latency (config : Config.t) = latency_without_arbitration config
+    let latency (config : Config.t) = config.adder_stages
 
     let create ~config ~scope ~clock { Datapath_input.p1; p2; valid } =
       let spec = Reg_spec.create ~clock () in
@@ -203,7 +185,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~coarse_reduce:true ~reduce:false config
+      Config.multiply_latency ~reduce:Coarse config
     ;;
 
     let latency (config : Config.t) =
@@ -235,27 +217,21 @@ module Make (Num_bits : Num_bits.S) = struct
         else
           ( multiply
               ~include_fine_reduction
-              ~latency_without_arbitration
+              ~latency
               ~config
               ~scope
               ~clock
               (y1_minus_x1, x2)
           , multiply
               ~include_fine_reduction
-              ~latency_without_arbitration
+              ~latency
               ~config
               ~scope
               ~clock
               (y1_plus_x1, y2) )
       in
       let c_C =
-        multiply
-          ~include_fine_reduction
-          ~latency_without_arbitration
-          ~config
-          ~scope
-          ~clock
-          (p1.t, p2.t)
+        multiply ~include_fine_reduction ~latency ~config ~scope ~clock (p1.t, p2.t)
       in
       let scope = Scope.sub_scope scope "stage1" in
       { c_A; c_B; c_C; c_D = pipe p1.z; valid = pipe valid }
@@ -273,8 +249,7 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let latency_without_arbitration (config : Config.t) = config.adder_stages
-    let latency (config : Config.t) = latency_without_arbitration config
+    let latency (config : Config.t) = config.adder_stages
 
     let create ~config ~scope ~clock { Stage1.c_A; c_B; c_C; c_D; valid } =
       (* CR rahul: need to get this correctly from the config *)
@@ -308,8 +283,7 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let latency_without_arbitration (config : Config.t) = (2 * config.adder_stages) + 1
-    let latency (config : Config.t) = latency_without_arbitration config
+    let latency (config : Config.t) = (2 * config.adder_stages) + 1
 
     let reduce ~(build_mode : Build_mode.t) ~(config : Config.t) ~scope ~clock v =
       let p = Field_ops_model.Approx_msb_multiplier_model.p in
@@ -399,7 +373,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) =
@@ -423,20 +397,8 @@ module Make (Num_bits : Num_bits.S) = struct
             (c_E, c_F)
             (c_G, c_H)
         else
-          ( multiply
-              ~include_fine_reduction
-              ~latency_without_arbitration
-              ~config
-              ~scope
-              ~clock
-              (c_E, c_F)
-          , multiply
-              ~include_fine_reduction
-              ~latency_without_arbitration
-              ~config
-              ~scope
-              ~clock
-              (c_G, c_H) )
+          ( multiply ~include_fine_reduction ~latency ~config ~scope ~clock (c_E, c_F)
+          , multiply ~include_fine_reduction ~latency ~config ~scope ~clock (c_G, c_H) )
       in
       let t3, z3 =
         if config.arbitrated_multiplier
@@ -451,20 +413,8 @@ module Make (Num_bits : Num_bits.S) = struct
             (c_E, c_H)
             (c_F, c_G)
         else
-          ( multiply
-              ~include_fine_reduction
-              ~latency_without_arbitration
-              ~config
-              ~scope
-              ~clock
-              (c_E, c_H)
-          , multiply
-              ~include_fine_reduction
-              ~latency_without_arbitration
-              ~config
-              ~scope
-              ~clock
-              (c_F, c_G) )
+          ( multiply ~include_fine_reduction ~latency ~config ~scope ~clock (c_E, c_H)
+          , multiply ~include_fine_reduction ~latency ~config ~scope ~clock (c_F, c_G) )
       in
       let scope = Scope.sub_scope scope "stage3" in
       { x3; y3; z3; t3; valid = pipe_with_clear valid }

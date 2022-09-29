@@ -37,7 +37,14 @@ val reduce
   -> Signal.t
   -> Signal.t
 
-val multiply_latency : ?coarse_reduce:bool -> reduce:bool -> t -> int
+module Reduce : sig
+  type t =
+    | None
+    | Coarse
+    | Fine
+end
+
+val multiply_latency : reduce:Reduce.t -> t -> int
 
 module For_bls12_377 : sig
   val with_barrett_reduction_arbitrated : t Lazy.t
