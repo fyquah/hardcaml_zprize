@@ -46,6 +46,7 @@ struct PostProcessingValues {
   bls12_377_g1::Xyzt running;
   bls12_377_g1::Xyzt bucket_sum;
   bls12_377_g1::Xyzt final_result;
+  bls12_377_g1::GeneralUnifiedAddIntoTemps temps;
 };
 
 // Driver class - maintains the set of points
@@ -221,9 +222,16 @@ public:
         bls12_377_g1::triangleSumUpdate(
             post_processing_values.accum,
             post_processing_values.running,
-            post_processing_values.bucket_sum);
+            post_processing_values.bucket_sum,
+            post_processing_values.temps
+            );
       }
-      bls12_377_g1::finalSumUpdate(post_processing_values.final_result, post_processing_values.accum, bit_offset);
+      bls12_377_g1::finalSumUpdate(
+          post_processing_values.final_result,
+          post_processing_values.accum,
+          bit_offset,
+          post_processing_values.temps
+          );
       bit_offset += CUR_WINDOW_LEN;
     }
     if (point_idx != NUM_OUTPUT_POINTS) {
