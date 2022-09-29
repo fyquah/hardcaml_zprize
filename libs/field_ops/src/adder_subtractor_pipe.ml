@@ -2,6 +2,7 @@ open Base
 open Hardcaml
 open Reg_with_enable
 
+(* CR rahul for fyquah: this correct? *)
 let latency ~stages = stages
 
 module Term_and_op = struct

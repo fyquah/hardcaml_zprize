@@ -126,18 +126,20 @@ let build_precompute_two num_bits =
     if idx = 1 lsl num_bits
     then ()
     else (
+      (* our number has a prefix of [idx], so we want to subtract off the largest multiple of
+       * [p] with a prefix of [idx-1] *)
       let prefix = Z.of_int (idx - 1) in
       let max_with_prefix = Z.((prefix lsl 377) + ((one lsl 377) - one)) in
       let mult = Z.(max_with_prefix / p) in
       let mult_times_p = Z.(mult * p) in
       let () =
-        let tmp = Z.(mult_times_p + p) in
+        let tmp = Z.((mult + one) * p) in
         assert (Z.(geq tmp ((prefix + one) lsl 377)))
       in
       Hashtbl.set ret ~key:idx ~data:mult_times_p;
       loop (idx + 1))
   in
-  loop 0;
+  loop 1;
   ret
 ;;
 
