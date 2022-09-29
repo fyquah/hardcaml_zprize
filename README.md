@@ -114,9 +114,9 @@ Now you can run the host.exe test program:
 A place to record AFI image ids and keep track of what point in the code they were made.
 AFI-id | AFI-gid | Notes | 2^26 performance
 ------- | ------- | ----- | -----
- afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned. |
- afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering |
- afi-064af6a9ebb4349d9 | agfi-0275df76295dbc8c1 | same as above, but with tlast set via C++ |
+ afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned. | n/a
+ afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering | n/a
+ afi-064af6a9ebb4349d9 | agfi-0275df76295dbc8c1 | same as above, but with tlast set via C++ | n/a
  afi-005f604b2e786b217 | agfi-0a8eb87970600ea78 | msm-1x-full-precompute-adder | [Copying scalars and points to gmem] 1.78697s, [Doing actual work] 10.8767s
  afi-0c117aa4642bded48 | agfi-074c9451b3f89d392 | msm-1x-full-precompute-merge-axi-streams | [transferring scalars to gmem] 0.204802s, [Doing FPGA Computation] 10.8336s
 
