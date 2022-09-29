@@ -41,19 +41,22 @@ module Make (Config : Config.S) = struct
   end
 
   let axis_pipeline_512 ~n scope (input : _ Axi512.Stream.Register.I.t) =
-    let outputs =
-      Core.Array.init n ~f:(fun _ -> Axi512.Stream.Register.O.Of_signal.wires ())
-    in
-    for i = 0 to n - 1 do
-      let up = if i = 0 then input.up else outputs.(i - 1).dn in
-      let dn_dest = if i = n - 1 then input.dn_dest else outputs.(i + 1).up_dest in
-      Axi512.Stream.Register.O.Of_signal.( <== )
-        outputs.(i)
-        (Axi512.Stream.Register.hierarchical
-           scope
-           { clock = input.clock; clear = input.clear; up; dn_dest })
-    done;
-    { Axi512.Stream.Register.O.dn = outputs.(n - 1).dn; up_dest = outputs.(0).up_dest }
+    match n with
+    | 0 -> { Axi512.Stream.Register.O.dn = input.up; up_dest = input.dn_dest }
+    | n ->
+      let outputs =
+        Core.Array.init n ~f:(fun _ -> Axi512.Stream.Register.O.Of_signal.wires ())
+      in
+      for i = 0 to n - 1 do
+        let up = if i = 0 then input.up else outputs.(i - 1).dn in
+        let dn_dest = if i = n - 1 then input.dn_dest else outputs.(i + 1).up_dest in
+        Axi512.Stream.Register.O.Of_signal.( <== )
+          outputs.(i)
+          (Axi512.Stream.Register.hierarchical
+             scope
+             { clock = input.clock; clear = input.clear; up; dn_dest })
+      done;
+      { Axi512.Stream.Register.O.dn = outputs.(n - 1).dn; up_dest = outputs.(0).up_dest }
   ;;
 
   let create
@@ -64,6 +67,7 @@ module Make (Config : Config.S) = struct
     let clock = ap_clk in
     let clear = ~:ap_rst_n in
     let scalar_and_input_point_ready = wire 1 in
+    let host_scalars_to_fpga_registers = Axi512.Stream.Register.O.Of_signal.wires () in
     let ddr_points_to_fpga_registers = Axi512.Stream.Register.O.Of_signal.wires () in
     let merge_axi_streams__ddr_points_to_fpga_dest =
       Axi512.Stream.Dest.Of_signal.wires ()
@@ -75,10 +79,20 @@ module Make (Config : Config.S) = struct
       Axi512.Stream.Register.O.Of_signal.wires ()
     in
     let host_to_msm__host_to_fpga_dest = Axi512.Stream.Dest.Of_signal.wires () in
-    (* TODO(fyquah): Pipelining host_scalars_to_fpga *)
     (* Add pipelining to the inputs going into merge_axi_stream, since timing
      * is quite tight there.
      *)
+    Axi512.Stream.Register.O.Of_signal.( <== )
+      host_scalars_to_fpga_registers
+      (* CR fyquah for rahul: Change ~n:0 to ~n:1 and the test will fail. *)
+      (axis_pipeline_512
+         ~n:0
+         scope
+         { clock
+         ; clear
+         ; up = host_scalars_to_fpga
+         ; dn_dest = merge_axi_streams__host_scalars_to_fpga_dest
+         });
     Axi512.Stream.Register.O.Of_signal.( <== )
       ddr_points_to_fpga_registers
       (axis_pipeline_512
@@ -95,7 +109,7 @@ module Make (Config : Config.S) = struct
         scope
         { clock
         ; clear
-        ; host_scalars_to_fpga
+        ; host_scalars_to_fpga = host_scalars_to_fpga_registers.dn
         ; ddr_points_to_fpga = ddr_points_to_fpga_registers.dn
         ; host_to_fpga_dest = merge_axi_streams_to_host_to_msm_registers.up_dest
         }
@@ -164,7 +178,7 @@ module Make (Config : Config.S) = struct
         }
     in
     result_point_ready <== msm_result_to_host.result_point_ready;
-    { O.host_scalars_to_fpga_dest = merge_axi_streams.host_scalars_to_fpga_dest
+    { O.host_scalars_to_fpga_dest = host_scalars_to_fpga_registers.up_dest
     ; ddr_points_to_fpga_dest = ddr_points_to_fpga_registers.up_dest
     ; fpga_to_host = msm_result_to_host.fpga_to_host
     }
