@@ -108,14 +108,16 @@ let%expect_test "Latency of half adder" =
   Stdio.printf
     "%d"
     (Test_mixed_add.Adder.latency
-       (Lazy.force Config.For_bls12_377.with_barrett_reduction_arbitrated))
+       (Lazy.force Config.For_bls12_377.with_barrett_reduction_arbitrated));
+  [%expect {| 205 |}]
 ;;
 
 let%expect_test "Latency of full adder" =
   Stdio.printf
     "%d"
     (Test_mixed_add.Adder.latency
-       (Lazy.force Config.For_bls12_377.with_barrett_reduction_full))
+       (Lazy.force Config.For_bls12_377.with_barrett_reduction_full));
+  [%expect {| 205 |}]
 ;;
 
 let%expect_test "Test on some test cases (without host precompute)" =
