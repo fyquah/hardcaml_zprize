@@ -360,9 +360,9 @@ class Xyzt {
 
   void generalUnifiedAddInto(const Xyzt &other) {
     // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-    GFq A, B, C, D, E, F, G, H;
+    static GFq A, B, C, D, E, F, G, H;
 
-    GFq temp1, temp2;
+    static GFq temp1, temp2;
     // A
     temp1.set_sub(y, x);
     temp2.set_sub(other.y, other.x);
