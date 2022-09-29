@@ -124,9 +124,9 @@ module Make (X : Config.S) = struct
       }
     ;;
 
-    let hierarchical scope i =
+    let hierarchical ?instance scope i =
       let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ~name:"axis_register" ~scope create i
+      H.hierarchical ?instance ~name:"axis_register" ~scope create i
     ;;
   end
 end

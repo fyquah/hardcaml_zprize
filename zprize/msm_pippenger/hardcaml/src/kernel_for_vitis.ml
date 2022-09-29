@@ -40,7 +40,7 @@ module Make (Config : Config.S) = struct
     [@@deriving sexp_of, compare, enumerate]
   end
 
-  let axis_pipeline_512 ~n scope (input : _ Axi512.Stream.Register.I.t) =
+  let axis_pipeline_512 ?instance ~n scope (input : _ Axi512.Stream.Register.I.t) =
     match n with
     | 0 -> { Axi512.Stream.Register.O.dn = input.up; up_dest = input.dn_dest }
     | n ->
@@ -53,6 +53,7 @@ module Make (Config : Config.S) = struct
         Axi512.Stream.Register.O.Of_signal.( <== )
           outputs.(i)
           (Axi512.Stream.Register.hierarchical
+             ?instance
              scope
              { clock = input.clock; clear = input.clear; up; dn_dest })
       done;
@@ -84,9 +85,9 @@ module Make (Config : Config.S) = struct
      *)
     Axi512.Stream.Register.O.Of_signal.( <== )
       host_scalars_to_fpga_registers
-      (* CR fyquah for rahul: Change ~n:0 to ~n:1 and the test will fail. *)
       (axis_pipeline_512
-         ~n:0
+         ~instance:"host_scalars_to_fpga_registers"
+         ~n:1
          scope
          { clock
          ; clear
@@ -96,6 +97,7 @@ module Make (Config : Config.S) = struct
     Axi512.Stream.Register.O.Of_signal.( <== )
       ddr_points_to_fpga_registers
       (axis_pipeline_512
+         ~instance:"ddr_points_to_fpga_registers"
          ~n:1
          scope
          { clock
@@ -126,6 +128,7 @@ module Make (Config : Config.S) = struct
     Axi512.Stream.Register.O.Of_signal.( <== )
       merge_axi_streams_to_host_to_msm_registers
       (axis_pipeline_512
+         ~instance:"merge_axi_streams_to_host_to_msm_registers"
          ~n:1
          scope
          { clock

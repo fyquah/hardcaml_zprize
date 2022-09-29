@@ -36,7 +36,7 @@ module type S = sig
     end
 
     val create : Scope.t -> Signal.t I.t -> Signal.t O.t
-    val hierarchical : Scope.t -> Signal.t I.t -> Signal.t O.t
+    val hierarchical : ?instance:string -> Scope.t -> Signal.t I.t -> Signal.t O.t
   end
 end
 
