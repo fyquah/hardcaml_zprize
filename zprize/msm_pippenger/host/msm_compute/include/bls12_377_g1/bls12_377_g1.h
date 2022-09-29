@@ -458,12 +458,12 @@ class Xyzt {
   }
 
   void copy_to_rust_type(g1_projective_t &projective) {
-    printf("FINAL RESULT, COPYING TO RUST\n");
-    println();
-    println_hex();
-    dump();
+    // printf("FINAL RESULT, COPYING TO RUST\n");
+    // println();
+    // println_hex();
+    // dump();
 
-    printf("\n\n normalized point\n\n");
+    // printf("\n\n normalized point\n\n");
     Xyzt temp;
     temp.x.set_div(x, z);
     temp.y.set_div(y, z);
