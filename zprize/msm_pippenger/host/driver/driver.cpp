@@ -68,6 +68,10 @@ public:
       source_kernel_input_scalars(npoints * UINT32_PER_INPUT_SCALAR),
       source_kernel_output(OUTPUT_SIZE_IN_UINT32)
   {
+    // memset(source_kernel_input_points.data(), 0, sizeof(uint32_t) * source_kernel_input_points.size());
+    // memset(source_kernel_input_scalars.data(), 0, sizeof(uint32_t) * source_kernel_input_scalars.size());
+    // memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
+
     std::cout << "Converting affine points into internal format ..." << std::endl;
     bls12_377_g1::Xyzt point;
     uint32_t *ptr_point = source_kernel_input_points.data();
@@ -92,10 +96,6 @@ public:
   }
 
   void load_xclbin(const std::string& binaryFile) {
-    memset(source_kernel_input_points.data(), 0, sizeof(uint32_t) * source_kernel_input_points.size());
-    memset(source_kernel_input_scalars.data(), 0, sizeof(uint32_t) * source_kernel_input_scalars.size());
-    memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
-
     // Create Program and Kernel
     auto devices = xcl::get_xil_devices();
     auto device = devices[0];
