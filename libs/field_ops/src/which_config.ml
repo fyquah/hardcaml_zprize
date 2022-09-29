@@ -3,4 +3,4 @@ type t =
   | Medium_pipelining
 [@@deriving enumerate]
 
-let t = Heavy_pipelining
+let t = Medium_pipelining
