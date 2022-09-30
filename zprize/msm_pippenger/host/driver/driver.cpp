@@ -214,16 +214,11 @@ public:
     cl_int err;
 
     {
-      std::vector<cl::Event> event_wait_list;
-      if (events.ev_krnl_s2mm_output.get() != nullptr) {
-        event_wait_list.push_back(events.ev_krnl_s2mm_output);
-      }
-
       OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
       OCL_CHECK(err, err = krnl_s2mm.setArg(2, uint32_t(OUTPUT_SIZE_IN_UINT32)));
       OCL_CHECK(err, err = q.enqueueTask(
             krnl_s2mm,
-            &event_wait_list,  /* event wait list */
+            nullptr,  /* event wait list */
             &events.ev_krnl_s2mm_output));
     }
 
@@ -341,8 +336,6 @@ public:
 
   void postProcess(const uint32_t *source_kernel_output) {
     const uint64_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
-
-    bls12_377_g1::init();
 
     post_processing_values.final_result.setToIdentity();
 
