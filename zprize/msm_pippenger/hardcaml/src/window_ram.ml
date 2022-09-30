@@ -172,8 +172,9 @@ struct
             ; port_b =
                 { read_enables =
                     sublist port_b.read_enables
-                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 1))
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
                     |> concat_lsb
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
@@ -182,8 +183,9 @@ struct
                     |> bits_lsb
                 ; write_enables =
                     sublist port_b.write_enables
-                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 1))
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
                     |> concat_lsb
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
@@ -191,14 +193,16 @@ struct
                          ~slr:partition.slr
                     |> bits_lsb
                 ; address =
-                    pipeline spec ~n:(ram_lookup_latency - 1) port_b.address
+                    pipeline spec ~n:(ram_lookup_latency - 2) port_b.address
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
                          ~clear
                          ~slr:partition.slr
                 ; data =
-                    pipeline spec ~n:(ram_lookup_latency - 1) port_b.data
+                    pipeline spec ~n:(ram_lookup_latency - 2) port_b.data
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
