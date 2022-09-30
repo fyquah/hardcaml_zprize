@@ -17,6 +17,6 @@ fn msm_correctness() {
     });
                                                  
     for b in 0..batches {
-        assert_eq!(msm_results[b].into_affine(), arkworks_results[b]);
+        assert_eq!(msm_results[b].into_affine(), arkworks_results[b], "assertion failed in batch = {}", b);
     }
 }

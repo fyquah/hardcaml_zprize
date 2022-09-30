@@ -145,10 +145,7 @@ public:
   }
 
   void wait_for_outstanding_scalar_transfer(uint64_t chunk_index) {
-    auto &ev = events.ev_krnl_mm2s_scalars[chunk_index];
-    if (ev.get() != nullptr) {
-      ev.wait();
-    }
+    events.ev_krnl_mm2s_scalars[chunk_index].wait();
   }
 
   void enqueue_scalars_transfer(uint64_t chunk_index) {
@@ -494,14 +491,22 @@ extern "C" void msm_mult(Driver *driver,
     uint32_t *ptr_device_input_scalar = driver->get_input_scalars_pointer();
 
     for (uint64_t b = 0; b < num_batches; b++) {
-      /* Enqueue affine points transfer for the entire batch. */
+      /* Wait for scalars transfer to finish before moving on to the next
+       * input. This isn't required for batch 0
+       */
+      if (b != 0) {
+        for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
+          driver->wait_for_outstanding_scalar_transfer(chunk_index);
+        }
+      }
 
-      /* Enqueue affine points to transfer */
       for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
-        std::cout << "Enqueue affine point " << chunk_index << std::endl;
+        /* Enqueue affine points to transfer */
+        // std::cout << "Enqueue affine point " << chunk_index << std::endl;
         driver->enqueue_points_stream(chunk_index);
 
-        std::cout << "Enqueue scalar chunk " << chunk_index << std::endl;
+        /* Enqueue scalars transfer */
+        // std::cout << "Enqueue scalar chunk " << chunk_index << std::endl;
         uint64_t num_points_in_chunk = driver->get_num_points_in_chunk(chunk_index);
         memcpy(
             ptr_device_input_scalar + (chunk_index * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
@@ -511,21 +516,27 @@ extern "C" void msm_mult(Driver *driver,
         ptr_scalars += num_points_in_chunk;
       }
 
+      /* Read the result from the previous iteration. We need to do this before enqueing another result
+       * transfer to prevent overwriting the contents of the result buffer.
+       *
+       * We could double buffer the result so we can start enqueing the result transfer immediately,
+       * but that's not necessary, since post processing time << kernel execution time by a long
+       * shot.
+       *
+       * If this ever changes, reconsider this.
+       */
+      if (b != 0) {
+        // std::cout << "Blocking for result from previous iteration" << std::endl;
+        driver->wait_for_result_transfer();
+        driver->post_process_final_result_and_copy_to_rust_type(out + (b - 1));
+      }
+
       /* Enqueue fpga->host transfer */
       driver->enqueue_result_transfer();
-
-      /* Read the result from the previous iteration */
-      std::cout << "Blocking for result" << std::endl;
-      driver->wait_for_result_transfer();
-      driver->post_process_final_result_and_copy_to_rust_type(out + b);
-
-      // for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
-      //   driver->wait_for_outstanding_scalar_transfer(chunk_index);
-      // }
     }
 
-    // driver->wait_for_result_transfer();
-    // driver->post_process_final_result_and_copy_to_rust_type(out + (num_batches - 1));
+    driver->wait_for_result_transfer();
+    driver->post_process_final_result_and_copy_to_rust_type(out + (num_batches - 1));
 
   } else {
     for (uint64_t i = 0; i < num_batches; i++) {
