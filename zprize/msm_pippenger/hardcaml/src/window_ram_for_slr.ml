@@ -89,4 +89,14 @@ struct
     ; port_b_q = mux port_b.read_window port_b_q
     }
   ;;
+
+  let hierarchical ?instance ~b_write_data ~build_mode scope i =
+    let module H = Hierarchy.In_scope (I) (O) in
+    H.hierarchical
+      ~name:"window_ram_for_slr"
+      ?instance
+      ~scope
+      (create ~build_mode ~b_write_data)
+      i
+  ;;
 end
