@@ -21,7 +21,7 @@ module Make (M : sig
   val ram_read_latency : int
 
   (** The latency on the inputs to the ram (read enables, read_window, write
-   * enable and address *)
+       * enable and address *)
   val ram_lookup_latency : int
 
   (** Additional pipelining on the read data for it to cross SLR gracefully. *)
@@ -273,7 +273,7 @@ struct
         |> pipeline spec ~n:1
     ; port_b_q =
         (match read_partition_b with
-         | None -> List.hd_exn aqs
+         | None -> List.hd_exn bqs
          | Some read_partition_b -> mux read_partition_b bqs)
         |> pipeline spec ~n:1
     }
