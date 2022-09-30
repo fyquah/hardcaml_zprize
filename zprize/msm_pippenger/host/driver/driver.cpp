@@ -17,37 +17,178 @@
 #define DDR_BITS 512
 
 // We round up our points to the nearest multiple of the AXI stream / DDR
-#define BYTES_PER_INPUT \
-  (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+// #define BYTES_PER_INPUT \
+//   (((SCALAR_BITS + BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_INPUT_POINT \
+  ((((BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8)
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_INPUT_SCALAR 32
+
+#define LOG_MAX_NUM_POINTS_PER_CHUNK 23
+#define MAX_NUM_INPUTS_PER_CHUNK (1ull << LOG_MAX_NUM_POINTS_PER_CHUNK)
+
+#define UINT32_PER_INPUT_POINT (BYTES_PER_INPUT_POINT / 4)
+#define UINT32_PER_INPUT_SCALAR (BYTES_PER_INPUT_SCALAR / 4)
+
+#define NUM_OUTPUT_POINTS 90091
+#define OUTPUT_SIZE_IN_BYTES (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS)
+#define OUTPUT_SIZE_IN_UINT32 (OUTPUT_SIZE_IN_BYTES / 4)
+
+typedef std::vector<uint32_t, aligned_allocator<uint32_t> > aligned_vec32;
+
+static uint32_t
+round_up_to_multiple_of_16(uint32_t x) {
+  return (x + 15) >> 4 << 4;
+}
 
 // Driver class - maintains the set of points
 class Driver {
- private:
-  std::vector<bls12_377_g1::Xyzt> points;
-  const std::string binaryFile;
+private:
+  aligned_vec32 source_kernel_input_points;
+  aligned_vec32 source_kernel_input_scalars;
+  aligned_vec32 source_kernel_output;
 
- public:
-  Driver(const std::vector<bls12_377_g1::Xyzt> &points, const std::string &binaryFile)
-      : points(points), binaryFile(binaryFile) {}
+  // OpenCL stuff
+  cl::CommandQueue q;
+  cl::Context context;
+  cl::Kernel krnl_mm2s_points;
+  cl::Kernel krnl_mm2s_scalars;
+  cl::Kernel krnl_msm_pippenger;
+  cl::Kernel krnl_s2mm;
+  std::vector<cl::Buffer> buffer_input_points;
+  std::vector<cl::Buffer> buffer_input_scalars;
+  cl::Buffer buffer_output;
 
-  const int NUM_OUTPUT_POINTS = 90091;
-  const int OUTPUT_SIZE = (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS) / 4;
+public:
+  const uint64_t total_num_points;
 
-  inline uint64_t numPoints() { return points.size(); }
-  inline int INPUT_SIZE() { return (BYTES_PER_INPUT * numPoints()) / 4; }
+  Driver(g1_affine_t *rust_points, ssize_t npoints)
+    : total_num_points(npoints),
+      source_kernel_input_points(npoints * UINT32_PER_INPUT_POINT),
+      source_kernel_input_scalars(npoints * UINT32_PER_INPUT_SCALAR),
+      source_kernel_output(OUTPUT_SIZE_IN_UINT32)
+  {
+    // memset(source_kernel_input_points.data(), 0, sizeof(uint32_t) * source_kernel_input_points.size());
+    // memset(source_kernel_input_scalars.data(), 0, sizeof(uint32_t) * source_kernel_input_scalars.size());
+    // memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
+
+    std::cout << "Converting affine points into internal format ..." << std::endl;
+    bls12_377_g1::Xyzt point;
+    uint32_t *ptr_point = source_kernel_input_points.data();
+
+    for (ssize_t i = 0; i < npoints; i++) {
+      // std::cout << rust_points[i] << std::endl;
+      point.copy_from_rust_type(rust_points[i]);
+      point.preComputeFPGA();
+      point.copy_to_fpga_buffer(ptr_point);
+      // point.println();
+
+      ptr_point += UINT32_PER_INPUT_POINT;
+    }
+  }
+
+  inline uint64_t num_input_chunks() {
+    return (total_num_points + MAX_NUM_INPUTS_PER_CHUNK - 1) >> LOG_MAX_NUM_POINTS_PER_CHUNK;
+  }
+
+  inline uint64_t num_points_in_last_chunk() {
+    return total_num_points - ((num_input_chunks()  - 1) << LOG_MAX_NUM_POINTS_PER_CHUNK);
+  }
+
+  void load_xclbin(const std::string& binaryFile) {
+    // Create Program and Kernel
+    auto devices = xcl::get_xil_devices();
+    auto device = devices[0];
+    cl_int err;
+
+    // read_binary_file() is a utility API which will load the binaryFile
+    // and will return the pointer to file buffer.
+    auto fileBuf = xcl::read_binary_file(binaryFile);
+    cl::Program::Binaries bins{{fileBuf.data(), fileBuf.size()}};
+    bool valid_device = false;
+    for (uint64_t i = 0; i < devices.size(); i++) {
+      auto device = devices[i];
+      // Creating Context and Command Queue for selected Device
+      OCL_CHECK(err, context = cl::Context(device, nullptr, nullptr, nullptr, &err));
+      OCL_CHECK(err, q = cl::CommandQueue(
+                         context, device,
+                         CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE | CL_QUEUE_PROFILING_ENABLE, &err));
+
+      std::cout << "Trying to program device[" << i << "]: " << device.getInfo<CL_DEVICE_NAME>()
+                << std::endl;
+      cl::Program program(context, {device}, bins, nullptr, &err);
+      if (err != CL_SUCCESS) {
+        std::cout << "Failed to program device[" << i << "] with xclbin file!\n";
+      } else {
+        std::cout << "Device[" << i << "]: program successful!\n";
+        OCL_CHECK(err, krnl_mm2s_points = cl::Kernel(program, "krnl_mm2s", &err));
+        OCL_CHECK(err, krnl_mm2s_scalars = cl::Kernel(program, "krnl_mm2s", &err));
+        OCL_CHECK(err, krnl_msm_pippenger = cl::Kernel(program, "krnl_msm_pippenger", &err));
+        OCL_CHECK(err, krnl_s2mm = cl::Kernel(program, "krnl_s2mm", &err));
+        valid_device = true;
+        break;  // we break because we found a valid device
+      }
+    }
+    if (!valid_device) {
+      std::cout << "Failed to program any device found, exit!\n";
+      exit(EXIT_FAILURE);
+    }
+
+    // Allocate openCL Buffers
+    for (uint64_t chunk_id = 0; chunk_id < num_input_chunks(); chunk_id++) {
+      uint64_t num_points_in_chunk = MAX_NUM_INPUTS_PER_CHUNK;
+      if (chunk_id == num_input_chunks() - 1) {
+        num_points_in_chunk = num_points_in_last_chunk();
+      }
+
+      OCL_CHECK(
+          err,
+          buffer_input_points.emplace_back(context,
+            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+            num_points_in_chunk * BYTES_PER_INPUT_POINT,
+            source_kernel_input_points.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_POINT),
+            &err));
+      OCL_CHECK(
+          err,
+          buffer_input_scalars.emplace_back(context,
+            CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+            num_points_in_chunk * BYTES_PER_INPUT_SCALAR,
+            source_kernel_input_scalars.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
+            &err));
+
+    }
+    OCL_CHECK(err,  buffer_output = cl::Buffer(context,
+                                               CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
+                                               OUTPUT_SIZE_IN_BYTES,
+                                               source_kernel_output.data(),
+                                               &err));
+
+    // Load points into the FPGA 
+    {
+      bench("Copying input points to gmem", [&]() {
+          cl_int err;
+
+          // Trick openCL to know which DDR to stream buffer_inputs to
+          for (auto buffer_input : buffer_input_points) {
+            OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input));
+            OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr));
+          }
+          OCL_CHECK(err, err = q.finish());
+      });
+    }
+  }
 
   bls12_377_g1::Xyzt postProcess(const uint32_t *source_kernel_output) {
-    const size_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
+    const uint64_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
 
     bls12_377_g1::init();
     bls12_377_g1::Xyzt final_result;
     final_result.setToIdentity();
 
     bls12_377_g1::Xyzt accum, running;
-    int bit_offset = 0;
-    int point_idx = 0;
-    for (int window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
+    uint64_t bit_offset = 0;
+    uint64_t point_idx = 0;
+    for (uint64_t window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
       const auto CUR_WINDOW_LEN = bls12_377_g1::NUM_WINDOW_BITS(window_idx);
       const auto CUR_NUM_BUCKETS = bls12_377_g1::NUM_BUCKETS(window_idx);
 
@@ -55,13 +196,14 @@ class Driver {
       bls12_377_g1::Xyzt bucket_sums[CUR_NUM_BUCKETS];
       accum.setToIdentity();
       running.setToIdentity();
-      for (int bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1 /* skip bucket 0 */;
+      for (uint64_t bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1 /* skip bucket 0 */;
            bucket_idx--) {
         auto &bucket_sum = bucket_sums[bucket_idx];
 
         // receive fpga point
         bucket_sum.import_from_fpga_vector(source_kernel_output +
                                            (NUM_32B_WORDS_PER_OUTPUT * point_idx));
+        bucket_sum.postComputeFPGA();
         ++point_idx;
 
         // do triangle sum update
@@ -80,144 +222,107 @@ class Driver {
   }
 
   inline void feed_msm(g1_projective_t *out, biginteger256_t *scalars) {
-    auto input_size = INPUT_SIZE();
-    auto output_size = OUTPUT_SIZE;
-    printf("Running MSM with [%i] input points and [%i] output points\n", numPoints(),
-           NUM_OUTPUT_POINTS);
-    printf("input_size = [%i], output_size = [%i] n", input_size, output_size);
+    bench("memcpy-ing scalars to special memory region", [&]() {
+        // uint32_t *ptr_scalar = source_kernel_input_scalars.data();
 
-    // Allocate Memory in Host Memory
-    size_t vector_input_size_bytes = sizeof(int) * input_size;
-    size_t vector_output_size_bytes = sizeof(int) * output_size;
+        // for (uint64_t i = 0; i < total_num_points; i++) {
+        //   // load the scalar
+        //   scalars[i].copy_to_fpga_buffer(ptr_scalar);
 
-    std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input(input_size);
-    std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(output_size);
-    memset(source_kernel_input.data(), 0, sizeof(uint32_t) * source_kernel_input.size());
-    memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
+        //   ptr_scalar += UINT32_PER_INPUT_SCALAR;
+        // }
 
-    // Load points from library representation
-    uint32_t *base_ptr = source_kernel_input.data();
-    printf("%i", (int)(BYTES_PER_INPUT / 4));
-    for (uint64_t i = 0; i < numPoints(); i++) {
-      const int NUM_32B_WORDS_PER_SCALAR = 256 / 32;
-      const int NUM_32B_WORDS_PER_POINT = (256 * 5) / 32;
-      // uint32_t *base_ptr = &source_kernel_input[i * (BYTES_PER_INPUT / 4)];
+        // TODO(fyquah): Annotate to compiler about alignment
 
-      // load the point
-      points[i].copy_to_fpga_buffer(base_ptr);
-      // load the scalar
-      scalars[i].copy_to_fpga_buffer(base_ptr + (1152 / 32));
-      base_ptr += (BYTES_PER_INPUT) / 4;
-    }
-
-    cl_int err;
-    cl::CommandQueue q;
-    cl::Context context;
-    cl::Kernel krnl_mm2s, krnl_msm_pippenger, krnl_s2mm;
-    // OPENCL HOST CODE AREA START
-    // Create Program and Kernel
-    auto devices = xcl::get_xil_devices();
-    auto device = devices[0];
-
-    // read_binary_file() is a utility API which will load the binaryFile
-    // and will return the pointer to file buffer.
-    auto fileBuf = xcl::read_binary_file(binaryFile);
-    cl::Program::Binaries bins{{fileBuf.data(), fileBuf.size()}};
-    bool valid_device = false;
-    for (unsigned int i = 0; i < devices.size(); i++) {
-      auto device = devices[i];
-      // Creating Context and Command Queue for selected Device
-      OCL_CHECK(err, context = cl::Context(device, nullptr, nullptr, nullptr, &err));
-      OCL_CHECK(err, q = cl::CommandQueue(
-                         context, device,
-                         CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE | CL_QUEUE_PROFILING_ENABLE, &err));
-
-      std::cout << "Trying to program device[" << i << "]: " << device.getInfo<CL_DEVICE_NAME>()
-                << std::endl;
-      cl::Program program(context, {device}, bins, nullptr, &err);
-      if (err != CL_SUCCESS) {
-        std::cout << "Failed to program device[" << i << "] with xclbin file!\n";
-      } else {
-        std::cout << "Device[" << i << "]: program successful!\n";
-        OCL_CHECK(err, krnl_mm2s = cl::Kernel(program, "krnl_mm2s", &err));
-        OCL_CHECK(err, krnl_msm_pippenger = cl::Kernel(program, "krnl_msm_pippenger", &err));
-        OCL_CHECK(err, krnl_s2mm = cl::Kernel(program, "krnl_s2mm", &err));
-        valid_device = true;
-        break;  // we break because we found a valid device
-      }
-    }
-    if (!valid_device) {
-      std::cout << "Failed to program any device found, exit!\n";
-      exit(EXIT_FAILURE);
-    }
-
-    // Allocate Buffer in Global Memory
-    OCL_CHECK(err,
-              cl::Buffer buffer_input(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-                                      vector_input_size_bytes, source_kernel_input.data(), &err));
-    OCL_CHECK(
-        err, cl::Buffer buffer_output(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
-                                      vector_output_size_bytes, source_kernel_output.data(), &err));
-
-    // Set the "Kernel 0" Arguments
-    OCL_CHECK(err, err = krnl_mm2s.setArg(0, buffer_input));
-    OCL_CHECK(err, err = krnl_mm2s.setArg(2, input_size));
-
-    // Set the "Kernel 1" Arguments
-    OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
-    OCL_CHECK(err, err = krnl_s2mm.setArg(2, output_size));
-
-    // Copy input data to device global memory
-    bench("Copying scalars and points to gmem", [&]() {
-      OCL_CHECK(
-          err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr));
-      OCL_CHECK(err, err = q.finish());
+        memcpy(
+            source_kernel_input_scalars.data(),
+            (void*) scalars,
+            UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * total_num_points
+        );
     });
 
-    bench("Doing actual work", [&]() {
-      OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s));
-      std::cout << "Launched writer kernel!" << std::endl;
+    bench("transferring scalars to gmem", [&]() {
+        cl_int err;
 
-      // Launch the reader kernel
-      OCL_CHECK(err, err = q.enqueueTask(krnl_s2mm));
-      std::cout << "Launched reader kernel!" << std::endl;
+        // Trick openCL to know which DDR to stream buffer_inputs to
+        for (auto buffer_input : buffer_input_scalars) {
+          OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(0, buffer_input));
+          OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input}, 0 /* 0 means from host*/, nullptr));
+        }
+        OCL_CHECK(err, err = q.finish());
+    });
 
-      // Wait for kernels to finish its operation
-      OCL_CHECK(err, err = q.finish());
+    bench("Doing FPGA Computation", [&]() {
+        cl_int err;
+
+        // Set the writer kernel arguments and dispatch them
+        for (uint64_t chunk_id = 0; chunk_id < num_input_chunks(); chunk_id++) {
+          uint64_t num_points_in_chunk = MAX_NUM_INPUTS_PER_CHUNK;
+          bool is_last_chunk = chunk_id == num_input_chunks() - 1;
+          if (is_last_chunk) {
+            num_points_in_chunk = num_points_in_last_chunk();
+          }
+
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input_points[chunk_id]));
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(2, round_up_to_multiple_of_16(
+                                                              num_points_in_chunk * UINT32_PER_INPUT_POINT)));
+          OCL_CHECK(err, err = krnl_mm2s_points.setArg(3, is_last_chunk));
+          OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_points));
+
+          OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(0, buffer_input_scalars[chunk_id]));
+          OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(2, round_up_to_multiple_of_16(
+                                                              num_points_in_chunk * UINT32_PER_INPUT_SCALAR)));
+          OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(3, is_last_chunk));
+          OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_scalars));
+        }
+        std::cout << "Launched writer kernels!" << std::endl;
+
+        // Launch the reader kernel arguments and dispatch them
+        OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
+        OCL_CHECK(err, err = krnl_s2mm.setArg(2, uint32_t(OUTPUT_SIZE_IN_UINT32)));
+        OCL_CHECK(err, err = q.enqueueTask(krnl_s2mm));
+        std::cout << "Launched reader kernel!" << std::endl;
+
+        // Wait for kernels to finish its operation
+        OCL_CHECK(err, err = q.finish());
     });
 
     bench("Copying results back from gmem", [&]() {
-      // Copy Result from Device Global Memory to Host Local Memory
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_output}, CL_MIGRATE_MEM_OBJECT_HOST));
-      OCL_CHECK(err, err = q.finish());
+        cl_int err;
+
+        // Copy Result from Device Global Memory to Host Local Memory
+        OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_output}, CL_MIGRATE_MEM_OBJECT_HOST));
+        OCL_CHECK(err, err = q.finish());
     });
 
-    // OPENCL HOST CODE AREA END
-    auto final_result = postProcess(source_kernel_output.data());
-    final_result.copy_to_rust_type(*out);
+    bench("Doing on-host postprocessing", [&]() {
+        auto final_result = postProcess(source_kernel_output.data());
+        final_result.copy_to_rust_type(*out);
+    });
   }
 };
 
 extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t *rust_points,
                             ssize_t npoints) {
-  std::string binaryFile(xclbin, xclbin_len);
-  printf("Initializing with XCLBIN=%s\n", binaryFile.c_str());
   bls12_377_g1::init();
-  std::vector<bls12_377_g1::Xyzt> points(npoints);
-  for (ssize_t i = 0; i < npoints; i++) {
-    // std::cout << rust_points[i] << std::endl;
-    points[i].copy_from_rust_type(rust_points[i]);
-    // points[i].println();
-  }
-  auto *driver = new Driver(points, binaryFile);
+
+  std::cout << "Instantiating msm driver for " << npoints << " points" << std::endl;
+  auto *driver = new Driver(rust_points, npoints);
+
+  std::string binaryFile(xclbin, xclbin_len);
+  std::cout << "Loading XCLBIN=" << binaryFile << " and doing openCL setups:" << std::endl;
+  driver->load_xclbin(binaryFile);
+
   return driver;
 }
 
 extern "C" void msm_mult(Driver *driver, g1_projective_t *out, uint64_t batch_size,
                          biginteger256_t *scalars) {
   for (uint64_t i = 0; i < batch_size; i++) {
-    printf("Running MSM (Batch %lu) with [%lu] input points\n", i, driver->numPoints());
+    printf("Running MSM (Batch %lu) with [%lu] input points\n", i, driver->total_num_points);
+    printf("Number of input chunks = %lu\n", driver->num_input_chunks());
+    printf("Number of points in last chunk = 0x%016x\n", driver->num_points_in_last_chunk());
 
-    driver->feed_msm(out + i, scalars + (i * driver->numPoints()));
+    driver->feed_msm(out + i, scalars + (i * driver->total_num_points));
   }
 }

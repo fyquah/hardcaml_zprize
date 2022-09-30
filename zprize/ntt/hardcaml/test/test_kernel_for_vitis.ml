@@ -175,8 +175,10 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf.Z.of_z) in
     let results = ref [] in
     let num_results = ref 0 in
+    let x = ref 0 in
     let cycle ?(n = 1) () =
       assert (n > 0);
+      Int.incr x;
       for _ = 1 to n do
         let tready = random_bool ~p_true:wiggle_prob in
         if Bits.to_bool !(outputs.compute_to_controller.tvalid) && tready
@@ -185,7 +187,8 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
           Int.incr num_results);
         inputs.compute_to_controller_dest.tready := Bits.of_bool tready;
         Cyclesim.cycle sim
-      done
+      done;
+      if !x > 10_000 then raise_s [%message "Running too long"]
     in
     start_sim inputs cycle;
     let run_pass ~which coefs =

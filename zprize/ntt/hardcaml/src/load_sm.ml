@@ -6,7 +6,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
-  let logsync = 1
+  let write_pipelining = 2
 
   module State = struct
     type t =
@@ -44,12 +44,12 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let sm = Always.State_machine.create (module State) spec in
     let addr = Var.reg spec ~width:(logn + logblocks) in
     let addr_next = addr.value +:. 1 in
-    let sync = Var.reg spec ~width:logsync in
+    let sync = Var.reg spec ~width:(Int.ceil_log2 write_pipelining) in
     let tvalid = i.tvalid in
     Always.(
       compile
         [ sm.switch
-            [ Start, [ addr <--. 0; when_ i.start [ sm.set_next Stream ] ]
+            [ Start, [ addr <--. 0; sync <--. 0; when_ i.start [ sm.set_next Stream ] ]
             ; ( Stream
               , [ when_
                     tvalid
@@ -57,7 +57,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                 ] )
             ; ( Sync
               , [ sync <-- sync.value +:. 1
-                ; when_ (sync.value ==:. -1) [ sm.set_next Start ]
+                ; when_ (sync.value ==:. write_pipelining - 1) [ sm.set_next Start ]
                 ] )
             ]
         ]);
