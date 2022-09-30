@@ -118,8 +118,7 @@ class GFq {
     mpz_set(v, other.v);
   }
 
-  ~GFq() { /*mpz_clear(v);*/
-  }
+  ~GFq() { mpz_clear(v); }
 
   // arithmetic
   void divBy2() {
@@ -262,6 +261,19 @@ void print_params() {
   gmp_printf("Other: {\n\tk = %#Zx, \n\ttwisted_scale = %#Zx\n}\n", k.v, twisted_scale.v);
 }
 
+struct GeneralUnifiedAddIntoTemps {
+  GFq A;
+  GFq B;
+  GFq C;
+  GFq D;
+  GFq E;
+  GFq F;
+  GFq G;
+  GFq H;
+  GFq temp1;
+  GFq temp2;
+};
+
 class Xyzt {
  public:
   GFq x, y, z, t;
@@ -359,11 +371,19 @@ class Xyzt {
     z.set(COFACTOR);
   }
 
-  void generalUnifiedAddInto(const Xyzt &other) {
+  void generalUnifiedAddInto(const Xyzt &other, GeneralUnifiedAddIntoTemps &temps) {
     // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-    GFq A, B, C, D, E, F, G, H;
+    auto &A     = temps.A;
+    auto &B     = temps.B;
+    auto &C     = temps.C;
+    auto &D     = temps.D;
+    auto &E     = temps.E;
+    auto &F     = temps.F;
+    auto &G     = temps.G;
+    auto &H     = temps.H;
+    auto &temp1 = temps.temp1;
+    auto &temp2 = temps.temp2;
 
-    GFq temp1, temp2;
     // A
     temp1.set_sub(y, x);
     temp2.set_sub(other.y, other.x);
@@ -393,7 +413,19 @@ class Xyzt {
     z.set_mul(F, G);
   }
 
-  void doubleInPlace() { generalUnifiedAddInto(*this); }
+  void generalUnifiedAddInto(const Xyzt &other) {
+    GeneralUnifiedAddIntoTemps temps;
+    generalUnifiedAddInto(other, temps);
+  }
+
+  void doubleInPlace(GeneralUnifiedAddIntoTemps &temps) {
+    generalUnifiedAddInto(*this, temps);
+  }
+
+  void doubleInPlace() {
+    GeneralUnifiedAddIntoTemps temps;
+    generalUnifiedAddInto(*this, temps);
+  }
 
   void postComputeFPGA() {
     x.divBy2();
@@ -459,19 +491,19 @@ class Xyzt {
   }
 
   void copy_to_rust_type(g1_projective_t &projective) {
-    printf("FINAL RESULT, COPYING TO RUST\n");
-    println();
-    println_hex();
-    dump();
+    // printf("FINAL RESULT, COPYING TO RUST\n");
+    // println();
+    // println_hex();
+    // dump();
 
-    printf("\n\n normalized point\n\n");
+    // printf("\n\n normalized point\n\n");
     Xyzt temp;
     temp.x.set_div(x, z);
     temp.y.set_div(y, z);
     temp.z.set(ONE_WORDS);
     temp.t.set(ZERO_WORDS);
-    temp.println_hex();
-    temp.dump();
+    // temp.println_hex();
+    // temp.dump();
     // printf("\nPARAMS\n");
     // print_params();
     x.copy_to_rust_type(projective.x);

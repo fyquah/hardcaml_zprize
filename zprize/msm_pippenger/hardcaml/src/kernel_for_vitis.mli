@@ -17,7 +17,8 @@ module Make (Config : Config.S) : sig
     type 'a t =
       { ap_clk : 'a
       ; ap_rst_n : 'a
-      ; host_to_fpga : 'a Axi512.Stream.Source.t
+      ; host_scalars_to_fpga : 'a Axi512.Stream.Source.t
+      ; ddr_points_to_fpga : 'a Axi512.Stream.Source.t
       ; fpga_to_host_dest : 'a Axi512.Stream.Dest.t
       }
     [@@deriving sexp_of, hardcaml]
@@ -26,7 +27,8 @@ module Make (Config : Config.S) : sig
   module O : sig
     type 'a t =
       { fpga_to_host : 'a Axi512.Stream.Source.t
-      ; host_to_fpga_dest : 'a Axi512.Stream.Dest.t
+      ; host_scalars_to_fpga_dest : 'a Axi512.Stream.Dest.t
+      ; ddr_points_to_fpga_dest : 'a Axi512.Stream.Dest.t
       }
     [@@deriving sexp_of, hardcaml]
   end

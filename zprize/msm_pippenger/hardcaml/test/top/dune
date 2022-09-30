@@ -3,6 +3,7 @@
  (libraries
   core
   expect_test_helpers_core
+  hardcaml_step_testbench
   hardcaml_waveterm
   hardcaml_verilator
   msm_pippenger
