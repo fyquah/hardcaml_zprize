@@ -234,7 +234,7 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let include_fine_reduction = true
+    let include_fine_reduction = false
 
     (* CR rahul: need to get this correctly from the config - it's the log2 of error introduced by 
      * the msb approximation *)
@@ -314,7 +314,7 @@ module Make (Num_bits : Num_bits.S) = struct
     let create ~config ~scope ~clock { Stage1.c_A; c_B; c_C; c_D; valid } =
       [%test_result: int] (width c_A) ~expect:(num_bits + accumulated_error);
       [%test_result: int] (width c_B) ~expect:(num_bits + accumulated_error);
-      [%test_result: int] (width c_C) ~expect:(num_bits + Stage0.error);
+      [%test_result: int] (width c_C) ~expect:(num_bits + Stage1.error);
       [%test_result: int] (width c_D) ~expect:num_bits;
       let c_C = uresize c_C (num_bits + accumulated_error) in
       let c_D = uresize c_D (num_bits + accumulated_error) in

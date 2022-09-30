@@ -8,9 +8,7 @@ module For_bls12_377 = struct
   let barrett_reduction_config = Barrett_reduction.Config.for_bls12_377
 
   let barrett_coarse_reduction_config =
-    let base = Barrett_reduction.Config.for_bls12_377 in
-    let num_correction_steps = base.num_correction_steps + 1 in
-    { base with num_correction_steps; include_fine_reduction = false }
+    { Barrett_reduction.Config.for_bls12_377 with include_fine_reduction = false }
   ;;
 
   let square : Ec_fpn_ops_config.fn =
