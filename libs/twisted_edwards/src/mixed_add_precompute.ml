@@ -180,7 +180,7 @@ module Make (Num_bits : Num_bits.S) = struct
     ;;
   end
 
-  module Stage1 = struct
+  module Stage1a = struct
     module I = struct
       type 'a t =
         { clock : 'a
@@ -191,11 +191,9 @@ module Make (Num_bits : Num_bits.S) = struct
 
     module O = struct
       type 'a t =
-        { c_A : 'a [@bits num_bits]
+        { valid : 'a [@rtlname "stage_1avalid"]
+        ; c_A : 'a [@bits num_bits]
         ; c_B : 'a [@bits num_bits]
-        ; c_C : 'a [@bits num_bits]
-        ; c_D : 'a [@bits num_bits]
-        ; valid : 'a [@rtlname "stage1_valid"]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -211,7 +209,7 @@ module Make (Num_bits : Num_bits.S) = struct
     let create
       ~config
       scope
-      { I.clock; stage0 = { p1; p2; y1_plus_x1; y1_minus_x1; valid } }
+      { I.clock; stage0 = { p1 = _; p2; y1_plus_x1; y1_minus_x1; valid } }
       =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
@@ -231,6 +229,50 @@ module Make (Num_bits : Num_bits.S) = struct
           , multiply ~latency_without_arbitration ~config ~scope ~clock (y1_plus_x1, p2.y)
           )
       in
+      let scope = Scope.sub_scope scope "stage1a" in
+      { c_A; c_B; valid = pipe valid }
+      |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
+    ;;
+
+    let hierarchical ~config scope i =
+      let module H = Hierarchy.In_scope (I) (O) in
+      H.hierarchical ~scope ~name:"mixed_add_precompute_stage_1a" (create ~config) i
+    ;;
+  end
+
+  module Stage1b = struct
+    module I = struct
+      type 'a t =
+        { clock : 'a
+        ; stage0 : 'a Stage0.O.t
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O = struct
+      type 'a t =
+        { c_C : 'a [@bits num_bits]
+        ; c_D : 'a [@bits num_bits]
+        ; valid : 'a [@rtlname "stage1_valid"]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    let latency_without_arbitration (config : Config.t) =
+      Config.multiply_latency ~reduce:true config
+    ;;
+
+    let latency (config : Config.t) =
+      latency_without_arbitration config + if config.arbitrated_multiplier then 1 else 0
+    ;;
+
+    let create
+      ~config
+      scope
+      { I.clock; stage0 = { p1; p2; y1_plus_x1 = _; y1_minus_x1 = _; valid } }
+      =
+      let spec = Reg_spec.create ~clock () in
+      let pipe = pipeline spec ~n:(latency config) in
       let c_C =
         config.multiply.impl ~scope ~clock ~enable:vdd p1.t (Some p2.t)
         |> Config.reduce config ~scope ~clock ~enable:vdd
@@ -239,14 +281,14 @@ module Make (Num_bits : Num_bits.S) = struct
              ~enable:vdd
              ~n:(latency config - Config.multiply_latency ~reduce:true config)
       in
-      let scope = Scope.sub_scope scope "stage1" in
-      { c_A; c_B; c_C; c_D = pipe p1.z; valid = pipe valid }
+      let scope = Scope.sub_scope scope "stage1b" in
+      { c_C; c_D = pipe p1.z; valid = pipe valid }
       |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
 
     let hierarchical ~config scope i =
       let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ~scope ~name:"mixed_add_precompute_stage_1" (create ~config) i
+      H.hierarchical ~scope ~name:"mixed_add_precompute_stage_1b" (create ~config) i
     ;;
   end
 
@@ -254,7 +296,8 @@ module Make (Num_bits : Num_bits.S) = struct
     module I = struct
       type 'a t =
         { clock : 'a
-        ; stage1 : 'a Stage1.O.t
+        ; stage1a : 'a Stage1a.O.t [@rtlprefix "stage1a$"]
+        ; stage1b : 'a Stage1b.O.t [@rtlprefix "stage1b$"]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -273,7 +316,11 @@ module Make (Num_bits : Num_bits.S) = struct
     let latency_without_arbitration (config : Config.t) = config.adder_stages
     let latency (config : Config.t) = latency_without_arbitration config
 
-    let create ~config scope { I.clock; stage1 = { c_A; c_B; c_C; c_D; valid } } =
+    let create
+      ~config
+      scope
+      { I.clock; stage1a = { c_A; c_B; valid }; stage1b = { c_C; c_D; valid = _ } }
+      =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
@@ -367,8 +414,9 @@ module Make (Num_bits : Num_bits.S) = struct
   let output_pipes = 2
 
   let latency config =
+    assert (Stage1a.latency config = Stage1b.latency config);
     Stage0.latency config
-    + Stage1.latency config
+    + Stage1a.latency config
     + Stage2.latency config
     + Stage3.latency config
     + output_pipes
@@ -378,8 +426,9 @@ module Make (Num_bits : Num_bits.S) = struct
     let { Stage3.O.x3; y3; z3; t3; valid = valid_out } =
       let datapath_input = { Datapath_input.p1; p2; valid = valid_in } in
       let stage0 = Stage0.hierarchical ~config scope { clock; datapath_input } in
-      let stage1 = Stage1.hierarchical ~config scope { clock; stage0 } in
-      let stage2 = Stage2.hierarchical ~config scope { clock; stage1 } in
+      let stage1a = Stage1a.hierarchical ~config scope { clock; stage0 } in
+      let stage1b = Stage1b.hierarchical ~config scope { clock; stage0 } in
+      let stage2 = Stage2.hierarchical ~config scope { clock; stage1a; stage1b } in
       let stage3 = Stage3.hierarchical ~config scope { clock; stage2 } in
       Stage3.O.Of_signal.pipeline ~n:output_pipes (Reg_spec.create ~clock ()) stage3
     in
