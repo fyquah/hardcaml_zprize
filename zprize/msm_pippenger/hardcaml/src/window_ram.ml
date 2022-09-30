@@ -95,7 +95,6 @@ struct
   let hierarchical ?instance ~b_write_data ~build_mode scope i =
     let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical
-      ~attributes:[ Rtl_attribute.Vivado.keep_hierarchy true ]
       ~name:"window_ram"
       ?instance
       ~scope
