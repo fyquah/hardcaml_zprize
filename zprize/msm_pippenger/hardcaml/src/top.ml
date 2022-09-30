@@ -157,102 +157,89 @@ module Make (Config : Config.S) = struct
     let adder_valid_out = wire 1 in
     let fifo_q_has_space = wire 1 in
     let port_a_q, port_b_q =
-      List.init num_windows ~f:(fun window ->
-        let address_bits =
-          if window = num_windows - 1 then last_window_size_bits else window_size_bits
-        in
-        let ctrl_window_en = ctrl.window ==:. window in
-        (* To support write before read mode in URAM, writes must happen on port
-           A and reads on port B. *)
-        Dual_port_ram.create
-          ~read_latency:ram_read_latency
-          ~arch:Ultraram
-          ~build_mode
-          ~clock
-          ~clear
-          ~size:
-            (if window = num_windows - 1
-            then 1 lsl last_window_size_bits
-            else 1 lsl window_size_bits)
-          ~port_a:
-            (let port =
-               { Ram_port.write_enable =
-                   pipeline
-                     ~n:
-                       (ram_lookup_latency
-                       + ram_read_latency
-                       + adder_latency
-                       + ram_write_latency)
-                     spec
-                     ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_a_we")
-               ; read_enable =
-                   pipeline
-                     ~n:ram_lookup_latency
-                     spec
-                     ((sm.is Read_result
-                      &: (window_address.value ==:. window)
-                      &: fifo_q_has_space)
-                     -- "port_a_re")
-               ; data = pipeline ~n:ram_write_latency spec (adder_p3 -- "port_a_d")
-               ; address =
-                   sel_bottom
+      let module Window_ram =
+        Window_ram.Make (struct
+          let num_in_first_half = num_windows / 2
+          let num_in_second_half = num_windows - num_in_first_half
+
+          let partitions =
+            [ { Window_ram.Partition.window_size_bits =
+                  List.init num_in_first_half ~f:(fun i ->
+                    if i = num_windows - 1
+                    then last_window_size_bits
+                    else window_size_bits)
+              }
+            ; { Window_ram.Partition.window_size_bits =
+                  List.init num_in_second_half ~f:(fun i ->
+                    if i = num_in_second_half - 1
+                    then last_window_size_bits
+                    else window_size_bits)
+              }
+            ]
+          ;;
+
+          let data_bits = Signal.width adder_p3
+          let ram_read_latency = ram_read_latency
+          let ram_lookup_latency = ram_lookup_latency
+        end)
+      in
+      Window_ram.hierarchical
+        ~build_mode
+        ~b_write_data:(Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram)
+        scope
+        { Window_ram.I.clock
+        ; clear
+        ; port_a =
+            { write_enables =
+                List.init num_windows ~f:(fun window ->
+                  let ctrl_window_en = ctrl.window ==:. window in
+                  pipeline
+                    ~n:(ram_read_latency + adder_latency + ram_write_latency)
+                    spec
+                    ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_a_we"))
+            ; read_enables =
+                List.init num_windows ~f:(fun window ->
+                  (sm.is Read_result
+                  &: (window_address.value ==:. window)
+                  &: fifo_q_has_space)
+                  -- "port_a_re")
+            ; data = adder_p3 -- "port_a_d"
+            ; address =
+                sel_bottom
+                  (mux2
+                     (sm.is Read_result)
+                     bucket_address.value
                      (pipeline
-                        ~n:ram_lookup_latency
+                        ~n:(ram_read_latency + adder_latency + ram_write_latency)
                         spec
-                        (mux2
-                           (sm.is Read_result)
-                           bucket_address.value
-                           (pipeline
-                              ~n:(ram_read_latency + adder_latency + ram_write_latency)
-                              spec
-                              ctrl.bucket
-                           -- "ctrl.bucket")))
-                     address_bits
-               }
-             in
-             Ram_port.(
-               iter2 port port_names ~f:(fun s n ->
-                 ignore
-                   (s -- ("window" ^ Int.to_string window ^ "$ram_a$" ^ n) : Signal.t)));
-             port)
-          ~port_b:
-            (let port =
-               { Ram_port.write_enable =
-                   pipeline
-                     ~n:ram_lookup_latency
-                     spec
-                     ((sm.is Read_result
-                      &: (window_address.value ==:. window)
-                      &: fifo_q_has_space)
-                     -- "port_b_we")
-               ; read_enable =
-                   pipeline
-                     ~n:ram_lookup_latency
-                     spec
-                     ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
-               ; data = Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram
-               ; address =
-                   pipeline
-                     ~n:ram_lookup_latency
-                     spec
-                     (mux2
-                        (sm.is Read_result)
-                        (sel_bottom bucket_address.value address_bits -- "bucket.address")
-                        (sel_bottom ctrl.bucket address_bits -- "ctrl.bucket"))
-               }
-             in
-             Ram_port.(
-               iter2 port port_names ~f:(fun s n ->
-                 ignore
-                   (s -- ("window" ^ Int.to_string window ^ "$ram_b$" ^ n) : Signal.t)));
-             port)
-          ())
-      |> List.unzip
+                        ctrl.bucket
+                     -- "ctrl.bucket"))
+                  last_window_size_bits
+            ; read_window = window_address.value
+            }
+        ; port_b =
+            { write_enables =
+                List.init num_windows ~f:(fun window ->
+                  (sm.is Read_result
+                  &: (window_address.value ==:. window)
+                  &: fifo_q_has_space)
+                  -- "port_b_we")
+            ; read_enables =
+                List.init num_windows ~f:(fun window ->
+                  let ctrl_window_en = ctrl.window ==:. window in
+                  (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
+            ; data = Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram
+            ; address =
+                mux2
+                  (sm.is Read_result)
+                  (sel_bottom bucket_address.value last_window_size_bits
+                  -- "bucket.address")
+                  (sel_bottom ctrl.bucket last_window_size_bits -- "ctrl.bucket")
+            ; read_window = ctrl.window
+            }
+        }
+      |> fun (window_ram : _ Window_ram.O.t) -> window_ram.port_a_q, window_ram.port_b_q
     in
-    List.iteri port_a_q ~f:(fun i port ->
-      ignore (port -- ("window" ^ Int.to_string i ^ "$ram_a$q") : Signal.t));
-    List.iteri port_b_q ~f:(fun i port ->
-      ignore (port -- ("window" ^ Int.to_string i ^ "$ram_b$q") : Signal.t));
     let adder =
       Mixed_add.hierarchical
         scope
@@ -260,11 +247,7 @@ module Make (Config : Config.S) = struct
         { clock
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
-        ; p1 =
-            Mixed_add.Xyzt.Of_signal.unpack
-              (mux
-                 (pipeline spec ctrl.window ~n:(ram_lookup_latency + ram_read_latency))
-                 port_b_q)
+        ; p1 = Mixed_add.Xyzt.Of_signal.unpack port_b_q
         ; p2 =
             Mixed_add.Xyt.Of_signal.(
               pipeline
@@ -364,13 +347,7 @@ module Make (Config : Config.S) = struct
       in
       let d =
         pipeline spec finished.value ~n:(ram_lookup_latency + ram_read_latency)
-        @: (mux
-              (pipeline
-                 spec
-                 window_address.value
-                 ~n:(ram_lookup_latency + ram_read_latency))
-              port_a_q
-           -- "fifo_d")
+        @: (port_a_q -- "fifo_d")
       in
       let rd = result_point_ready -- "fifo_rd" in
       Fifo.create_showahead_with_extra_reg
