@@ -31,6 +31,9 @@
 #define OUTPUT_SIZE_IN_BYTES (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS)
 #define OUTPUT_SIZE_IN_UINT32 (OUTPUT_SIZE_IN_BYTES / 4)
 
+static const bool mask_io = true;
+static const bool debug = false;
+
 typedef std::vector<uint32_t, aligned_allocator<uint32_t> > aligned_vec32;
 
 static uint32_t
@@ -40,7 +43,7 @@ round_up_to_multiple_of_16(uint32_t x) {
 
 static uint32_t calc_log_max_num_points_per_chunk(uint64_t npoints) {
   /* This number of found via empirical validation */
-  const uint64_t max_allowed_num_chunks = 2;
+  const uint64_t max_allowed_num_chunks = 4;
 
   /* Pessimistic minimum number of points per chunk to ensure we wre alligned */
   uint64_t log_max_num_points_per_chunk = 18;
@@ -141,160 +144,6 @@ public:
     }
 
     return max_num_points_per_chunk();
-  }
-
-  bool is_active(cl::Event ev) {
-    if (ev.get() == nullptr) {
-      return false;
-    }
-
-    cl_int info;
-    cl_int err;
-
-    OCL_CHECK(err, err = ev.getInfo<cl_int>(CL_EVENT_COMMAND_EXECUTION_STATUS, &info));
-
-    return info != CL_COMPLETE;
-  }
-
-  void push_to_list_if_active(std::vector<cl::Event> &event_wait_list, const cl::Event & ev) {
-    if (is_active(ev)) {
-      event_wait_list.push_back(ev);
-    }
-  }
-
-  void enqueue_points_stream(uint64_t chunk_index) {
-    /* TODO(fyquah): Maybe wait for preceeding krnl_s2mm to finish before giving more work? */
-    cl_int err;
-
-    std::vector<cl::Event> event_wait_list;
-    uint64_t chunk_index_to_wait_for = 
-      (chunk_index == 0 ? num_input_chunks() - 1 : chunk_index - 1);
-
-    push_to_list_if_active(
-        event_wait_list,
-        events.ev_krnl_mm2s_points[chunk_index_to_wait_for]
-        );
-
-    push_to_list_if_active(
-        event_wait_list,
-        events.ev_krnl_s2mm_output_previous
-        );
-
-    OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input_points[chunk_index]));
-    OCL_CHECK(err, err = krnl_mm2s_points.setArg(2, round_up_to_multiple_of_16(
-            get_num_points_in_chunk(chunk_index) * UINT32_PER_INPUT_POINT)));
-    OCL_CHECK(err, err = krnl_mm2s_points.setArg(3, bool(chunk_index == num_input_chunks() - 1)));
-    OCL_CHECK(err, err = q.enqueueTask(
-          krnl_mm2s_points,
-          &event_wait_list,
-          &events.ev_krnl_mm2s_points[chunk_index]
-          ));
-  }
-
-  void wait_for_outstanding_scalar_transfer(uint64_t chunk_index) {
-    events.ev_krnl_mm2s_scalars[chunk_index].wait();
-  }
-
-  void enqueue_scalars_transfer(uint64_t chunk_index) {
-    cl_int err;
-    auto &buffer_input = buffer_input_scalars[chunk_index];
-    bool is_last_chunk = (chunk_index == num_input_chunks() - 1);
-    uint64_t num_points_in_chunk = get_num_points_in_chunk(chunk_index);
-
-    {
-      uint64_t chunk_index_to_wait_for = 
-        (chunk_index == 0 ? num_input_chunks() - 1 : chunk_index - 1);
-      std::vector<cl::Event> event_wait_list;
-      push_to_list_if_active(
-          event_wait_list,
-          events.ev_transfer_scalars_to_fpga[chunk_index_to_wait_for]
-          );
-      push_to_list_if_active(
-          event_wait_list,
-          events.ev_krnl_s2mm_output_previous
-          );
-
-      OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(0, buffer_input));
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
-            {buffer_input},
-            0 /* 0 means from host*/,
-            &event_wait_list,
-            &events.ev_transfer_scalars_to_fpga[chunk_index]));
-    }
-
-    {
-      std::vector<cl::Event> event_wait_list;
-
-      /* Start streaming only when scalars are in the FPGA */
-      push_to_list_if_active(
-                      event_wait_list,
-                      events.ev_transfer_scalars_to_fpga[chunk_index]);
-
-      uint64_t chunk_index_to_wait_for = 
-        (chunk_index == 0 ? num_input_chunks() - 1 : chunk_index - 1);
-
-      /* Ensures strict ordering of chunks being streamed into the fpga. */
-      push_to_list_if_active(
-          event_wait_list,
-          events.ev_krnl_mm2s_scalars[chunk_index_to_wait_for]);
-
-      OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(0, buffer_input_scalars[chunk_index]));
-      OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(
-            2,
-            round_up_to_multiple_of_16(num_points_in_chunk * UINT32_PER_INPUT_SCALAR)));
-      OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(3, is_last_chunk));
-      OCL_CHECK(err, err = q.enqueueTask(
-            krnl_mm2s_scalars,
-            &event_wait_list,
-            &events.ev_krnl_mm2s_scalars[chunk_index]
-            ));
-    }
-  }
-
-  void enqueue_result_transfer(uint64_t batch) {
-    cl_int err;
-
-    bool is_even = batch % 2 == 0;
-    auto &buffer_output = is_even ? buffer_output_a : buffer_output_b;
-
-    {
-      events.ev_krnl_s2mm_output_previous = events.ev_krnl_s2mm_output_current;
-
-      std::vector<cl::Event> event_wait_list;
-
-      push_to_list_if_active(
-                      event_wait_list,
-                      events.ev_krnl_s2mm_output_previous);
-
-      OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
-      OCL_CHECK(err, err = krnl_s2mm.setArg(2, uint32_t(OUTPUT_SIZE_IN_UINT32)));
-      OCL_CHECK(err, err = q.enqueueTask(
-            krnl_s2mm,
-            &event_wait_list,  /* event wait list */
-            &events.ev_krnl_s2mm_output_current));
-    }
-
-    {
-      std::vector<cl::Event> event_wait_list;
-
-      push_to_list_if_active(
-                      event_wait_list,
-                      events.ev_krnl_s2mm_output_current);
-
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
-            {buffer_output},
-            CL_MIGRATE_MEM_OBJECT_HOST,
-            &event_wait_list,
-            (is_even ? &events.ev_transfer_output_to_host_a : &events.ev_transfer_output_to_host_b)));
-    }
-  }
-
-  void wait_for_result_transfer(uint64_t batch_index) {
-    if (batch_index % 2 == 0) {
-      events.ev_transfer_output_to_host_a.wait();
-    } else {
-      events.ev_transfer_output_to_host_b.wait();
-    }
   }
 
   inline uint64_t num_input_chunks() {
@@ -549,6 +398,36 @@ public:
     uint64_t processed_outputs = 0;
     cl_int err;
 
+    auto do_postprocessing = [&]() {
+      postProcess((processed_outputs % 2 == 0 ? source_kernel_output_a.data() : source_kernel_output_b.data()));
+      post_processing_values.final_result.copy_to_rust_type(*out);
+      processed_outputs++;
+      out++;
+    };
+
+    auto do_work_for_output = [&]() {
+      if (has_output_to_transfer) {
+        // Copy Result from Device Global Memory to Host Local Memory
+        OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
+              {(transferred_outputs % 2 == 0 ? buffer_output_a : buffer_output_b)},
+              CL_MIGRATE_MEM_OBJECT_HOST));
+        transferred_outputs++;
+      }
+
+      /* Dispatch all the work that has been enqueued, while we potentially do post processing */
+      q.flush();
+
+      if (has_output_to_process) {
+        if (debug) {
+          bench("Doing on-host postprocessing", do_postprocessing);
+        } else {
+          do_postprocessing();
+        }
+      }
+
+      has_output_to_process = has_output_to_transfer;
+    };
+
     for (uint64_t b = 0; b < num_batches; b++) {
 
       /* Enqueue fpga->host transfer for this batch. */
@@ -582,27 +461,8 @@ public:
           OCL_CHECK(err, err = q.enqueueTask(krnl_s2mm));
         }
 
-        if (has_output_to_transfer) {
-          // Copy Result from Device Global Memory to Host Local Memory
-          OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
-                {(transferred_outputs % 2 == 0 ? buffer_output_a : buffer_output_b)},
-                CL_MIGRATE_MEM_OBJECT_HOST));
-          transferred_outputs++;
-        }
+        do_work_for_output();
 
-        /* Dispatch all the work that has been enqueued, while we potentially do post processing */
-        q.flush();
-
-        if (has_output_to_process) {
-          bench("Doing on-host postprocessing", [&]() {
-                postProcess((processed_outputs % 2 == 0 ? source_kernel_output_a.data() : source_kernel_output_b.data()));
-                post_processing_values.final_result.copy_to_rust_type(*out);
-                processed_outputs++;
-                out++;
-          });
-        }
-
-        has_output_to_process = has_output_to_transfer;
         has_output_to_transfer = is_last_chunk;
 
         scalars += num_points_in_chunk;
@@ -610,29 +470,10 @@ public:
     }
 
     while (processed_outputs < num_batches) {
-      q.finish();
+      OCL_CHECK(err, err = q.finish());
 
-      if (has_output_to_transfer) {
-        // Copy Result from Device Global Memory to Host Local Memory
-        OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
-              {(transferred_outputs % 2 == 0 ? buffer_output_a : buffer_output_b)},
-              CL_MIGRATE_MEM_OBJECT_HOST));
-        transferred_outputs++;
-      }
+      do_work_for_output();
 
-      /* Dispatch all the work that has been enqueued, while we potentially do post processing */
-      q.flush();
-
-      if (has_output_to_process) {
-        bench("Doing on-host postprocessing", [&]() {
-            postProcess((processed_outputs % 2 == 0 ? source_kernel_output_a.data() : source_kernel_output_b.data()));
-            post_processing_values.final_result.copy_to_rust_type(*out);
-            processed_outputs++;
-            out++;
-        });
-      }
-
-      has_output_to_process = has_output_to_transfer;
       has_output_to_transfer = false;
     }
   }
@@ -652,79 +493,15 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
   return driver;
 }
 
-static const bool mask_io = true;
-static const bool debug = true;
-
 extern "C" void msm_mult(Driver *driver,
                          g1_projective_t *out,
                          uint64_t num_batches,
                          biginteger256_t *ptr_scalars) {
   printf("Running MSM of [%lu] input points (%lu batches)\n", driver->total_num_points, num_batches);
-  printf("Streaming input scalars across %lu chunks per batch\n", driver->num_input_chunks());
+  printf("Streaming input scalars across %lu chunks per batch (asynchronous = %b)\n", driver->num_input_chunks(), mask_io);
 
   if (mask_io) {
     driver->run_asynchronous(out, ptr_scalars, num_batches);
-
-    // uint32_t *ptr_device_input_scalar = driver->get_input_scalars_pointer();
-
-    // for (uint64_t b = 0; b < num_batches; b++) {
-    //   /* Enqueue fpga->host transfer for this batch. */
-    //   driver->enqueue_result_transfer(b);
-
-    //   for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
-    //     /* Wait for scalars transfer to finish before moving on to the next
-    //      * input. This isn't required for batch 0
-    //      */
-    //     if (b != 0) {
-    //       if (debug) {
-    //         std::cout << "BLocking for last iterations' transfers to finish " << chunk_index << std::endl;
-    //       }
-    //       driver->wait_for_outstanding_scalar_transfer(chunk_index);
-    //     }
-
-    //     /* Enqueue affine points to transfer */
-    //     if (debug) {
-    //       std::cout << "Enqueue affine point " << chunk_index << std::endl;
-    //     }
-    //     driver->enqueue_points_stream(chunk_index);
-
-    //     /* Enqueue scalars transfer */
-    //     if (debug) {
-    //       std::cout << "Enqueue scalar chunk " << chunk_index << std::endl;
-    //     }
-    //     uint64_t num_points_in_chunk = driver->get_num_points_in_chunk(chunk_index);
-    //     memcpy(
-    //         ptr_device_input_scalar + (chunk_index * driver->max_num_points_per_chunk() * UINT32_PER_INPUT_SCALAR),
-    //         (void*) ptr_scalars,
-    //         UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * num_points_in_chunk);
-    //     driver->enqueue_scalars_transfer(chunk_index);
-    //     ptr_scalars += num_points_in_chunk;
-    //   }
-
-    //   /* Read the result from the previous iteration. We need to do this before enqueing another result
-    //    * transfer to prevent overwriting the contents of the result buffer.
-    //    *
-    //    * We could double buffer the result so we can start enqueing the result transfer immediately,
-    //    * but that's not necessary, since post processing time << kernel execution time by a long
-    //    * shot.
-    //    *
-    //    * If this ever changes, reconsider this.
-    //    */
-    //   if (b != 0) {
-    //     if (debug) {
-    //       std::cout << "Blocking for result from previous iteration" << std::endl;
-    //     }
-    //     driver->wait_for_result_transfer(b - 1);
-    //     driver->post_process_final_result_and_copy_to_rust_type(b - 1, out + (b - 1));
-    //   }
-    // }
-
-    // /* The for loop above processes all but the last transfer, so process it now. */
-    // if (debug) {
-    //   std::cout << "Blocking for final result" << std::endl;
-    // }
-    // driver->wait_for_result_transfer(num_batches - 1);
-    // driver->post_process_final_result_and_copy_to_rust_type(num_batches - 1, out + (num_batches - 1));
 
   } else {
     for (uint64_t i = 0; i < num_batches; i++) {
