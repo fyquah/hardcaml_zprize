@@ -167,19 +167,19 @@ module Make (Config : Config.S) = struct
         Window_ram.Make (struct
           let num_in_first_half = num_windows / 2
           let num_in_second_half = num_windows - num_in_first_half
-          let centre_slr = None
+          let centre_slr = Some 1
 
           let partitions =
             [ { Window_ram.Partition.window_size_bits =
                   List.init num_in_first_half ~f:(fun _ -> window_size_bits)
-              ; slr = None
+              ; slr = Some 2
               }
             ; { Window_ram.Partition.window_size_bits =
                   List.init num_in_second_half ~f:(fun i ->
                     if i = num_in_second_half - 1
                     then last_window_size_bits
                     else window_size_bits)
-              ; slr = None
+              ; slr = Some 0
               }
             ]
           ;;
