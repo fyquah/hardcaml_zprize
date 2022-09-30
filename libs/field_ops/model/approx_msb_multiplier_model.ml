@@ -134,7 +134,8 @@ let build_precompute_two num_bits =
       let mult_times_p = Z.(mult * p) in
       let () =
         let tmp = Z.((mult + one) * p) in
-        assert (Z.(geq tmp ((prefix + one) lsl 377)))
+        assert (Z.(geq tmp ((prefix + one) lsl 377)));
+        assert(Z.(equal (mult_times_p asr 377) prefix));
       in
       Hashtbl.set ret ~key:idx ~data:mult_times_p;
       loop (idx + 1))
