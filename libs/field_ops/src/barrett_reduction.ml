@@ -251,13 +251,6 @@ module With_interface (M : sig
 end) =
 struct
   include M
-
-  (* CR rahul: this is a hack *)
-  let () = assert(bits = 378 || bits = 377)
-  let wide_multiply = bits = 378
-  let () = assert(not wide_multiply)
-  let k = if wide_multiply then (2 * bits - 1) else (2 * bits)
-
   module Config = Config
 
   module Stage0 = struct
@@ -277,11 +270,11 @@ struct
     [@@deriving sexp_of, hardcaml]
 
     let create ~scope ~clock ~enable ~m ~(config : Config.t) { Stage0.a; valid } =
-      let () = 
+      let () =
         let w = bits + 1 in
-        Core.print_s [%message (k : int) (wide_multiply: bool) (w : int) (bits : int)];
-        assert(Z.(lt m (one lsl w)));
-      in 
+        Core.print_s [%message (k : int) (w : int) (bits : int)];
+        assert (Z.(lt m (one lsl w)))
+      in
       let expected_width = 2 * bits in
       [%test_result: int] (width a) ~expect:expected_width;
       let latency =
@@ -460,14 +453,12 @@ let hierarchical
   ~enable
   { With_valid.valid; value = a }
   =
-  let bits = width a in
-  let n = (bits + 1) / 2 in
-  assert(n = 377 || n = 378);
-  let config = if n = 377 then config else { config with num_correction_steps = 5 } in
+  let n = (width a + 1) / 2 in
   let output_padding =
     if config.include_fine_reduction then 0 else config.num_correction_steps
   in
-  Core.print_s [%message (n : int) (output_padding : int) (config.num_correction_steps : int) ];
+  Core.print_s
+    [%message (n : int) (output_padding : int) (config.num_correction_steps : int)];
   let module M =
     With_interface (struct
       let bits = n
