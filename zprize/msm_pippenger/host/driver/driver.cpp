@@ -24,7 +24,7 @@
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_INPUT_SCALAR 32
 
-#define LOG_MAX_NUM_POINTS_PER_CHUNK 23
+#define LOG_MAX_NUM_POINTS_PER_CHUNK 16
 #define MAX_NUM_INPUTS_PER_CHUNK (1ull << LOG_MAX_NUM_POINTS_PER_CHUNK)
 
 #define UINT32_PER_INPUT_POINT (BYTES_PER_INPUT_POINT / 4)
@@ -49,12 +49,21 @@ struct PostProcessingValues {
   bls12_377_g1::GeneralUnifiedAddIntoTemps temps;
 };
 
+struct Events {
+  std::vector<cl::Event> ev_transfer_scalars_to_fpga;
+  std::vector<cl::Event> ev_krnl_mm2s_scalars;
+  cl::Event              ev_krnl_s2mm_output;
+  cl::Event              ev_transfer_output_to_host;
+  cl::Event              ev_krnl_mm2s_points;
+};
+
 // Driver class - maintains the set of points
 class Driver {
 private:
   aligned_vec32 source_kernel_input_points;
   aligned_vec32 source_kernel_input_scalars;
   aligned_vec32 source_kernel_output;
+  aligned_vec32 result_buffer;
 
   // OpenCL stuff
   cl::CommandQueue q;
@@ -65,6 +74,7 @@ private:
   cl::Kernel krnl_s2mm;
   std::vector<cl::Buffer> buffer_input_points;
   std::vector<cl::Buffer> buffer_input_scalars;
+  Events events;
   cl::Buffer buffer_output;
 
   // preallocated objects to be used for post-processing
@@ -77,7 +87,8 @@ public:
     : total_num_points(npoints),
       source_kernel_input_points(npoints * UINT32_PER_INPUT_POINT),
       source_kernel_input_scalars(npoints * UINT32_PER_INPUT_SCALAR),
-      source_kernel_output(OUTPUT_SIZE_IN_UINT32)
+      source_kernel_output(OUTPUT_SIZE_IN_UINT32),
+      result_buffer(OUTPUT_SIZE_IN_UINT32 * 2)
   {
     // memset(source_kernel_input_points.data(), 0, sizeof(uint32_t) * source_kernel_input_points.size());
     // memset(source_kernel_input_scalars.data(), 0, sizeof(uint32_t) * source_kernel_input_scalars.size());
@@ -101,6 +112,92 @@ public:
       }
     }
     std::cout << "Done internal format conversion!" << std::endl;
+  }
+
+  uint64_t num_points_in_chunk(uint64_t chunk_index) {
+    if (chunk_index == num_input_chunks() - 1) {
+      return num_points_in_last_chunk();
+    }
+
+    return MAX_NUM_INPUTS_PER_CHUNK;
+  }
+
+  void enqueue_points_stream_for_one_batch() {
+    cl_int err;
+    std::vector<cl::Event> event_wait_list(1);
+
+    for (uint64_t chunk_index = 0; chunk_index < num_input_chunks(); chunk_index++) {
+      event_wait_list[0] = events.ev_krnl_mm2s_points;
+
+      OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input_points[chunk_index]));
+      OCL_CHECK(err, err = krnl_mm2s_points.setArg(2, round_up_to_multiple_of_16(
+              num_points_in_chunk(chunk_index) * UINT32_PER_INPUT_POINT)));
+      OCL_CHECK(err, err = krnl_mm2s_points.setArg(3, bool(chunk_index == num_input_chunks() - 1)));
+      OCL_CHECK(err, err = q.enqueueTask(
+            krnl_mm2s_points,
+            &event_wait_list,
+            &events.ev_krnl_mm2s_points
+            ));
+    }
+  }
+
+  void enqueue_scalars_transfer(uint64_t chunk_index) {
+    cl_int err;
+    auto &buffer_input = buffer_input_scalars[chunk_index];
+    bool is_last_chunk = (chunk_index == num_input_chunks() - 1);
+    uint64_t num_points_in_chunk = MAX_NUM_INPUTS_PER_CHUNK;
+
+    if (is_last_chunk) {
+      num_points_in_chunk = num_points_in_last_chunk();
+    }
+
+    {
+      std::vector<cl::Event> event_wait_list = { events.ev_krnl_mm2s_scalars[chunk_index] };
+
+      OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(0, buffer_input));
+      OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
+            {buffer_input},
+            0 /* 0 means from host*/,
+            &event_wait_list,
+            &events.ev_transfer_scalars_to_fpga[chunk_index]));
+    }
+
+    {
+      std::vector<cl::Event> event_wait_list = { events.ev_transfer_scalars_to_fpga[chunk_index] };
+
+      OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(0, buffer_input_scalars[chunk_index]));
+      OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(
+            2,
+            round_up_to_multiple_of_16(num_points_in_chunk * UINT32_PER_INPUT_SCALAR)));
+      OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(3, is_last_chunk));
+      OCL_CHECK(err, err = q.enqueueTask(
+            krnl_mm2s_scalars,
+            &event_wait_list,
+            &events.ev_krnl_mm2s_scalars[chunk_index]
+            ));
+    }
+  }
+
+  void block_for_result() {
+    cl_int err;
+
+    OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
+    OCL_CHECK(err, err = krnl_s2mm.setArg(2, uint32_t(OUTPUT_SIZE_IN_UINT32)));
+    OCL_CHECK(err, err = q.enqueueTask(
+          krnl_s2mm,
+          nullptr,  /* event wait list */
+          &events.ev_krnl_s2mm_output));
+
+    {
+      std::vector<cl::Event> event_wait_list = { events.ev_krnl_s2mm_output };
+
+      OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
+            {buffer_output},
+            CL_MIGRATE_MEM_OBJECT_HOST,
+            &event_wait_list,
+            &events.ev_transfer_output_to_host));
+    }
+    events.ev_transfer_output_to_host.wait();
   }
 
   inline uint64_t num_input_chunks() {
@@ -242,6 +339,16 @@ public:
     post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
   }
 
+  inline uint32_t *get_input_scalars_pointer() {
+    return (uint32_t*) __builtin_assume_aligned(
+            (void*) source_kernel_input_scalars.data(), 8192);
+  }
+
+  void post_process_final_result_and_copy_to_rust_type(g1_projective_t *out) {
+    postProcess(source_kernel_output.data());
+    post_processing_values.final_result.copy_to_rust_type(*out);
+  }
+
   inline void feed_msm(g1_projective_t *out, biginteger256_t *scalars) {
     bench("memcpy-ing scalars to special memory region", [&]() {
         // uint32_t *ptr_scalar = source_kernel_input_scalars.data();
@@ -340,13 +447,35 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
   return driver;
 }
 
-extern "C" void msm_mult(Driver *driver, g1_projective_t *out, uint64_t batch_size,
-                         biginteger256_t *scalars) {
-  for (uint64_t i = 0; i < batch_size; i++) {
-    printf("Running MSM (Batch %lu) with [%lu] input points\n", i, driver->total_num_points);
-    printf("Number of input chunks = %lu\n", driver->num_input_chunks());
-    printf("Number of points in last chunk = 0x%016x\n", driver->num_points_in_last_chunk());
+extern "C" void msm_mult(Driver *driver,
+                         g1_projective_t *out,
+                         uint64_t num_batches,
+                         biginteger256_t *ptr_scalars_base) {
+  printf("Running MSM of [%lu] input points (%lu batches)\n", driver->total_num_points, num_batches);
+  printf("Streaming input scalars across %lu chunks\n", driver->num_input_chunks());
 
-    driver->feed_msm(out + i, scalars + (i * driver->total_num_points));
+  /* Enqueue all the input dma transfers first */
+  uint32_t *ptr_device_input_scalar = driver->get_input_scalars_pointer();
+  biginteger256_t *ptr_scalars = ptr_scalars_base;
+
+  for (uint64_t i = 0; i < num_batches; i++) {
+    /* Enqueue affine points transfer for the entire batch. */
+    driver->enqueue_points_stream_for_one_batch();
+
+    /* Enqueue affine points to transfer */
+    for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
+      uint64_t num_points_in_chunk = driver->num_points_in_chunk(chunk_index);
+      memcpy(
+          ptr_device_input_scalar + (chunk_index * MAX_NUM_INPUTS_PER_CHUNK),
+          (void*) ptr_scalars,
+          UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * num_points_in_chunk);
+      driver->enqueue_scalars_transfer(chunk_index);
+      ptr_scalars += num_points_in_chunk;
+    }
+  }
+
+  for (uint64_t b = 0; b < num_batches; b++) {
+    driver->block_for_result();
+    driver->post_process_final_result_and_copy_to_rust_type(out + b);
   }
 }
