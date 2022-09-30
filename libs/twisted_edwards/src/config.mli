@@ -4,13 +4,13 @@ open Signal
 
 module Slr_assignments : sig
   type t =
-    { input : int
-    ; stage0 : int
-    ; stage1a : int
-    ; stage1b : int
-    ; stage2 : int
-    ; stage3 : int
-    ; output : int
+    { input : int option
+    ; stage0 : int option
+    ; stage1a : int option
+    ; stage1b : int option
+    ; stage2 : int option
+    ; stage3 : int option
+    ; output : int option
     }
 end
 

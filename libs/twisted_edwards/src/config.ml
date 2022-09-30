@@ -11,13 +11,13 @@ end
 
 module Slr_assignments = struct
   type t =
-    { input : int
-    ; stage0 : int
-    ; stage1a : int
-    ; stage1b : int
-    ; stage2 : int
-    ; stage3 : int
-    ; output : int
+    { input : int option
+    ; stage0 : int option
+    ; stage1a : int option
+    ; stage1b : int option
+    ; stage2 : int option
+    ; stage3 : int option
+    ; output : int option
     }
 end
 
@@ -50,13 +50,13 @@ let multiply_latency ~reduce (t : t) =
 
 module For_bls12_377 = struct
   let slr_assignments =
-    { Slr_assignments.input = 1
-    ; stage0 = 1
-    ; stage1a = 2
-    ; stage1b = 1
-    ; stage2 = 2
-    ; stage3 = 2
-    ; output = 1
+    { Slr_assignments.input = Some 1
+    ; stage0 = Some 1
+    ; stage1a = Some 2
+    ; stage1b = Some 1
+    ; stage2 = Some 2
+    ; stage3 = Some 2
+    ; output = Some 1
     }
   ;;
 

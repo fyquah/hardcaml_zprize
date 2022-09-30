@@ -174,9 +174,17 @@ module Make (Num_bits : Num_bits.S) = struct
       |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
 
-    let hierarchical ~config scope i =
+    let hierarchical ~(config : Config.t) scope i =
       let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ~scope ~name:"mixed_add_precompute_stage_0" (create ~config) i
+      H.hierarchical
+        ~scope
+        ~name:"mixed_add_precompute_stage_0"
+        ?instance:
+          (match config.slr_assignments.stage0 with
+           | None -> None
+           | Some slr -> Some (sprintf "mixed_add_precompute_stage_0_SLR%d" slr))
+        (create ~config)
+        i
     ;;
   end
 
@@ -234,9 +242,17 @@ module Make (Num_bits : Num_bits.S) = struct
       |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
 
-    let hierarchical ~config scope i =
+    let hierarchical ~(config : Config.t) scope i =
       let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ~scope ~name:"mixed_add_precompute_stage_1a" (create ~config) i
+      H.hierarchical
+        ~scope
+        ~name:"mixed_add_precompute_stage_1a"
+        ?instance:
+          (match config.slr_assignments.stage1a with
+           | None -> None
+           | Some slr -> Some (sprintf "mixed_add_precompute_stage_1a_SLR%d" slr))
+        (create ~config)
+        i
     ;;
   end
 
@@ -286,9 +302,17 @@ module Make (Num_bits : Num_bits.S) = struct
       |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
 
-    let hierarchical ~config scope i =
+    let hierarchical ~(config : Config.t) scope i =
       let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ~scope ~name:"mixed_add_precompute_stage_1b" (create ~config) i
+      H.hierarchical
+        ~scope
+        ~name:"mixed_add_precompute_stage_1b"
+        ?instance:
+          (match config.slr_assignments.stage1b with
+           | None -> None
+           | Some slr -> Some (sprintf "mixed_add_precompute_stage_1b_SLR%d" slr))
+        (create ~config)
+        i
     ;;
   end
 
@@ -333,9 +357,17 @@ module Make (Num_bits : Num_bits.S) = struct
       |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
 
-    let hierarchical ~config scope i =
+    let hierarchical ~(config : Config.t) scope i =
       let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ~scope ~name:"mixed_add_precompute_stage_2" (create ~config) i
+      H.hierarchical
+        ~scope
+        ~name:"mixed_add_precompute_stage_2"
+        ?instance:
+          (match config.slr_assignments.stage2 with
+           | None -> None
+           | Some slr -> Some (sprintf "mixed_add_precompute_stage_2_SLR%d" slr))
+        (create ~config)
+        i
     ;;
   end
 
@@ -405,9 +437,17 @@ module Make (Num_bits : Num_bits.S) = struct
       |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
 
-    let hierarchical ~config scope i =
+    let hierarchical ~(config : Config.t) scope i =
       let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ~scope ~name:"mixed_add_precompute_stage_3" (create ~config) i
+      H.hierarchical
+        ~scope
+        ~name:"mixed_add_precompute_stage_3"
+        ?instance:
+          (match config.slr_assignments.stage3 with
+           | None -> None
+           | Some slr -> Some (sprintf "mixed_add_precompute_stage_3_SLR%d" slr))
+        (create ~config)
+        i
     ;;
   end
 
