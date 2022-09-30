@@ -4,14 +4,14 @@ open Signal
 open Hardcaml_xilinx
 
 module Make (M : sig
-  val window_size_bits : int list
+  val window_size_bits : int list list
   val data_bits : int
   val ram_read_latency : int
 end) =
 struct
   open M
 
-  let num_windows = List.length window_size_bits
+  let num_windows = List.map window_size_bits ~f:List.length |> List.fold ~init:0 ~f:( + )
 
   module I = struct
     module Ram_port = struct
@@ -20,7 +20,9 @@ struct
         ; read_enables : 'a list [@length num_windows]
         ; data : 'a [@bits data_bits]
         ; address : 'a
-             [@bits Option.value_exn (List.max_elt ~compare:Int.max window_size_bits)]
+             [@bits
+               Option.value_exn
+                 (List.max_elt ~compare:Int.max (List.concat window_size_bits))]
         ; read_window : 'a [@bits Int.ceil_log2 num_windows]
         }
       [@@deriving sexp_of, hardcaml]
@@ -46,7 +48,7 @@ struct
   let create ~build_mode ~b_write_data scope { I.clock; clear; port_a; port_b } =
     let ( -- ) = Scope.naming scope in
     let port_a_q, port_b_q =
-      List.mapi window_size_bits ~f:(fun i window_size_bits ->
+      List.mapi (List.concat window_size_bits) ~f:(fun i window_size_bits ->
         Dual_port_ram.create
           ~read_latency:ram_read_latency
           ~arch:Ultraram

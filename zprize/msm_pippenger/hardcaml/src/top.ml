@@ -159,9 +159,17 @@ module Make (Config : Config.S) = struct
     let port_a_q, port_b_q =
       let module Window_ram =
         Window_ram.Make (struct
+          let num_in_first_half = num_windows / 2
+          let num_in_second_half = num_windows - num_in_first_half
+
           let window_size_bits =
-            List.init num_windows ~f:(fun i ->
-              if i = num_windows - 1 then last_window_size_bits else window_size_bits)
+            [ List.init num_in_first_half ~f:(fun i ->
+                if i = num_windows - 1 then last_window_size_bits else window_size_bits)
+            ; List.init num_in_second_half ~f:(fun i ->
+                if i = num_in_second_half - 1
+                then last_window_size_bits
+                else window_size_bits)
+            ]
           ;;
 
           let data_bits = Signal.width adder_p3
