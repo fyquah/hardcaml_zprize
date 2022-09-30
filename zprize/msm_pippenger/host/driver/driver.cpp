@@ -466,7 +466,7 @@ extern "C" void msm_mult(Driver *driver,
     for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
       uint64_t num_points_in_chunk = driver->num_points_in_chunk(chunk_index);
       memcpy(
-          ptr_device_input_scalar + (chunk_index * MAX_NUM_INPUTS_PER_CHUNK),
+          ptr_device_input_scalar + (chunk_index * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
           (void*) ptr_scalars,
           UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * num_points_in_chunk);
       driver->enqueue_scalars_transfer(chunk_index);
