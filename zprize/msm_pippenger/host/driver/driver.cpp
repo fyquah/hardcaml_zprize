@@ -24,9 +24,6 @@
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_INPUT_SCALAR 32
 
-#define LOG_MAX_NUM_POINTS_PER_CHUNK 20
-#define MAX_NUM_INPUTS_PER_CHUNK (1ull << LOG_MAX_NUM_POINTS_PER_CHUNK)
-
 #define UINT32_PER_INPUT_POINT (BYTES_PER_INPUT_POINT / 4)
 #define UINT32_PER_INPUT_SCALAR (BYTES_PER_INPUT_SCALAR / 4)
 
@@ -40,6 +37,20 @@ static uint32_t
 round_up_to_multiple_of_16(uint32_t x) {
   return (x + 15) >> 4 << 4;
 }
+
+static uint32_t calc_log_max_num_points_per_chunk(uint64_t npoints) {
+  /* This number of found via empirical validation */
+  const uint64_t max_allowed_num_chunks = 2;
+
+  /* Pessimistic minimum number of points per chunk to ensure we wre alligned */
+  uint64_t log_max_num_points_per_chunk = 12;
+
+  while (max_allowed_num_chunks * (1ull << log_max_num_points_per_chunk) < npoints) {
+    log_max_num_points_per_chunk++;
+  }
+  return log_max_num_points_per_chunk;
+}
+
 
 struct PostProcessingValues {
   bls12_377_g1::Xyzt accum;
@@ -60,6 +71,8 @@ struct Events {
 // Driver class - maintains the set of points
 class Driver {
 private:
+  const uint64_t log_max_num_points_per_chunk;
+
   aligned_vec32 source_kernel_input_points;
   aligned_vec32 source_kernel_input_scalars;
   aligned_vec32 source_kernel_output;
@@ -83,12 +96,17 @@ private:
 public:
   const uint64_t total_num_points;
 
+  inline uint64_t max_num_points_per_chunk() {
+    return 1ull << log_max_num_points_per_chunk;
+  }
+
   Driver(g1_affine_t *rust_points, ssize_t npoints)
     : total_num_points(npoints),
       source_kernel_input_points(npoints * UINT32_PER_INPUT_POINT),
       source_kernel_input_scalars(npoints * UINT32_PER_INPUT_SCALAR),
       source_kernel_output(OUTPUT_SIZE_IN_UINT32),
-      result_buffer(OUTPUT_SIZE_IN_UINT32 * 2)
+      result_buffer(OUTPUT_SIZE_IN_UINT32 * 2),
+      log_max_num_points_per_chunk(calc_log_max_num_points_per_chunk(npoints))
   {
     // memset(source_kernel_input_points.data(), 0, sizeof(uint32_t) * source_kernel_input_points.size());
     // memset(source_kernel_input_scalars.data(), 0, sizeof(uint32_t) * source_kernel_input_scalars.size());
@@ -119,7 +137,7 @@ public:
       return num_points_in_last_chunk();
     }
 
-    return MAX_NUM_INPUTS_PER_CHUNK;
+    return max_num_points_per_chunk();
   }
 
   void enqueue_points_stream(uint64_t chunk_index) {
@@ -226,11 +244,11 @@ public:
   }
 
   inline uint64_t num_input_chunks() {
-    return (total_num_points + MAX_NUM_INPUTS_PER_CHUNK - 1) >> LOG_MAX_NUM_POINTS_PER_CHUNK;
+    return (total_num_points + max_num_points_per_chunk() - 1) >> log_max_num_points_per_chunk;
   }
 
   inline uint64_t num_points_in_last_chunk() {
-    return total_num_points - ((num_input_chunks()  - 1) << LOG_MAX_NUM_POINTS_PER_CHUNK);
+    return total_num_points - ((num_input_chunks()  - 1) << log_max_num_points_per_chunk);
   }
 
   void load_xclbin(const std::string& binaryFile) {
@@ -274,7 +292,7 @@ public:
 
     // Allocate openCL Buffers
     for (uint64_t chunk_id = 0; chunk_id < num_input_chunks(); chunk_id++) {
-      uint64_t num_points_in_chunk = MAX_NUM_INPUTS_PER_CHUNK;
+      uint64_t num_points_in_chunk = max_num_points_per_chunk();
       if (chunk_id == num_input_chunks() - 1) {
         num_points_in_chunk = num_points_in_last_chunk();
       }
@@ -284,14 +302,14 @@ public:
           buffer_input_points.emplace_back(context,
             CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
             num_points_in_chunk * BYTES_PER_INPUT_POINT,
-            source_kernel_input_points.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_POINT),
+            source_kernel_input_points.data() + (chunk_id * max_num_points_per_chunk() * UINT32_PER_INPUT_POINT),
             &err));
       OCL_CHECK(
           err,
           buffer_input_scalars.emplace_back(context,
             CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
             num_points_in_chunk * BYTES_PER_INPUT_SCALAR,
-            source_kernel_input_scalars.data() + (chunk_id * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
+            source_kernel_input_scalars.data() + (chunk_id * max_num_points_per_chunk() * UINT32_PER_INPUT_SCALAR),
             &err));
 
     }
@@ -418,7 +436,7 @@ public:
 
         // Set the writer kernel arguments and dispatch them
         for (uint64_t chunk_id = 0; chunk_id < num_input_chunks(); chunk_id++) {
-          uint64_t num_points_in_chunk = MAX_NUM_INPUTS_PER_CHUNK;
+          uint64_t num_points_in_chunk = max_num_points_per_chunk();
           bool is_last_chunk = chunk_id == num_input_chunks() - 1;
           if (is_last_chunk) {
             num_points_in_chunk = num_points_in_last_chunk();
@@ -477,39 +495,45 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len, g1_affine_t 
   return driver;
 }
 
-static bool mask_io = true;
+static const bool mask_io = true;
+static const bool debug = true;
 
 extern "C" void msm_mult(Driver *driver,
                          g1_projective_t *out,
                          uint64_t num_batches,
                          biginteger256_t *ptr_scalars) {
-  // printf("Running MSM of [%lu] input points (%lu batches)\n", driver->total_num_points, num_batches);
-  // printf("Streaming input scalars across %lu chunks\n", driver->num_input_chunks());
+  printf("Running MSM of [%lu] input points (%lu batches)\n", driver->total_num_points, num_batches);
+  printf("Streaming input scalars across %lu chunks per batch\n", driver->num_input_chunks());
 
   if (mask_io) {
     /* Enqueue all the input dma transfers first */
     uint32_t *ptr_device_input_scalar = driver->get_input_scalars_pointer();
 
     for (uint64_t b = 0; b < num_batches; b++) {
-      /* Wait for scalars transfer to finish before moving on to the next
-       * input. This isn't required for batch 0
-       */
-      if (b != 0) {
-        for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
+      for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
+        /* Wait for scalars transfer to finish before moving on to the next
+         * input. This isn't required for batch 0
+         */
+        if (b != 0) {
+          if (debug) {
+            std::cout << "BLocking for last iterations' transfers to finish " << chunk_index << std::endl;
+          }
           driver->wait_for_outstanding_scalar_transfer(chunk_index);
         }
-      }
 
-      for (uint64_t chunk_index = 0; chunk_index < driver->num_input_chunks(); chunk_index++) {
         /* Enqueue affine points to transfer */
-        // std::cout << "Enqueue affine point " << chunk_index << std::endl;
+        if (debug) {
+          std::cout << "Enqueue affine point " << chunk_index << std::endl;
+        }
         driver->enqueue_points_stream(chunk_index);
 
         /* Enqueue scalars transfer */
-        // std::cout << "Enqueue scalar chunk " << chunk_index << std::endl;
+        if (debug) {
+          std::cout << "Enqueue scalar chunk " << chunk_index << std::endl;
+        }
         uint64_t num_points_in_chunk = driver->get_num_points_in_chunk(chunk_index);
         memcpy(
-            ptr_device_input_scalar + (chunk_index * MAX_NUM_INPUTS_PER_CHUNK * UINT32_PER_INPUT_SCALAR),
+            ptr_device_input_scalar + (chunk_index * driver->max_num_points_per_chunk() * UINT32_PER_INPUT_SCALAR),
             (void*) ptr_scalars,
             UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * num_points_in_chunk);
         driver->enqueue_scalars_transfer(chunk_index);
@@ -526,15 +550,21 @@ extern "C" void msm_mult(Driver *driver,
        * If this ever changes, reconsider this.
        */
       if (b != 0) {
-        // std::cout << "Blocking for result from previous iteration" << std::endl;
+        if (debug) {
+          std::cout << "Blocking for result from previous iteration" << std::endl;
+        }
         driver->wait_for_result_transfer();
         driver->post_process_final_result_and_copy_to_rust_type(out + (b - 1));
       }
 
-      /* Enqueue fpga->host transfer */
+      /* Enqueue fpga->host transfer for this batch. */
       driver->enqueue_result_transfer();
     }
 
+    /* The for loop above processes all but the last transfer, so process it now. */
+    if (debug) {
+      std::cout << "Blocking for final result" << std::endl;
+    }
     driver->wait_for_result_transfer();
     driver->post_process_final_result_and_copy_to_rust_type(out + (num_batches - 1));
 

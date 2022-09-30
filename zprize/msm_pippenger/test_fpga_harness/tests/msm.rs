@@ -12,9 +12,12 @@ use blst_msm::*;
 fn msm_correctness() {
     let (batches, points, scalars, arkworks_results) = util::generate_or_load_test_data();
     let mut context = multi_scalar_mult_init(points.as_slice());
+
+    let t_begin = SystemTime::now();
     let msm_results = multi_scalar_mult(&mut context, points.as_slice(), unsafe {
         std::mem::transmute::<&[_], &[BigInteger256]>(scalars.as_slice())
     });
+    println!("Running multi_scalar_mult took {:?}", t_begin.elapsed());
                                                  
     for b in 0..batches {
         assert_eq!(msm_results[b].into_affine(), arkworks_results[b], "assertion failed in batch = {}", b);
