@@ -48,13 +48,19 @@ module Make (Config : Config.S) = struct
   let ram_read_latency = 3
   let ram_lookup_latency = 3
   let ram_write_latency = 3
+  let ram_output_latency = 3
 
   module Full_controller = Full_controller.Make (struct
     module Top_config = Config
 
     let pipeline_depth =
       Int.round_up
-        (adder_latency + ram_lookup_latency + ram_read_latency + ram_write_latency + 2)
+        (adder_latency
+        + ram_lookup_latency
+        + ram_read_latency
+        + ram_output_latency
+        + ram_write_latency
+        + 2)
         ~to_multiple_of:2
       / 2
     ;;
@@ -184,6 +190,7 @@ module Make (Config : Config.S) = struct
           let data_bits = Signal.width adder_p3
           let ram_read_latency = ram_read_latency
           let ram_lookup_latency = ram_lookup_latency
+          let ram_output_latency = ram_output_latency
         end)
       in
       Window_ram.hierarchical
@@ -197,7 +204,11 @@ module Make (Config : Config.S) = struct
                 List.init num_windows ~f:(fun window ->
                   let ctrl_window_en = ctrl.window ==:. window in
                   pipeline
-                    ~n:(ram_read_latency + adder_latency + ram_write_latency)
+                    ~n:
+                      (ram_read_latency
+                      + ram_output_latency
+                      + adder_latency
+                      + ram_write_latency)
                     spec
                     ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_a_we"))
             ; read_enables =
@@ -213,7 +224,11 @@ module Make (Config : Config.S) = struct
                      (sm.is Read_result)
                      bucket_address.value
                      (pipeline
-                        ~n:(ram_read_latency + adder_latency + ram_write_latency)
+                        ~n:
+                          (ram_read_latency
+                          + ram_output_latency
+                          + adder_latency
+                          + ram_write_latency)
                         spec
                         ctrl.bucket
                      -- "ctrl.bucket"))
@@ -249,14 +264,17 @@ module Make (Config : Config.S) = struct
         ~config:adder_config
         { clock
         ; valid_in =
-            pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
+            pipeline
+              spec
+              adder_valid_in
+              ~n:(ram_lookup_latency + ram_read_latency + ram_output_latency)
         ; p1 = Mixed_add.Xyzt.Of_signal.unpack port_b_q
         ; p2 =
             Mixed_add.Xyt.Of_signal.(
               pipeline
                 spec
                 ctrl_affine_point_as_xyt
-                ~n:(ram_lookup_latency + ram_read_latency))
+                ~n:(ram_lookup_latency + ram_read_latency + ram_output_latency))
         }
     in
     adder_valid_out <== adder.valid_out;
@@ -268,7 +286,11 @@ module Make (Config : Config.S) = struct
         spec_with_clear
         ~width:
           (num_bits_to_represent
-             (ram_lookup_latency + ram_read_latency + adder_latency + ram_write_latency))
+             (ram_lookup_latency
+             + ram_read_latency
+             + ram_output_latency
+             + adder_latency
+             + ram_write_latency))
     in
     let last_scalar_l = Variable.reg spec_with_clear ~width:1 in
     let last_result_point = wire 1 in
@@ -344,12 +366,15 @@ module Make (Config : Config.S) = struct
       let wr =
         pipeline
           spec
-          ~n:(ram_lookup_latency + ram_read_latency)
+          ~n:(ram_lookup_latency + ram_read_latency + ram_output_latency)
           (done_l.value &: sm.is Read_result &: fifo_q_has_space -- "fifo_q_has_space")
         -- "fifo_wr"
       in
       let d =
-        pipeline spec finished.value ~n:(ram_lookup_latency + ram_read_latency)
+        pipeline
+          spec
+          finished.value
+          ~n:(ram_lookup_latency + ram_read_latency + ram_output_latency)
         @: (port_a_q -- "fifo_d")
       in
       let rd = result_point_ready -- "fifo_rd" in
@@ -366,7 +391,9 @@ module Make (Config : Config.S) = struct
         ()
     in
     fifo_q_has_space
-    <== (fifo_q.used <:. fifo_capacity - ram_lookup_latency - ram_read_latency - 2);
+    <== (fifo_q.used
+        <:. fifo_capacity - ram_lookup_latency - ram_read_latency - ram_output_latency - 2
+        );
     last_result_point <== (msb fifo_q.q &: ~:(fifo_q.empty));
     { O.result_point = Mixed_add.Xyzt.Of_signal.unpack (lsbs fifo_q.q)
     ; result_point_valid = ~:(fifo_q.empty)

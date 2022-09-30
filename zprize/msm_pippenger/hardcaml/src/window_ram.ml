@@ -13,8 +13,16 @@ module Make (M : sig
   val centre_slr : int option
   val partitions : Partition.t list
   val data_bits : int
+
+  (** The underlying XPM's read latency *)
   val ram_read_latency : int
+
+  (** The latency on the inputs to the ram (read enables, read_window, write
+   * enable and address *)
   val ram_lookup_latency : int
+
+  (** Additional pipelining on the read data for it to cross SLR gracefully. *)
+  val ram_output_latency : int
 end) =
 struct
   open M
@@ -208,27 +216,44 @@ struct
                 }
             }
         in
-        o.port_a_q, o.port_b_q)
+        ( pipeline spec ~n:(ram_output_latency - 3) o.port_a_q
+          |> Named_register.named_register ~scope ~clock ~clear ~slr:partition.slr
+          |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
+        , pipeline spec ~n:(ram_output_latency - 3) o.port_b_q
+          |> Named_register.named_register ~scope ~clock ~clear ~slr:partition.slr
+          |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr ))
       |> List.unzip
     in
+    (* [read_partition_a] and [read_partition_b] doesn't require SLR pinning,
+     * They should just be on the centre SLR. They are just used for muxing 
+     * at the final stage.
+     *)
     let read_partition_a =
       Option.map
-        ~f:(pipeline spec ~n:(ram_lookup_latency + ram_read_latency))
+        ~f:
+          (pipeline
+             spec
+             ~n:(ram_lookup_latency + ram_read_latency + ram_output_latency - 1))
         (window_to_partition port_a.read_window)
     in
     let read_partition_b =
       Option.map
-        ~f:(pipeline spec ~n:(ram_lookup_latency + ram_read_latency))
+        ~f:
+          (pipeline
+             spec
+             ~n:(ram_lookup_latency + ram_read_latency + ram_output_latency - 1))
         (window_to_partition port_b.read_window)
     in
     { O.port_a_q =
         (match read_partition_a with
          | None -> List.hd_exn aqs
          | Some read_partition_a -> mux read_partition_a aqs)
+        |> pipeline spec ~n:1
     ; port_b_q =
         (match read_partition_b with
          | None -> List.hd_exn aqs
          | Some read_partition_b -> mux read_partition_b bqs)
+        |> pipeline spec ~n:1
     }
   ;;
 
