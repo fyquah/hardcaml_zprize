@@ -7,6 +7,9 @@ module Partition = struct
     { slr : int option
     ; window_size_bits : int list
     }
+  [@@deriving sexp_of]
+
+  let num_windows t = List.length t.window_size_bits
 end
 
 module Make (M : sig
@@ -33,10 +36,9 @@ struct
   ;;
 
   let address_bits =
-    Option.value_exn
-      (List.max_elt
-         ~compare:Int.max
-         (List.concat_map partitions ~f:(fun p -> p.window_size_bits)))
+    List.concat_map partitions ~f:(fun p -> p.window_size_bits)
+    |> List.max_elt ~compare:Int.compare
+    |> Option.value_exn
   ;;
 
   module I = struct
@@ -94,7 +96,7 @@ struct
     let aqs, bqs =
       List.map2_exn window_offsets partitions ~f:(fun window_offset partition ->
         let module M =
-          Window_ram_for_slr.Make (struct
+          Window_ram_partition.Make (struct
             let address_bits = address_bits
             let window_size_bits = partition.window_size_bits
             let data_bits = data_bits
@@ -107,7 +109,7 @@ struct
         let instance =
           match partition.slr with
           | None -> None
-          | Some slr -> Some (Printf.sprintf "window_ram_for_slr_SLR%d" slr)
+          | Some slr -> Some (Printf.sprintf "window_ram_partition_SLR%d" slr)
         in
         (* TODO(fyquah): I thinkw e can get a way without clears?? *)
         let o =
@@ -162,6 +164,7 @@ struct
                       spec
                       ~n:(ram_lookup_latency - 2)
                       (port_a.read_window -:. window_offset)
+                    |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
                     |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
@@ -210,6 +213,7 @@ struct
                          ~slr:partition.slr
                 ; read_window =
                     port_b.read_window -:. window_offset
+                    |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
                     |> pipeline spec ~n:(ram_lookup_latency - 2)
                     |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register

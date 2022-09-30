@@ -171,10 +171,7 @@ module Make (Config : Config.S) = struct
 
           let partitions =
             [ { Window_ram.Partition.window_size_bits =
-                  List.init num_in_first_half ~f:(fun i ->
-                    if i = num_windows - 1
-                    then last_window_size_bits
-                    else window_size_bits)
+                  List.init num_in_first_half ~f:(fun _ -> window_size_bits)
               ; slr = None
               }
             ; { Window_ram.Partition.window_size_bits =

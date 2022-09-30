@@ -54,6 +54,8 @@ struct
     let ( -- ) = Scope.naming scope in
     let port_a_q, port_b_q =
       List.mapi window_size_bits ~f:(fun i window_size_bits ->
+        if window_size_bits > address_bits
+        then raise_s [%message (window_size_bits : int) (address_bits : int)];
         Dual_port_ram.create
           ~read_latency:ram_read_latency
           ~arch:Ultraram
@@ -112,7 +114,7 @@ struct
   let hierarchical ?instance ~b_write_data ~build_mode scope i =
     let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical
-      ~name:"window_ram_for_slr"
+      ~name:"window_ram_partition"
       ~attributes:[ Rtl_attribute.Vivado.keep_hierarchy true ]
       ?instance
       ~scope
