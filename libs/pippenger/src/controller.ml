@@ -4,7 +4,6 @@ open! Hardcaml
 module Make (Config : Config.S) = struct
   open Signal
   open Config
-  module Bucket_pipeline = Bucket_pipeline.Make (Config)
   module Stalled_point_fifos = Stalled_point_fifos.Make (Config)
   module Track_scalars = Track_scalars.Make (Config)
 
