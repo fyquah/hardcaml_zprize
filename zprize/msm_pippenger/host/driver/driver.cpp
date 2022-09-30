@@ -24,7 +24,7 @@
 #define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define BYTES_PER_INPUT_SCALAR 32
 
-#define LOG_MAX_NUM_POINTS_PER_CHUNK 19
+#define LOG_MAX_NUM_POINTS_PER_CHUNK 20
 #define MAX_NUM_INPUTS_PER_CHUNK (1ull << LOG_MAX_NUM_POINTS_PER_CHUNK)
 
 #define UINT32_PER_INPUT_POINT (BYTES_PER_INPUT_POINT / 4)
@@ -483,8 +483,8 @@ extern "C" void msm_mult(Driver *driver,
                          g1_projective_t *out,
                          uint64_t num_batches,
                          biginteger256_t *ptr_scalars) {
-  printf("Running MSM of [%lu] input points (%lu batches)\n", driver->total_num_points, num_batches);
-  printf("Streaming input scalars across %lu chunks\n", driver->num_input_chunks());
+  // printf("Running MSM of [%lu] input points (%lu batches)\n", driver->total_num_points, num_batches);
+  // printf("Streaming input scalars across %lu chunks\n", driver->num_input_chunks());
 
   if (mask_io) {
     /* Enqueue all the input dma transfers first */
