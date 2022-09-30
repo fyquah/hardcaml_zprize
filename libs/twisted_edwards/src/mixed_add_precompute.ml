@@ -125,21 +125,18 @@ module Make (Num_bits : Num_bits.S) = struct
     assert (width a = width b);
     let spec = Reg_spec.create ~clock () in
     let stages = config.adder_stages in
-    Adder_subtractor_pipe.add
-      ~scope
-      ~clock
-      ~enable:vdd
-      ~stages:config.adder_stages
-      [ a; b ]
+    let enable = vdd in
+    Adder_subtractor_pipe.add ~scope ~clock ~enable ~stages [ a; b ]
     |> concat_result
     |> fun x ->
     let n = latency config - Adder_subtractor_pipe.latency ~stages in
     assert (n >= 0);
-    if n = 0 then x else pipeline spec ~n ~enable:vdd x
+    if n = 0 then x else pipeline spec ~n ~enable x
   ;;
 
   let sub_pipe ~ensure_positive ~scope ~latency ~(config : Config.t) ~clock a b =
     assert (width a = width b);
+    let enable = vdd in
     let width = width a in
     let spec = Reg_spec.create ~clock () in
     let stages = config.subtractor_stages in
@@ -149,16 +146,16 @@ module Make (Num_bits : Num_bits.S) = struct
       Adder_subtractor_pipe.mixed
         ~scope
         ~clock
-        ~enable:vdd
+        ~enable
         ~stages
         ~init:a
         [ Sub b; Add (Signal.of_z Z.(config.p lsl extra_bits) ~width) ])
-    else Adder_subtractor_pipe.sub ~scope ~clock ~enable:vdd ~stages [ a; b ])
+    else Adder_subtractor_pipe.sub ~scope ~clock ~enable ~stages [ a; b ])
     |> concat_result
     |> fun x ->
     let n = latency config - Adder_subtractor_pipe.latency ~stages in
     assert (n >= 0);
-    if n = 0 then x else pipeline spec ~n ~enable:vdd x
+    if n = 0 then x else pipeline spec ~n ~enable x
   ;;
 
   let _ = mod_add_pipe
@@ -304,7 +301,7 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let error = 0
+    let error = 1
     let latency (config : Config.t) = config.adder_stages
 
     let create ~config ~scope ~clock { Stage1.c_A; c_B; c_C; c_D; valid } =
@@ -317,16 +314,11 @@ module Make (Num_bits : Num_bits.S) = struct
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
-      let c_E =
-        mod_sub_pipe ~scope ~latency ~config ~clock c_B c_A
-        |> Fn.flip sel_bottom (num_bits + Stage0.error + Stage1.error + error)
-      in
-      let c_F =
-        mod_sub_pipe ~scope ~latency ~config ~clock c_D c_C
-        |> Fn.flip sel_bottom (num_bits + Stage0.error + Stage1.error + error)
-      in
-      let c_G = mod_add_pipe ~scope ~latency ~config ~clock c_D c_C in
-      let c_H = mod_add_pipe ~scope ~latency ~config ~clock c_B c_A in
+      let re = Fn.flip uresize (num_bits + Stage0.error + Stage1.error + error) in
+      let c_E = mod_sub_pipe ~scope ~latency ~config ~clock c_B c_A |> re in
+      let c_F = mod_sub_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
+      let c_G = add_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
+      let c_H = add_pipe ~scope ~latency ~config ~clock c_B c_A |> re in
       let scope = Scope.sub_scope scope "stage2" in
       { c_E; c_F; c_G; c_H; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
@@ -377,22 +369,32 @@ module Make (Num_bits : Num_bits.S) = struct
       [%test_result: int]
         num_extra_bits
         ~expect:(Stage0.error + Stage1.error + Stage2.error);
+      print_s
+        [%message
+          (List.(
+             take mux_list 3
+             |> mapi ~f:(fun i v ->
+                  of_int ~width:log2_depth (if i = 0 then 0 else i - 1) @: v
+                  |> Signal.to_z ~signedness:Unsigned
+                  |> fun s ->
+                  assert (Z.(equal (s mod config.p) zero));
+                  Z.(s / config.p) |> Bits.of_z ~width:num_bits))
+            : Bits.t list)];
       (* do a coarse reduction from [0,512M] to [0,4M) - in our particular case, it's
        * actually just [0, 3M) *)
-      let rd_idx = 
-        let slice = if num_extra_bits = 0 then gnd else (sel_top v num_extra_bits) in
+      let rd_idx =
+        let slice = if num_extra_bits = 0 then gnd else sel_top v num_extra_bits in
+        print_s [%message (num_extra_bits : int) (log2_depth : int)];
         uresize slice log2_depth
-      in 
+      in
       let bram =
         match build_mode with
-        | Simulation -> mux rd_idx mux_list |> pipeline spec ~n:read_latency
-        | Synthesis ->
-          (* CR rahul: do an init bram here *)
-          Signal.gnd
+        | Simulation | Synthesis -> mux rd_idx mux_list |> pipeline spec ~n:read_latency
       in
       let coarse_reduction =
         let v = pipeline spec ~n:read_latency (drop_top v num_extra_bits) in
         assert (width v = width bram);
+        assert (width v = num_bits);
         let signed_res =
           sub_pipe
             ~ensure_positive:false
