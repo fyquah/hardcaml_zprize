@@ -42,7 +42,7 @@ round_up_to_multiple_of_16(uint32_t x) {
 }
 
 static uint32_t calc_log_max_num_points_per_chunk(uint64_t npoints) {
-  /* This number of found via empirical validation */
+  /* MSM 10s, divide that by 4 - 2.5s, plenty of time to mask away the post-processing work. */
   const uint64_t max_allowed_num_chunks = 4;
 
   /* Pessimistic minimum number of points per chunk to ensure we wre alligned */
