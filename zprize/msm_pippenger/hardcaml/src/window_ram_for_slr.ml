@@ -92,8 +92,20 @@ struct
       ignore (port -- ("window" ^ Int.to_string i ^ "$ram_a$q") : Signal.t));
     List.iteri port_b_q ~f:(fun i port ->
       ignore (port -- ("window" ^ Int.to_string i ^ "$ram_b$q") : Signal.t));
-    { O.port_a_q = mux port_a.read_window port_a_q
-    ; port_b_q = mux port_b.read_window port_b_q
+    { O.port_a_q =
+        mux
+          (Signal.pipeline
+             (Reg_spec.create ~clock ~clear ())
+             ~n:ram_read_latency
+             port_a.read_window)
+          port_a_q
+    ; port_b_q =
+        mux
+          (Signal.pipeline
+             (Reg_spec.create ~clock ~clear ())
+             ~n:ram_read_latency
+             port_b.read_window)
+          port_b_q
     }
   ;;
 

@@ -10,6 +10,7 @@ module Partition = struct
 end
 
 module Make (M : sig
+  val centre_slr : int option
   val partitions : Partition.t list
   val data_bits : int
   val ram_read_latency : int
@@ -112,8 +113,9 @@ struct
             ; port_a =
                 { read_enables =
                     sublist port_a.read_enables
-                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 1))
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
                     |> concat_lsb
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
@@ -122,8 +124,9 @@ struct
                     |> bits_lsb
                 ; write_enables =
                     sublist port_a.write_enables
-                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 1))
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
                     |> concat_lsb
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
@@ -131,14 +134,16 @@ struct
                          ~slr:partition.slr
                     |> bits_lsb
                 ; address =
-                    pipeline spec ~n:(ram_lookup_latency - 1) port_a.address
+                    pipeline spec ~n:(ram_lookup_latency - 2) port_a.address
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
                          ~clear
                          ~slr:partition.slr
                 ; data =
-                    pipeline spec ~n:(ram_lookup_latency - 1) port_a.data
+                    pipeline spec ~n:(ram_lookup_latency - 2) port_a.data
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
@@ -147,8 +152,9 @@ struct
                 ; read_window =
                     pipeline
                       spec
-                      ~n:(ram_lookup_latency + ram_read_latency - 1)
+                      ~n:(ram_lookup_latency - 2)
                       (port_a.read_window -:. window_offset)
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock
@@ -191,10 +197,9 @@ struct
                          ~clear
                          ~slr:partition.slr
                 ; read_window =
-                    pipeline
-                      spec
-                      ~n:(ram_lookup_latency + ram_read_latency - 1)
-                      (port_b.read_window -:. window_offset)
+                    port_b.read_window -:. window_offset
+                    |> pipeline spec ~n:(ram_lookup_latency - 2)
+                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
                     |> Named_register.named_register
                          ~scope
                          ~clock

@@ -161,6 +161,7 @@ module Make (Config : Config.S) = struct
         Window_ram.Make (struct
           let num_in_first_half = num_windows / 2
           let num_in_second_half = num_windows - num_in_first_half
+          let centre_slr = None
 
           let partitions =
             [ { Window_ram.Partition.window_size_bits =
