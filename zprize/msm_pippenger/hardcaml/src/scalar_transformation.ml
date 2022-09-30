@@ -241,7 +241,14 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
         ~scope
         ~clock:i.clock
         ~clear:i.clear
-        (List.init (num_windows - 1) ~f:(fun i -> Stage.Minus_1 (i + 1)))
+        (List.init (num_windows + 1) ~f:(fun i ->
+           if i = 0
+           then Stage.Register
+           else if 1 <= i && i <= num_windows - 1
+           then Minus_1 i
+           else if i = num_windows
+           then Register
+           else failwith "bad index"))
         input
     in
     (* construct the output *)
