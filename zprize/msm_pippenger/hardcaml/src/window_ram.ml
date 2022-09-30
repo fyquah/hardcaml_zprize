@@ -3,7 +3,10 @@ open Hardcaml
 open Signal
 
 module Partition = struct
-  type t = { window_size_bits : int list }
+  type t =
+    { slr : int option
+    ; window_size_bits : int list
+    }
 end
 
 module Make (M : sig
@@ -92,8 +95,14 @@ struct
         let sublist l =
           List.sub l ~pos:window_offset ~len:(List.length partition.window_size_bits)
         in
+        let instance =
+          match partition.slr with
+          | None -> None
+          | Some slr -> Some (Printf.sprintf "window_ram_for_slr_SLR%d" slr)
+        in
         let o =
           M.hierarchical
+            ?instance
             ~build_mode
             ~b_write_data
             scope

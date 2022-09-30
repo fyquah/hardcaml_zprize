@@ -3,6 +3,13 @@ open Hardcaml
 open Hardcaml_xilinx
 open Signal
 
+module Slr = struct
+  type t =
+    | SLR0
+    | SLR1
+    | SLR2
+end
+
 module Make (M : sig
   val address_bits : int
   val window_size_bits : int list
@@ -94,6 +101,7 @@ struct
     let module H = Hierarchy.In_scope (I) (O) in
     H.hierarchical
       ~name:"window_ram_for_slr"
+      ~attributes:[ Rtl_attribute.Vivado.keep_hierarchy true ]
       ?instance
       ~scope
       (create ~build_mode ~b_write_data)

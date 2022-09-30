@@ -168,12 +168,14 @@ module Make (Config : Config.S) = struct
                     if i = num_windows - 1
                     then last_window_size_bits
                     else window_size_bits)
+              ; slr = None
               }
             ; { Window_ram.Partition.window_size_bits =
                   List.init num_in_second_half ~f:(fun i ->
                     if i = num_in_second_half - 1
                     then last_window_size_bits
                     else window_size_bits)
+              ; slr = None
               }
             ]
           ;;
