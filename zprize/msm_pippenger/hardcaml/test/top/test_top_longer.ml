@@ -6,6 +6,7 @@ let%expect_test "Test over more inputs" =
     let scalar_bits = 12
     let controller_log_stall_fifo_depth = 2
     let window_size_bits = 3
+    let window_ram_partition_settings = None
   end
   in
   let module Test = Make (Config) in

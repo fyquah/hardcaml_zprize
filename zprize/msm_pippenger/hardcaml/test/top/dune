@@ -1,5 +1,5 @@
 (library
  (name msm_pippenger_test_top)
- (libraries core expect_test_helpers_core hardcaml_step_testbench hardcaml_waveterm hardcaml_verilator msm_pippenger twisted_edwards_model_lib)
+ (libraries core expect_test_helpers_core hardcaml_waveterm hardcaml_verilator msm_pippenger twisted_edwards_model_lib)
  (inline_tests)
  (preprocess (pps ppx_jane ppx_deriving_hardcaml )))

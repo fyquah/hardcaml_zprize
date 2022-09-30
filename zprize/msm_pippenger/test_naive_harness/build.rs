@@ -15,10 +15,10 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", dst.display());
     // Phase `foo` here stands for the library name (without lib prefix and without .a suffix)
     //
-    println!("cargo:rustc-link-lib=dylib=zprize_msm_fpga");
+    println!("cargo:rustc-link-lib=dylib=naive_driver");
     println!("cargo:rustc-link-lib=dylib=gmp");
 
-    //println!("cargo:rustc-flags= -L zprize_msm_fpga");
+    //println!("cargo:rustc-flags= -L naive_driver");
     //println!("cargo:rustc-flags= -L gmp");
     // C++ is bit more complicated, since platform specifics come to play
     let target = env::var("TARGET").unwrap();

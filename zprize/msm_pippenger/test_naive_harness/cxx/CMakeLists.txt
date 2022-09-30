@@ -7,7 +7,7 @@ add_subdirectory(host)
 # The target installation command has to exist
 # and has to install all linkable targets 
 # into `.` (current) directory for cargo to find it.  
-install(TARGETS zprize_msm_fpga DESTINATION .)
+install(TARGETS naive_driver DESTINATION .)
 
 
 # install(TARGETS gmp DESTINATION .)
