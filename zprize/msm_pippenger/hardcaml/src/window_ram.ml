@@ -21,6 +21,7 @@ struct
         ; data : 'a [@bits data_bits]
         ; address : 'a
              [@bits Option.value_exn (List.max_elt ~compare:Int.max window_size_bits)]
+        ; read_window : 'a [@bits Int.ceil_log2 num_windows]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -36,8 +37,8 @@ struct
 
   module O = struct
     type 'a t =
-      { port_a_q : 'a list [@bits data_bits] [@length num_windows]
-      ; port_b_q : 'a list [@bits data_bits] [@length num_windows]
+      { port_a_q : 'a [@bits data_bits]
+      ; port_b_q : 'a [@bits data_bits]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -84,7 +85,9 @@ struct
       ignore (port -- ("window" ^ Int.to_string i ^ "$ram_a$q") : Signal.t));
     List.iteri port_b_q ~f:(fun i port ->
       ignore (port -- ("window" ^ Int.to_string i ^ "$ram_b$q") : Signal.t));
-    { O.port_a_q; port_b_q }
+    { O.port_a_q = mux port_a.read_window port_a_q
+    ; port_b_q = mux port_b.read_window port_b_q
+    }
   ;;
 
   let hierarchical ?instance ~b_write_data ~build_mode scope i =

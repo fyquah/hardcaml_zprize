@@ -210,6 +210,11 @@ module Make (Config : Config.S) = struct
                            ctrl.bucket
                         -- "ctrl.bucket")))
                   last_window_size_bits
+            ; read_window =
+                pipeline
+                  spec
+                  window_address.value
+                  ~n:(ram_lookup_latency + ram_read_latency)
             }
         ; port_b =
             { write_enables =
@@ -238,14 +243,12 @@ module Make (Config : Config.S) = struct
                      (sel_bottom bucket_address.value last_window_size_bits
                      -- "bucket.address")
                      (sel_bottom ctrl.bucket last_window_size_bits -- "ctrl.bucket"))
+            ; read_window =
+                pipeline spec ctrl.window ~n:(ram_lookup_latency + ram_read_latency)
             }
         }
       |> fun (window_ram : _ Window_ram.O.t) -> window_ram.port_a_q, window_ram.port_b_q
     in
-    List.iteri port_a_q ~f:(fun i port ->
-      ignore (port -- ("window" ^ Int.to_string i ^ "$ram_a$q") : Signal.t));
-    List.iteri port_b_q ~f:(fun i port ->
-      ignore (port -- ("window" ^ Int.to_string i ^ "$ram_b$q") : Signal.t));
     let adder =
       Mixed_add.hierarchical
         scope
@@ -253,11 +256,7 @@ module Make (Config : Config.S) = struct
         { clock
         ; valid_in =
             pipeline spec adder_valid_in ~n:(ram_lookup_latency + ram_read_latency)
-        ; p1 =
-            Mixed_add.Xyzt.Of_signal.unpack
-              (mux
-                 (pipeline spec ctrl.window ~n:(ram_lookup_latency + ram_read_latency))
-                 port_b_q)
+        ; p1 = Mixed_add.Xyzt.Of_signal.unpack port_b_q
         ; p2 =
             Mixed_add.Xyt.Of_signal.(
               pipeline
@@ -357,13 +356,7 @@ module Make (Config : Config.S) = struct
       in
       let d =
         pipeline spec finished.value ~n:(ram_lookup_latency + ram_read_latency)
-        @: (mux
-              (pipeline
-                 spec
-                 window_address.value
-                 ~n:(ram_lookup_latency + ram_read_latency))
-              port_a_q
-           -- "fifo_d")
+        @: (port_a_q -- "fifo_d")
       in
       let rd = result_point_ready -- "fifo_rd" in
       Fifo.create_showahead_with_extra_reg
