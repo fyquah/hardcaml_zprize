@@ -165,23 +165,43 @@ module Make (Config : Config.S) = struct
     let port_a_q, port_b_q =
       let module Window_ram =
         Window_ram.Make (struct
-          let num_in_first_half = num_windows / 2
-          let num_in_second_half = num_windows - num_in_first_half
           let centre_slr = Some 1
 
           let partitions =
-            [ { Window_ram.Partition.window_size_bits =
-                  List.init num_in_first_half ~f:(fun _ -> window_size_bits)
-              ; slr = Some 2
-              }
-            ; { Window_ram.Partition.window_size_bits =
-                  List.init num_in_second_half ~f:(fun i ->
-                    if i = num_in_second_half - 1
+            let window_ram_partition_settings =
+              match window_ram_partition_settings with
+              | Some x -> x
+              | None ->
+                if num_windows >= 3
+                then
+                  [ { slr = SLR0; num_windows = num_windows / 3 }
+                  ; { slr = SLR1; num_windows = num_windows / 3 }
+                  ; { slr = SLR2; num_windows = num_windows - (2 * (num_windows / 3)) }
+                  ]
+                else if num_windows = 2
+                then
+                  [ { slr = SLR0; num_windows = num_windows / 2 }
+                  ; { slr = SLR1; num_windows = num_windows / 2 }
+                  ]
+                else [ { slr = SLR0; num_windows } ]
+            in
+            let num_partitions = List.length window_ram_partition_settings in
+            List.mapi
+              window_ram_partition_settings
+              ~f:(fun partition_index partition_setting ->
+              { Window_ram.Partition.window_size_bits =
+                  List.init partition_setting.num_windows ~f:(fun i ->
+                    if i = partition_setting.num_windows - 1
+                       && partition_index = num_partitions - 1
                     then last_window_size_bits
                     else window_size_bits)
-              ; slr = Some 0
-              }
-            ]
+              ; slr =
+                  Some
+                    (match partition_setting.slr with
+                     | SLR0 -> 0
+                     | SLR1 -> 1
+                     | SLR2 -> 2)
+              })
           ;;
 
           let data_bits = Signal.width adder_p3

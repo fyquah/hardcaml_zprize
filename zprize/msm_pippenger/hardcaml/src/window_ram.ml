@@ -160,17 +160,24 @@ struct
                          ~clear
                          ~slr:partition.slr
                 ; read_window =
-                    pipeline
-                      spec
-                      ~n:(ram_lookup_latency - 2)
-                      (port_a.read_window -:. window_offset)
-                    |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
-                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> Named_register.named_register
-                         ~scope
-                         ~clock
-                         ~clear
-                         ~slr:partition.slr
+                    (if Partition.num_windows partition = 1
+                    then gnd
+                    else
+                      pipeline
+                        spec
+                        ~n:(ram_lookup_latency - 2)
+                        (port_a.read_window -:. window_offset)
+                      |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
+                      |> Named_register.named_register
+                           ~scope
+                           ~clock
+                           ~clear
+                           ~slr:centre_slr
+                      |> Named_register.named_register
+                           ~scope
+                           ~clock
+                           ~clear
+                           ~slr:partition.slr)
                 }
             ; port_b =
                 { read_enables =
@@ -212,15 +219,22 @@ struct
                          ~clear
                          ~slr:partition.slr
                 ; read_window =
-                    port_b.read_window -:. window_offset
-                    |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
-                    |> pipeline spec ~n:(ram_lookup_latency - 2)
-                    |> Named_register.named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> Named_register.named_register
-                         ~scope
-                         ~clock
-                         ~clear
-                         ~slr:partition.slr
+                    (if Partition.num_windows partition = 1
+                    then gnd
+                    else
+                      port_b.read_window -:. window_offset
+                      |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
+                      |> pipeline spec ~n:(ram_lookup_latency - 2)
+                      |> Named_register.named_register
+                           ~scope
+                           ~clock
+                           ~clear
+                           ~slr:centre_slr
+                      |> Named_register.named_register
+                           ~scope
+                           ~clock
+                           ~clear
+                           ~slr:partition.slr)
                 }
             }
         in
