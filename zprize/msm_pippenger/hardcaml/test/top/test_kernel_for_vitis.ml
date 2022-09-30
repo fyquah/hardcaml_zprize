@@ -70,6 +70,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   let axi_bits = 512
   let aligned_to = 64
   let aligned_field_bits = Int.round_up Config.field_bits ~to_multiple_of:aligned_to
+  let aligned_scalar_bits = Int.round_up Config.scalar_bits ~to_multiple_of:aligned_to
   let drop_t = false
 
   let num_clocks_per_output =
@@ -117,7 +118,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     in
     let scalars =
       let b =
-        Array.map inputs ~f:(fun input -> Bits.uresize input.scalar aligned_to)
+        Array.map inputs ~f:(fun input -> Bits.uresize input.scalar aligned_scalar_bits)
         |> Bits.of_array
       in
       Bits.uresize b (Int.round_up (Bits.width b) ~to_multiple_of:axi_bits)
