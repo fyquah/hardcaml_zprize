@@ -1,6 +1,3 @@
-#ifndef ZPRIZE_MSM_FPGA_DRIVER_H
-#define ZPRIZE_MSM_FPGA_DRIVER_H
-
 #include <iostream>
 #include <vector>
 
@@ -9,6 +6,8 @@
 #include "bls12_377_g1/rust_types.h"
 
 #define SCALAR_NUM_BITS 253
+
+namespace {
 
 class ZprizeMsmFpgaDriver {
  private:
@@ -53,6 +52,8 @@ class ZprizeMsmFpgaDriver {
     final_result.setToIdentity();
 
     bls12_377_g1::Xyzt accum, running;
+    bls12_377_g1::GeneralUnifiedAddIntoTemps temps;
+
     int bit_offset = 0;
     for (int window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
       const auto CUR_WINDOW_LEN = bls12_377_g1::NUM_WINDOW_BITS(window_idx);
@@ -64,16 +65,16 @@ class ZprizeMsmFpgaDriver {
       for (size_t pt_idx = 0; pt_idx < numPoints(); pt_idx++) {
         const uint64_t bucket = scalars[pt_idx].getSlice(bit_offset, CUR_WINDOW_LEN);
         assert(bucket < (uint64_t)CUR_NUM_BUCKETS);
-        bucket_sums[bucket].generalUnifiedAddInto(points[pt_idx]);
+        bucket_sums[bucket].generalUnifiedAddInto(points[pt_idx], temps);
       }
 
       // perform triangle sum
       accum.setToIdentity();
       running.setToIdentity();
       for (int bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1; bucket_idx--) {
-        bls12_377_g1::triangleSumUpdate(accum, running, bucket_sums[bucket_idx]);
+        bls12_377_g1::triangleSumUpdate(accum, running, bucket_sums[bucket_idx], temps);
       }
-      bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset);
+      bls12_377_g1::finalSumUpdate(final_result, accum, bit_offset, temps);
       bit_offset += CUR_WINDOW_LEN;
     }
 
@@ -82,4 +83,47 @@ class ZprizeMsmFpgaDriver {
   }
 };
 
-#endif
+std::ostream &operator<<(std::ostream &os, const biginteger384_t &point) {
+  os << "(";
+  for (int i = 0; i < 6; i++) {
+    if (i != 0) {
+      os << ", ";
+    }
+    os << point.data[i];
+  }
+  return os << ")";
+}
+
+std::ostream &operator<<(std::ostream &os, const g1_affine_t &point) {
+  return os << "{ x: " << point.x << " , y: " << point.y
+            << ", infinity: " << (point.infinity ? "true" : "false") << " }";
+}
+
+}  // namespace
+
+extern "C" ZprizeMsmFpgaDriver *zprize_msm_fpga_init(g1_affine_t *rust_points, ssize_t npoints) {
+  bls12_377_g1::init();
+  std::vector<bls12_377_g1::Xyzt> points(npoints);
+  for (ssize_t i = 0; i < npoints; i++) {
+    std::cout << rust_points[i] << std::endl;
+    points[i].copy_from_rust_type(rust_points[i]);
+    points[i].println();
+  }
+  auto *driver = new ZprizeMsmFpgaDriver(points);
+  return driver;
+}
+
+extern "C" void zprize_msm_fpga_mult(ZprizeMsmFpgaDriver *context, g1_projective_t *out,
+                                     uint64_t batch_size, biginteger256_t *scalars) {
+  // TODO(fyquah): I don't think this works yet ...
+  for (uint64_t i = 0; i < batch_size; i++) {
+    context->naive_msm(out + i, scalars + (i * context->numPoints()));
+  }
+}
+
+extern "C" void zprize_msm_pippenger_mult(ZprizeMsmFpgaDriver *context, g1_projective_t *out,
+                                          uint64_t batch_size, biginteger256_t *scalars) {
+  for (uint64_t i = 0; i < batch_size; i++) {
+    context->pippenger_msm(out + i, scalars + (i * context->numPoints()));
+  }
+}
