@@ -251,6 +251,9 @@ module With_interface (M : sig
 end) =
 struct
   include M
+
+  let k = 2 * bits
+
   module Config = Config
 
   module Stage0 = struct
