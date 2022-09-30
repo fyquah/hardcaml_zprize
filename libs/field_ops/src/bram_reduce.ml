@@ -84,7 +84,7 @@ module Make (Config : Config) = struct
       (* use the top [error_bits] to look up the coarse correction value *)
       let rd_idx =
         let slice = if error_bits = 0 then gnd else sel_top coarse_value error_bits in
-        print_s [%message (error_bits : int) (log2_depth : int)];
+        (*print_s [%message (error_bits : int) (log2_depth : int)];*)
         uresize slice log2_depth
       in
       (* perform the ROM read *)
@@ -126,6 +126,7 @@ module Make (Config : Config) = struct
 
     let create scope { I.clock; stage0 = { coarse_value; coarse_correction; top_zero } } =
       let ( -- ) = Scope.naming scope in
+      let spec = Reg_spec.create ~clock () in
       let signed_res =
         sub_pipe
           ~scope
@@ -142,6 +143,7 @@ module Make (Config : Config) = struct
        * can just flip the top bit to fix the result 
        * on the other hand, when [rd_idx == 0], we subtract 0 and just keep going to fine 
        * reduction. *)
+      let top_zero = pipeline spec ~n:latency top_zero in
       let corrected_msb = mux2 top_zero gnd ~:(msb signed_res) in
       let coarse_reduction = corrected_msb @: lsbs signed_res in
       { O.coarse_reduction }

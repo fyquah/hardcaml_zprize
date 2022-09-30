@@ -275,7 +275,7 @@ struct
     let create ~scope ~clock ~enable ~m ~(config : Config.t) { Stage0.a; valid } =
       let () =
         let w = bits + 1 in
-        Core.print_s [%message (k : int) (w : int) (bits : int)];
+        (*Core.print_s [%message (k : int) (w : int) (bits : int)];*)
         assert (Z.(lt m (one lsl w)))
       in
       let expected_width = 2 * bits in
@@ -460,8 +460,8 @@ let hierarchical
   let output_padding =
     if config.include_fine_reduction then 0 else config.num_correction_steps
   in
-  Core.print_s
-    [%message (n : int) (output_padding : int) (config.num_correction_steps : int)];
+  (*Core.print_s
+    [%message (n : int) (output_padding : int) (config.num_correction_steps : int)];*)
   let module M =
     With_interface (struct
       let bits = n
@@ -471,6 +471,6 @@ let hierarchical
   let { M.O.a_mod_p; valid } =
     M.hierarchical ~config ~p scope { M.I.clock; enable; a; valid }
   in
-  Core.print_s [%message "built barret reduction" (config.include_fine_reduction : bool)];
+  (*Core.print_s [%message "built barret reduction" (config.include_fine_reduction : bool)];*)
   { With_valid.valid; value = a_mod_p }
 ;;

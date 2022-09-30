@@ -8,6 +8,7 @@ include struct
   module Adder_subtractor_pipe = Adder_subtractor_pipe
   module Modulo_adder_pipe = Modulo_adder_pipe
   module Modulo_subtractor_pipe = Modulo_subtractor_pipe
+  module Bram_reduce = Bram_reduce
 end
 
 include struct
@@ -135,27 +136,24 @@ module Make (Num_bits : Num_bits.S) = struct
       if n = 0 then x else pipeline spec ~n ~enable x
     in
     [%test_result: int] (width res) ~expect:(width a + 1);
-    print_s [%message "add_pipe" (width res : int) (width a : int)];
+    (*print_s [%message "add_pipe" (width res : int) (width a : int)];*)
     res
   ;;
 
-  let sub_pipe ~ensure_positive ~scope ~latency ~(config : Config.t) ~clock a b =
+  let sub_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
     assert (width a = width b);
     let enable = vdd in
     let width = width a in
     let spec = Reg_spec.create ~clock () in
     let stages = config.subtractor_stages in
-    (if ensure_positive
-    then (
-      let extra_bits = width - num_bits in
-      Adder_subtractor_pipe.mixed
-        ~scope
-        ~clock
-        ~enable
-        ~stages
-        ~init:a
-        [ Sub b; Add (Signal.of_z Z.(config.p lsl extra_bits) ~width) ])
-    else Adder_subtractor_pipe.sub ~scope ~clock ~enable ~stages [ a; b ])
+    let extra_bits = width - num_bits in
+    Adder_subtractor_pipe.mixed
+      ~scope
+      ~clock
+      ~enable
+      ~stages
+      ~init:a
+      [ Sub b; Add (Signal.of_z Z.(config.p lsl extra_bits) ~width) ]
     |> concat_result
     |> fun x ->
     let n = latency config - Adder_subtractor_pipe.latency ~stages in
@@ -236,9 +234,12 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    (* CR rahul: need to get this correctly from the config *)
     let include_fine_reduction = true
-    let error = if include_fine_reduction then 0 else 5
+
+    (* CR rahul: need to get this correctly from the config - it's the log2 of error introduced by 
+     * the msb approximation *)
+    let accumulated_error = Stage0.error
+    let error = if include_fine_reduction then 0 else 4
 
     let latency_without_arbitration (config : Config.t) =
       Config.multiply_latency
@@ -251,14 +252,14 @@ module Make (Num_bits : Num_bits.S) = struct
     ;;
 
     let create ~config ~scope ~clock { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; valid } =
-      [%test_result: int] (width y1_plus_x1) ~expect:(num_bits + Stage0.error);
-      [%test_result: int] (width y1_minus_x1) ~expect:(num_bits + Stage0.error);
+      [%test_result: int] (width y1_plus_x1) ~expect:(num_bits + accumulated_error);
+      [%test_result: int] (width y1_minus_x1) ~expect:(num_bits + accumulated_error);
       [%test_result: int] (width p2.x) ~expect:num_bits;
       [%test_result: int] (width p2.y) ~expect:num_bits;
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
-      let x2 = uresize p2.x (num_bits + Stage0.error) in
-      let y2 = uresize p2.y (num_bits + Stage0.error) in
+      let x2 = uresize p2.x (num_bits + accumulated_error) in
+      let y2 = uresize p2.y (num_bits + accumulated_error) in
       let c_A, c_B =
         if config.arbitrated_multiplier
         then
@@ -306,30 +307,28 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
+    let accumulated_error = Stage0.error + Stage1.error
     let error = 1
     let latency (config : Config.t) = config.adder_stages
 
     let create ~config ~scope ~clock { Stage1.c_A; c_B; c_C; c_D; valid } =
-      [%test_result: int] (width c_A) ~expect:(num_bits + Stage0.error + Stage1.error);
-      [%test_result: int] (width c_B) ~expect:(num_bits + Stage0.error + Stage1.error);
+      [%test_result: int] (width c_A) ~expect:(num_bits + accumulated_error);
+      [%test_result: int] (width c_B) ~expect:(num_bits + accumulated_error);
       [%test_result: int] (width c_C) ~expect:(num_bits + Stage0.error);
       [%test_result: int] (width c_D) ~expect:num_bits;
-      let c_C = uresize c_C (num_bits + Stage0.error + Stage1.error) in
-      let c_D = uresize c_D (num_bits + Stage0.error + Stage1.error) in
-      let cur_input_error = Stage0.error + Stage1.error in
-      print_s [%message (cur_input_error : int)];
+      let c_C = uresize c_C (num_bits + accumulated_error) in
+      let c_D = uresize c_D (num_bits + accumulated_error) in
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
       let re s =
-        print_s
-          [%message
-            "re" (width s : int) (num_bits + Stage0.error + Stage1.error + error : int)];
-        assert (width s <= num_bits + Stage0.error + Stage1.error + error);
-        uresize s (num_bits + Stage0.error + Stage1.error + error)
+        let target_width = num_bits + accumulated_error + error in
+        (*print_s [%message "re" (width s : int) (target_width : int)];
+        assert (width s <= target_width);*)
+        uresize s target_width
       in
-      let c_E = mod_sub_pipe ~scope ~latency ~config ~clock c_B c_A |> re in
-      let c_F = mod_sub_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
+      let c_E = sub_pipe ~scope ~latency ~config ~clock c_B c_A |> re in
+      let c_F = sub_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
       let c_G = add_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
       let c_H = add_pipe ~scope ~latency ~config ~clock c_B c_A |> re in
       let scope = Scope.sub_scope scope "stage2" in
@@ -339,6 +338,8 @@ module Make (Num_bits : Num_bits.S) = struct
   end
 
   module Stage2_reduce = struct
+    let accumulated_error = Stage0.error + Stage1.error + Stage2.error
+
     type 'a t =
       { c_E : 'a [@bits num_bits]
       ; c_F : 'a [@bits num_bits]
@@ -348,134 +349,51 @@ module Make (Num_bits : Num_bits.S) = struct
       }
     [@@deriving sexp_of, hardcaml]
 
-    let read_latency = 1
-    let latency (config : Config.t) = (2 * config.adder_stages) + read_latency
-
-    let reduce ~(build_mode : Build_mode.t) ~(config : Config.t) ~scope ~clock v =
-      let scope = Scope.sub_scope scope "stage2_reduce" in
-      let ( -- ) = Scope.naming scope in
-      assert (Z.(equal Field_ops_model.Approx_msb_multiplier_model.p config.p));
-      let spec = Reg_spec.create ~clock () in
-      (* make sure the inputs are good *)
-      let num_extra_bits = width v - num_bits in
-      assert (num_extra_bits <= 9);
-      [%test_result: int]
-        num_extra_bits
-        ~expect:(Stage0.error + Stage1.error + Stage2.error);
-      (* build the static bram values *)
-      let log2_depth = num_extra_bits in
-      let mux_list =
-        (* we can knock off the top [log2_depth] bits here because we know what they are *)
-        let tbl =
-          Field_ops_model.Approx_msb_multiplier_model.build_precompute_two log2_depth
-        in
-        List.init (1 lsl log2_depth) ~f:(fun i ->
-          let orig_bits =
-            Hashtbl.find_exn tbl i |> Bits.of_z ~width:(num_bits + log2_depth)
-          in
-          let expected_prefix =
-            (if i = 0 then 0 else i - 1) |> Bits.of_int ~width:log2_depth
-          in
-          [%test_result: Bits.t]
-            (Bits.sel_top orig_bits log2_depth)
-            ~expect:expected_prefix;
-          let truncated_suffix = Bits.drop_top orig_bits log2_depth in
-          [%test_result: int] (Bits.width truncated_suffix) ~expect:num_bits;
-          truncated_suffix |> Bits.to_constant |> Signal.of_constant)
+    let latency (config : Config.t) =
+      let module Bram_reduce =
+        Bram_reduce.Make (struct
+          let p = config.p
+          let adder_stages = config.adder_stages
+          let num_bits = num_bits
+          let error_bits = accumulated_error
+        end)
       in
-      print_s
-        [%message
-          (List.(
-             take mux_list 3
-             |> mapi ~f:(fun i v ->
-                  of_int ~width:log2_depth (if i = 0 then 0 else i - 1) @: v
-                  |> Signal.to_z ~signedness:Unsigned
-                  |> fun s ->
-                  assert (Z.(equal (s mod config.p) zero));
-                  Z.(s / config.p) |> Bits.of_z ~width:num_bits))
-            : Bits.t list)];
-      (* do a coarse reduction from [0,512M] to [0,4M) - in our particular case, it's
-       * actually just [0, 3M) *)
-      let rd_idx =
-        let slice = if num_extra_bits = 0 then gnd else sel_top v num_extra_bits in
-        print_s [%message (num_extra_bits : int) (log2_depth : int)];
-        uresize slice log2_depth
-      in
-      let bram =
-        match build_mode with
-        | Simulation | Synthesis -> mux rd_idx mux_list |> pipeline spec ~n:read_latency
-      in
-      ignore (rd_idx -- "rd_idx" : Signal.t);
-      ignore (bram -- "bram_read" : Signal.t);
-      let coarse_reduction =
-        if true
-        then (
-          let v = pipeline spec ~n:read_latency (drop_top v num_extra_bits) in
-          assert (width v = width bram);
-          assert (width v = num_bits);
-          let signed_res =
-            sub_pipe
-              ~ensure_positive:false
-              ~scope
-              ~latency:(Fn.const config.adder_stages)
-              ~config
-              ~clock
-              v
-              bram
-          in
-          [%test_result: int] (width signed_res) ~expect:(num_bits + 1);
-          ignore (signed_res -- "signed_res" : Signal.t);
-          (* when [rd_idx > 0], we know that the value we read from the bram has [rd_idx - 1] as its
-           * top [num_extra_bits] - after subtracting the [num_bits] suffixes of [v] and [bram], we
-           * can just flip the top bit to fix the result *)
-          let corrected_msb = mux2 (rd_idx ==:. 0) gnd ~:(msb signed_res) in
-          let corrected_res = corrected_msb @: lsbs signed_res in
-          corrected_res)
-        else pipeline spec v ~n:(read_latency + config.adder_stages)
-      in
-      [%test_result: int] (width coarse_reduction) ~expect:(num_bits + 1);
-      (* do a fine reduction *)
-      let fine_reduction =
-        List.map [ 2; 1 ] ~f:(fun i ->
-          let sub_val = Signal.of_z Z.(of_int i * config.p) ~width:(num_bits + 1) in
-          let res =
-            sub_pipe
-              ~ensure_positive:false
-              ~scope
-              ~latency:(Fn.const config.adder_stages)
-              ~config
-              ~clock
-              coarse_reduction
-              sub_val
-          in
-          [%test_result: int] (width res) ~expect:(num_bits + 2);
-          { With_valid.valid = ~:(msb res); value = lsbs res })
-        |> priority_select_with_default
-             ~default:(pipeline spec coarse_reduction ~n:config.adder_stages)
-      in
-      uresize fine_reduction num_bits
+      Bram_reduce.latency
     ;;
 
-    let create ~build_mode ~config ~scope ~clock { Stage2.c_E; c_F; c_G; c_H; valid } =
-      [%test_result: int]
-        (width c_E)
-        ~expect:(num_bits + Stage0.error + Stage1.error + Stage2.error);
-      [%test_result: int]
-        (width c_F)
-        ~expect:(num_bits + Stage0.error + Stage1.error + Stage2.error);
-      [%test_result: int]
-        (width c_G)
-        ~expect:(num_bits + Stage0.error + Stage1.error + Stage2.error);
-      [%test_result: int]
-        (width c_H)
-        ~expect:(num_bits + Stage0.error + Stage1.error + Stage2.error);
+    let create
+      ~build_mode
+      ~(config : Config.t)
+      ~scope
+      ~clock
+      { Stage2.c_E; c_F; c_G; c_H; valid }
+      =
+      (* create bram_reduce *)
+      let module Bram_reduce =
+        Bram_reduce.Make (struct
+          let p = config.p
+          let adder_stages = config.adder_stages
+          let num_bits = num_bits
+          let error_bits = accumulated_error
+        end)
+      in
+      let reduce coarse_value =
+        let reduce =
+          Bram_reduce.(hierarchical ~build_mode scope { I.clock; coarse_value })
+        in
+        reduce.reduced_value
+      in
+      [%test_result: int] (width c_E) ~expect:(num_bits + accumulated_error);
+      [%test_result: int] (width c_F) ~expect:(num_bits + accumulated_error);
+      [%test_result: int] (width c_G) ~expect:(num_bits + accumulated_error);
+      [%test_result: int] (width c_H) ~expect:(num_bits + accumulated_error);
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
-      let c_E = reduce c_E ~build_mode ~config ~scope ~clock in
-      let c_F = reduce c_F ~build_mode ~config ~scope ~clock in
-      let c_G = reduce c_G ~build_mode ~config ~scope ~clock in
-      let c_H = reduce c_H ~build_mode ~config ~scope ~clock in
+      let c_E = reduce c_E in
+      let c_F = reduce c_F in
+      let c_G = reduce c_G in
+      let c_H = reduce c_H in
       let scope = Scope.sub_scope scope "stage2_reduce" in
       { c_E; c_F; c_G; c_H; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
