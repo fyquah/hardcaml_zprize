@@ -198,12 +198,19 @@ public:
   void enqueue_result_transfer() {
     cl_int err;
 
-    OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
-    OCL_CHECK(err, err = krnl_s2mm.setArg(2, uint32_t(OUTPUT_SIZE_IN_UINT32)));
-    OCL_CHECK(err, err = q.enqueueTask(
-          krnl_s2mm,
-          nullptr,  /* event wait list */
-          &events.ev_krnl_s2mm_output));
+    {
+      std::vector<cl::Event> event_wait_list;
+      if (events.ev_krnl_s2mm_output.get() != nullptr) {
+        event_wait_list.push_back(events.ev_krnl_s2mm_output);
+      }
+
+      OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
+      OCL_CHECK(err, err = krnl_s2mm.setArg(2, uint32_t(OUTPUT_SIZE_IN_UINT32)));
+      OCL_CHECK(err, err = q.enqueueTask(
+            krnl_s2mm,
+            &event_wait_list,  /* event wait list */
+            &events.ev_krnl_s2mm_output));
+    }
 
     {
       std::vector<cl::Event> event_wait_list = { events.ev_krnl_s2mm_output };
