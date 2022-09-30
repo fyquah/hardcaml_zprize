@@ -40,7 +40,7 @@ round_up_to_multiple_of_16(uint32_t x) {
 
 static uint32_t calc_log_max_num_points_per_chunk(uint64_t npoints) {
   /* This number of found via empirical validation */
-  const uint64_t max_allowed_num_chunks = 2;
+  const uint64_t max_allowed_num_chunks = 1;
 
   /* Pessimistic minimum number of points per chunk to ensure we wre alligned */
   uint64_t log_max_num_points_per_chunk = 12;
@@ -64,7 +64,8 @@ struct Events {
   std::vector<cl::Event> ev_transfer_scalars_to_fpga;
   std::vector<cl::Event> ev_krnl_mm2s_scalars;
   std::vector<cl::Event> ev_krnl_mm2s_points;
-  cl::Event              ev_krnl_s2mm_output;
+  cl::Event              ev_krnl_s2mm_output_prev;
+  cl::Event              ev_krnl_s2mm_output_cur;
   cl::Event              ev_transfer_output_to_host;
 };
 
@@ -210,31 +211,48 @@ public:
     }
   }
 
-  void enqueue_result_transfer() {
+  void enqueue_s2mm() {
     cl_int err;
 
     {
+      events.ev_krnl_s2mm_output_prev = events.ev_krnl_s2mm_output_cur;
+
+      std::vector<cl::Event> event_wait_list;
+
+      if (events.ev_krnl_s2mm_output_prev.get() != nullptr) {
+        event_wait_list.push_back(events.ev_krnl_s2mm_output_prev);
+      }
+
       OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
       OCL_CHECK(err, err = krnl_s2mm.setArg(2, uint32_t(OUTPUT_SIZE_IN_UINT32)));
       OCL_CHECK(err, err = q.enqueueTask(
             krnl_s2mm,
-            nullptr,  /* event wait list */
-            &events.ev_krnl_s2mm_output));
+            &event_wait_list,  /* event wait list */
+            &events.ev_krnl_s2mm_output_cur));
     }
-
-    {
-      std::vector<cl::Event> event_wait_list = { events.ev_krnl_s2mm_output };
-
-      OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
-            {buffer_output},
-            CL_MIGRATE_MEM_OBJECT_HOST,
-            &event_wait_list,
-            &events.ev_transfer_output_to_host));
-    }
-
   }
 
-  void wait_for_result_transfer() {
+  void fetch_prev_output_to_host() {
+    cl_int err;
+    std::vector<cl::Event> event_wait_list = { events.ev_krnl_s2mm_output_prev };
+
+    OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
+          {buffer_output},
+          CL_MIGRATE_MEM_OBJECT_HOST,
+          &event_wait_list,
+          &events.ev_transfer_output_to_host));
+    events.ev_transfer_output_to_host.wait();
+  }
+
+  void fetch_cur_output_to_host() {
+    cl_int err;
+    std::vector<cl::Event> event_wait_list = { events.ev_krnl_s2mm_output_cur };
+
+    OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
+          {buffer_output},
+          CL_MIGRATE_MEM_OBJECT_HOST,
+          &event_wait_list,
+          &events.ev_transfer_output_to_host));
     events.ev_transfer_output_to_host.wait();
   }
 
@@ -272,8 +290,8 @@ public:
         std::cout << "Failed to program device[" << i << "] with xclbin file!\n";
       } else {
         std::cout << "Device[" << i << "]: program successful!\n";
-        OCL_CHECK(err, krnl_mm2s_points = cl::Kernel(program, "krnl_mm2s", &err));
-        OCL_CHECK(err, krnl_mm2s_scalars = cl::Kernel(program, "krnl_mm2s", &err));
+        OCL_CHECK(err, krnl_mm2s_points = cl::Kernel(program, "krnl_mm2s_1", &err));
+        OCL_CHECK(err, krnl_mm2s_scalars = cl::Kernel(program, "krnl_mm2s_2", &err));
         OCL_CHECK(err, krnl_msm_pippenger = cl::Kernel(program, "krnl_msm_pippenger", &err));
         OCL_CHECK(err, krnl_s2mm = cl::Kernel(program, "krnl_s2mm", &err));
         valid_device = true;
@@ -447,13 +465,13 @@ public:
           OCL_CHECK(err, err = krnl_mm2s_scalars.setArg(3, is_last_chunk));
           OCL_CHECK(err, err = q.enqueueTask(krnl_mm2s_scalars));
         }
-        std::cout << "Launched writer kernels!" << std::endl;
+        // std::cout << "Launched writer kernels!" << std::endl;
 
         // Launch the reader kernel arguments and dispatch them
         OCL_CHECK(err, err = krnl_s2mm.setArg(0, buffer_output));
         OCL_CHECK(err, err = krnl_s2mm.setArg(2, uint32_t(OUTPUT_SIZE_IN_UINT32)));
         OCL_CHECK(err, err = q.enqueueTask(krnl_s2mm));
-        std::cout << "Launched reader kernel!" << std::endl;
+        // std::cout << "Launched reader kernel!" << std::endl;
 
         // Wait for kernels to finish its operation
         OCL_CHECK(err, err = q.finish());
@@ -533,6 +551,9 @@ extern "C" void msm_mult(Driver *driver,
         ptr_scalars += num_points_in_chunk;
       }
 
+      /* Enqueue fpga->host transfer for this batch. */
+      driver->enqueue_s2mm();
+
       /* Read the result from the previous iteration. We need to do this before enqueing another result
        * transfer to prevent overwriting the contents of the result buffer.
        *
@@ -546,19 +567,16 @@ extern "C" void msm_mult(Driver *driver,
         if (debug) {
           std::cout << "Blocking for result from previous iteration" << std::endl;
         }
-        driver->wait_for_result_transfer();
+        driver->fetch_prev_output_to_host();
         driver->post_process_final_result_and_copy_to_rust_type(out + (b - 1));
       }
-
-      /* Enqueue fpga->host transfer for this batch. */
-      driver->enqueue_result_transfer();
     }
 
     /* The for loop above processes all but the last transfer, so process it now. */
     if (debug) {
       std::cout << "Blocking for final result" << std::endl;
     }
-    driver->wait_for_result_transfer();
+    driver->fetch_cur_output_to_host();
     driver->post_process_final_result_and_copy_to_rust_type(out + (num_batches - 1));
 
   } else {
