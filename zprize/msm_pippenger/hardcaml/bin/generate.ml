@@ -35,8 +35,8 @@ let command_kernel =
           "-num-windows"
           (optional int)
           ~doc:
-            "Override the number of windows used in the algorithm, to simulate a \
-             smaller number of buckets"
+            "Override the number of windows used in the algorithm, to simulate a smaller \
+             number of buckets"
       in
       fun () ->
         let module Kernel_for_vitis =
