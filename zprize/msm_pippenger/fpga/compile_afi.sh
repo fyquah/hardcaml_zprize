@@ -11,3 +11,6 @@ $VITIS_DIR/tools/create_vitis_afi.sh \
        -s3_dcp_key="${date_time}_dcp" \
        -s3_logs_key="${date_time}_logs"
 
+# Also upload to the bucket
+
+
