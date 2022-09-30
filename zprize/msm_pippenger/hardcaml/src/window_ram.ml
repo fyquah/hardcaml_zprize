@@ -100,6 +100,7 @@ struct
           | None -> None
           | Some slr -> Some (Printf.sprintf "window_ram_for_slr_SLR%d" slr)
         in
+        (* TODO(fyquah): I thinkw e can get a way without clears?? *)
         let o =
           M.hierarchical
             ?instance
@@ -110,9 +111,15 @@ struct
             ; clear
             ; port_a =
                 { read_enables =
-                    List.map
-                      (sublist port_a.read_enables)
-                      ~f:(pipeline spec ~n:ram_lookup_latency)
+                    sublist port_a.read_enables
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 1))
+                    |> concat_lsb
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
+                    |> bits_lsb
                 ; write_enables =
                     List.map
                       (sublist port_a.write_enables)
