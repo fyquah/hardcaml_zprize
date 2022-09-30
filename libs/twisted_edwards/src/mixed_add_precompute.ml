@@ -470,7 +470,16 @@ module Make (Num_bits : Num_bits.S) = struct
       let stage1b = Stage1b.hierarchical ~config scope { clock; stage0 } in
       let stage2 = Stage2.hierarchical ~config scope { clock; stage1a; stage1b } in
       let stage3 = Stage3.hierarchical ~config scope { clock; stage2 } in
-      Stage3.O.Of_signal.pipeline ~n:output_pipes (Reg_spec.create ~clock ()) stage3
+      Stage3.O.Of_signal.pack stage3
+      |> Field_ops_lib.Named_register.named_register
+           ~scope
+           ~clock
+           ~slr:config.slr_assignments.stage3
+      |> Field_ops_lib.Named_register.named_register
+           ~scope
+           ~clock
+           ~slr:config.slr_assignments.output
+      |> Stage3.O.Of_signal.unpack
     in
     { O.valid_out; p3 = { x = x3; y = y3; z = z3; t = t3 } }
   ;;
