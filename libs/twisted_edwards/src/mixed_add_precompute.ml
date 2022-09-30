@@ -608,14 +608,8 @@ module Make (Num_bits : Num_bits.S) = struct
       in
       let stage3 = Stage3.hierarchical ~config scope { clock; stage2 } in
       Stage3.O.Of_signal.pack stage3
-      |> Field_ops_lib.Named_register.named_register
-           ~scope
-           ~clock
-           ~slr:slr_assignments.stage3
-      |> Field_ops_lib.Named_register.named_register
-           ~scope
-           ~clock
-           ~slr:slr_assignments.output
+      |> named_register slr_assignments.stage3
+      |> named_register slr_assignments.output
       |> Stage3.O.Of_signal.unpack
     in
     { O.valid_out; p3 = { x = x3; y = y3; z = z3; t = t3 } }

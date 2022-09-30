@@ -50,10 +50,11 @@ let multiply_latency ~reduce (t : t) =
 
 module For_bls12_377 = struct
   let slr_assignments =
+    (* Only one modulo mult in SLR1, everything else in SLR2 *)
     { Slr_assignments.input = Some 1
     ; stage0 = Some 1
-    ; stage1a = Some 1
-    ; stage1b = Some 2
+    ; stage1a = Some 2
+    ; stage1b = Some 1
     ; stage2 = Some 2
     ; stage3 = Some 2
     ; output = Some 1
