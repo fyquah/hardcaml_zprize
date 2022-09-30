@@ -121,33 +121,85 @@ struct
                          ~slr:partition.slr
                     |> bits_lsb
                 ; write_enables =
-                    List.map
-                      (sublist port_a.write_enables)
-                      ~f:(pipeline spec ~n:ram_lookup_latency)
-                ; address = pipeline spec ~n:ram_lookup_latency port_a.address
-                ; data = pipeline spec ~n:ram_lookup_latency port_a.data
+                    sublist port_a.write_enables
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 1))
+                    |> concat_lsb
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
+                    |> bits_lsb
+                ; address =
+                    pipeline spec ~n:(ram_lookup_latency - 1) port_a.address
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
+                ; data =
+                    pipeline spec ~n:(ram_lookup_latency - 1) port_a.data
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
                 ; read_window =
                     pipeline
                       spec
-                      ~n:(ram_lookup_latency + ram_read_latency)
+                      ~n:(ram_lookup_latency + ram_read_latency - 1)
                       (port_a.read_window -:. window_offset)
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
                 }
             ; port_b =
                 { read_enables =
-                    List.map
-                      ~f:(pipeline spec ~n:ram_lookup_latency)
-                      (sublist port_b.read_enables)
+                    sublist port_b.read_enables
+                    |> List.map ~f:(pipeline spec ~n:ram_lookup_latency)
+                    |> concat_lsb
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
+                    |> bits_lsb
                 ; write_enables =
-                    List.map
-                      ~f:(pipeline spec ~n:ram_lookup_latency)
-                      (sublist port_b.write_enables)
-                ; address = pipeline spec ~n:ram_lookup_latency port_b.address
-                ; data = pipeline spec ~n:ram_lookup_latency port_b.data
+                    sublist port_b.write_enables
+                    |> List.map ~f:(pipeline spec ~n:ram_lookup_latency)
+                    |> concat_lsb
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
+                    |> bits_lsb
+                ; address =
+                    pipeline spec ~n:(ram_lookup_latency - 1) port_b.address
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
+                ; data =
+                    pipeline spec ~n:(ram_lookup_latency - 1) port_b.data
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
                 ; read_window =
                     pipeline
                       spec
-                      ~n:(ram_lookup_latency + ram_read_latency)
+                      ~n:(ram_lookup_latency + ram_read_latency - 1)
                       (port_b.read_window -:. window_offset)
+                    |> Named_register.named_register
+                         ~scope
+                         ~clock
+                         ~clear
+                         ~slr:partition.slr
                 }
             }
         in
