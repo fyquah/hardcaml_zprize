@@ -2,6 +2,18 @@ open Core
 open Hardcaml
 open Signal
 
+module Slr_assignments : sig
+  type t =
+    { input : int
+    ; stage0 : int
+    ; stage1a : int
+    ; stage1b : int
+    ; stage2 : int
+    ; stage3 : int
+    ; output : int
+    }
+end
+
 type fn = Elliptic_curve_lib.Ec_fpn_ops_config.fn =
   { latency : int
   ; impl : scope:Scope.t -> clock:Signal.t -> enable:Signal.t -> t -> t option -> t
@@ -18,6 +30,7 @@ type t =
   ; d : Z.t
   ; output_pipeline_stages : int
   ; arbitrated_multiplier : bool
+  ; slr_assignments : Slr_assignments.t
   }
 
 val reduce
