@@ -34,24 +34,26 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
     [@@deriving sexp_of, hardcaml ~rtlprefix:"o$"]
   end
 
-  module Pipeline_stage = struct
-    module Scalar_compute = struct
-      module T = struct
-        type 'a t =
-          { (* actually use the correct bit widths, just pad with 0s for interface *)
-            windows : 'a array
-               [@bits max_window_size_bits] [@length num_windows] [@rtlprefix "windows$"]
-          ; carry : 'a (* not relevant, just carried along *)
-          ; last_scalar : 'a
-          ; input_point : 'a Xyt.t [@rtlprefix "xyt$"]
-          }
-        [@@deriving sexp_of, hardcaml]
-      end
+  module Scalar_compute = struct
+    module T = struct
+      type 'a t =
+        { (* actually use the correct bit widths, just pad with 0s for interface *)
+          windows : 'a array
+             [@bits max_window_size_bits] [@length num_windows] [@rtlprefix "windows$"]
+        ; carry : 'a (* not relevant, just carried along *)
+        ; last_scalar : 'a
+        ; input_point : 'a Xyt.t [@rtlprefix "xyt$"]
+        }
+      [@@deriving sexp_of, hardcaml]
 
-      include T
-      module With_valid = With_valid.Wrap.Make (T)
+      let sum_of_port_widths = fold port_widths ~init:0 ~f:( + )
     end
 
+    include T
+    module With_valid = With_valid.Wrap.Make (T)
+  end
+
+  module Pipeline_stage = struct
     module I = struct
       type 'a t =
         { clock : 'a
@@ -69,6 +71,48 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
         }
       [@@deriving sexp_of, hardcaml]
     end
+  end
+
+  module Register_stage = struct
+    module I = Pipeline_stage.I
+    module O = Pipeline_stage.O
+
+    let data_bits = Int.round_up Scalar_compute.sum_of_port_widths ~to_multiple_of:8
+
+    module Axi_wrapper = Hardcaml_axi.Make (struct
+      let addr_bits = 32
+      let data_bits = data_bits
+    end)
+
+    module Register = Axi_wrapper.Stream.Register
+
+    let create scope ({ clock; clear; up_scalar; dn_ready } : _ I.t) : _ O.t =
+      let up =
+        { (Axi_wrapper.Stream.Source.Of_signal.of_int 0) with
+          tdata = uresize (Scalar_compute.Of_signal.pack up_scalar.value) data_bits
+        ; tvalid = up_scalar.valid
+        }
+      in
+      let dn_dest = { Axi_wrapper.Stream.Dest.tready = dn_ready } in
+      let register = Register.hierarchical scope { clock; clear; up; dn_dest } in
+      let dn_scalar =
+        { With_valid.valid = register.dn.tvalid
+        ; value = Scalar_compute.Of_signal.unpack (sel_bottom register.dn.tdata data_bits)
+        }
+      in
+      let up_ready = register.up_dest.tready in
+      { O.dn_scalar; up_ready }
+    ;;
+
+    let hierarchical ?instance scope =
+      let module H = Hierarchy.In_scope (I) (O) in
+      H.hierarchical ?instance ~name:"register_stage" ~scope create
+    ;;
+  end
+
+  module Minus_one_stage = struct
+    module I = Pipeline_stage.I
+    module O = Pipeline_stage.O
 
     let create scope ~stage ({ clock; clear; up_scalar; dn_ready } : _ I.t) : _ O.t =
       let ( -- ) = Scope.naming scope in
@@ -131,9 +175,47 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
 
     let hierarchical ?instance ~stage scope =
       let module H = Hierarchy.In_scope (I) (O) in
-      H.hierarchical ?instance ~name:"pipeline_stage" ~scope (create ~stage)
+      H.hierarchical ?instance ~name:"minus_one_stage" ~scope (create ~stage)
     ;;
   end
+
+  module Stage = struct
+    type t =
+      | Register
+      | Minus_1 of int
+
+    let _ = Register
+  end
+
+  let rec construct_pipeline ~output ~input ~clock ~clear ~scope stages up_scalar =
+    let stages_hd, stages_tl = List.hd_exn stages, List.tl_exn stages in
+    let dn_ready = wire 1 in
+    let { Pipeline_stage.O.dn_scalar; up_ready; _ } =
+      match (stages_hd : Stage.t) with
+      | Register ->
+        Register_stage.hierarchical
+          ~instance:"r_stage"
+          scope
+          { clock; clear; up_scalar; dn_ready }
+      | Minus_1 stage ->
+        Minus_one_stage.hierarchical
+          ~instance:("1_stage_" ^ Printf.sprintf "%02d" stage)
+          scope
+          ~stage
+          { clock; clear; up_scalar; dn_ready }
+    in
+    let next_up_ready =
+      if List.length stages_tl = 0
+      then (
+        Scalar_compute.With_valid.Of_signal.( <== ) output dn_scalar;
+        input)
+      else
+        (* continue construting the downstream pipeline *)
+        construct_pipeline ~output ~input ~scope ~clock ~clear stages_tl dn_scalar
+    in
+    dn_ready <== next_up_ready;
+    up_ready
+  ;;
 
   let create scope (i : _ I.t) : _ O.t =
     (*let ( -- ) = Scope.naming scope in*)
@@ -141,7 +223,7 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
     let input =
       { With_valid.valid = i.scalar_valid
       ; value =
-          { Pipeline_stage.Scalar_compute.windows =
+          { Scalar_compute.windows =
               Array.map2_exn window_bit_sizes window_bit_offsets ~f:(fun width offset ->
                 uresize i.scalar.:+[offset, Some width] max_window_size_bits)
           ; carry = gnd
@@ -151,31 +233,17 @@ module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) = st
       }
     in
     (* construct pipeline *)
-    let output = Pipeline_stage.Scalar_compute.With_valid.Of_signal.wires () in
-    let rec construct_pipeline stage up_scalar =
-      let dn_ready = wire 1 in
-      let cur_stage =
-        Pipeline_stage.hierarchical
-          ~instance:("stage_" ^ Printf.sprintf "%02d" stage)
-          scope
-          ~stage
-          { clock = i.clock; clear = i.clear; up_scalar; dn_ready }
-      in
-      let next_up_ready =
-        if stage = num_windows - 1
-        then (
-          Pipeline_stage.Scalar_compute.With_valid.Of_signal.( <== )
-            output
-            cur_stage.dn_scalar;
-          i.scalar_and_input_point_ready)
-        else
-          (* continue construting the downstream pipeline *)
-          construct_pipeline (stage + 1) cur_stage.dn_scalar
-      in
-      dn_ready <== next_up_ready;
-      cur_stage.up_ready
+    let output = Scalar_compute.With_valid.Of_signal.wires () in
+    let scalar_and_input_point_ready =
+      construct_pipeline
+        ~input:i.scalar_and_input_point_ready
+        ~output
+        ~scope
+        ~clock:i.clock
+        ~clear:i.clear
+        (List.init (num_windows - 1) ~f:(fun i -> Stage.Minus_1 (i + 1)))
+        input
     in
-    let scalar_and_input_point_ready = construct_pipeline 1 input in
     (* construct the output *)
     let output_scalar, output_negatives =
       (* perform the final carry *)
