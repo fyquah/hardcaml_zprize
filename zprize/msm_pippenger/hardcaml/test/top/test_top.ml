@@ -23,7 +23,10 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     then
       let module V = Hardcaml_verilator.With_interface (Top.I) (Top.O) in
       V.create ~clock_names:[ "clock" ] ~cache_dir:"/tmp/top/" ~verbose:true create
-    else Sim.create ~config:Cyclesim.Config.trace_all create
+    else
+      Sim.create
+        ~config:{ Cyclesim.Config.trace_all with deduplicate_signals = false }
+        create
   ;;
 
   type result =

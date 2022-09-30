@@ -453,32 +453,169 @@ module Make (Num_bits : Num_bits.S) = struct
 
   let output_pipes = 2
 
-  let latency config =
+  let needs_slr_crossing ~src ~dst =
+    match src, dst with
+    | None, _ | _, None -> false
+    | Some src, Some dst -> src <> dst
+  ;;
+
+  let latency (config : Config.t) =
+    let slr_assignments = config.slr_assignments in
+    let needs_slr_crossing_input_to_stage0 =
+      needs_slr_crossing ~src:slr_assignments.input ~dst:slr_assignments.stage0
+    in
+    let needs_slr_crossing_stage0_to_1a =
+      needs_slr_crossing ~src:slr_assignments.stage0 ~dst:slr_assignments.stage1a
+    in
+    let needs_slr_crossing_stage0_to_1b =
+      needs_slr_crossing ~src:slr_assignments.stage0 ~dst:slr_assignments.stage1b
+    in
+    let needs_slr_crossing_stage1a_to_2 =
+      needs_slr_crossing ~src:slr_assignments.stage1a ~dst:slr_assignments.stage2
+    in
+    let needs_slr_crossing_stage1b_to_2 =
+      needs_slr_crossing ~src:slr_assignments.stage1b ~dst:slr_assignments.stage2
+    in
+    let needs_slr_crossing_stage2_to_3 =
+      needs_slr_crossing ~src:slr_assignments.stage2 ~dst:slr_assignments.stage3
+    in
     assert (Stage1a.latency config = Stage1b.latency config);
-    Stage0.latency config
+    (if needs_slr_crossing_input_to_stage0 then 2 else 0)
+    + Stage0.latency config
     + Stage1a.latency config
+    + Int.max
+        ((if needs_slr_crossing_stage0_to_1a then 2 else 0)
+        + if needs_slr_crossing_stage1a_to_2 then 2 else 0)
+        ((if needs_slr_crossing_stage0_to_1b then 2 else 0)
+        + if needs_slr_crossing_stage1b_to_2 then 2 else 0)
     + Stage2.latency config
+    + (if needs_slr_crossing_stage2_to_3 then 2 else 0)
     + Stage3.latency config
     + output_pipes
   ;;
 
-  let create ~config scope { I.clock; valid_in; p1; p2 } =
+  let named_register = Field_ops_lib.Named_register.named_register
+
+  let create ~(config : Config.t) scope { I.clock; valid_in; p1; p2 } =
+    let slr_assignments = config.slr_assignments in
     let { Stage3.O.x3; y3; z3; t3; valid = valid_out } =
-      let datapath_input = { Datapath_input.p1; p2; valid = valid_in } in
+      let needs_slr_crossing_input_to_stage0 =
+        needs_slr_crossing ~src:slr_assignments.input ~dst:slr_assignments.stage0
+      in
+      let needs_slr_crossing_stage0_to_1a =
+        needs_slr_crossing ~src:slr_assignments.stage0 ~dst:slr_assignments.stage1a
+      in
+      let needs_slr_crossing_stage0_to_1b =
+        needs_slr_crossing ~src:slr_assignments.stage0 ~dst:slr_assignments.stage1b
+      in
+      let needs_slr_crossing_stage1a_to_2 =
+        needs_slr_crossing ~src:slr_assignments.stage1a ~dst:slr_assignments.stage2
+      in
+      let needs_slr_crossing_stage1b_to_2 =
+        needs_slr_crossing ~src:slr_assignments.stage1b ~dst:slr_assignments.stage2
+      in
+      let needs_slr_crossing_stage2_to_3 =
+        needs_slr_crossing ~src:slr_assignments.stage2 ~dst:slr_assignments.stage3
+      in
+      let named_register slr x = named_register ~slr ~clock ~scope x in
+      let datapath_input =
+        let datapath_input = { Datapath_input.p1; p2; valid = valid_in } in
+        if needs_slr_crossing_input_to_stage0
+        then
+          datapath_input
+          |> Datapath_input.Of_signal.pack
+          |> named_register slr_assignments.input
+          |> named_register slr_assignments.stage0
+          |> Datapath_input.Of_signal.unpack
+        else datapath_input
+      in
       let stage0 = Stage0.hierarchical ~config scope { clock; datapath_input } in
-      let stage1a = Stage1a.hierarchical ~config scope { clock; stage0 } in
-      let stage1b = Stage1b.hierarchical ~config scope { clock; stage0 } in
-      let stage2 = Stage2.hierarchical ~config scope { clock; stage1a; stage1b } in
+      let stage1a =
+        let stage0 =
+          if needs_slr_crossing_stage0_to_1a
+          then
+            stage0
+            |> Stage0.O.Of_signal.pack
+            |> named_register slr_assignments.stage0
+            |> named_register slr_assignments.stage1a
+            |> Stage0.O.Of_signal.unpack
+          else stage0
+        in
+        Stage1a.hierarchical ~config scope { clock; stage0 }
+      in
+      let stage1b =
+        let stage0 =
+          if needs_slr_crossing_stage0_to_1b
+          then
+            stage0
+            |> Stage0.O.Of_signal.pack
+            |> named_register slr_assignments.stage0
+            |> named_register slr_assignments.stage1b
+            |> Stage0.O.Of_signal.unpack
+          else stage0
+        in
+        Stage1b.hierarchical ~config scope { clock; stage0 }
+      in
+      let stage2 =
+        let stage1a =
+          if needs_slr_crossing_stage1a_to_2
+          then
+            stage1a
+            |> Stage1a.O.Of_signal.pack
+            |> named_register slr_assignments.stage1a
+            |> named_register slr_assignments.stage2
+            |> Stage1a.O.Of_signal.unpack
+          else stage1a
+        in
+        let stage1b =
+          if needs_slr_crossing_stage1b_to_2
+          then
+            stage1b
+            |> Stage1b.O.Of_signal.pack
+            |> named_register slr_assignments.stage1b
+            |> named_register slr_assignments.stage2
+            |> Stage1b.O.Of_signal.unpack
+          else stage1b
+        in
+        let lat_a =
+          (if needs_slr_crossing_stage0_to_1a then 2 else 0)
+          + if needs_slr_crossing_stage1a_to_2 then 2 else 0
+        in
+        let lat_b =
+          (if needs_slr_crossing_stage0_to_1b then 2 else 0)
+          + if needs_slr_crossing_stage1b_to_2 then 2 else 0
+        in
+        let max_of_a_and_b = Int.max lat_a lat_b in
+        let stage1a =
+          Stage1a.O.map
+            ~f:(pipeline ~n:(max_of_a_and_b - lat_a) (Reg_spec.create ~clock ()))
+            stage1a
+        in
+        let stage1b =
+          Stage1b.O.map
+            ~f:(pipeline ~n:(max_of_a_and_b - lat_b) (Reg_spec.create ~clock ()))
+            stage1b
+        in
+        let stage2 = Stage2.hierarchical ~config scope { clock; stage1a; stage1b } in
+        if needs_slr_crossing_stage2_to_3
+        then
+          stage2
+          |> Stage2.O.Of_signal.pack
+          |> named_register slr_assignments.stage2
+          |> named_register slr_assignments.stage3
+          |> Stage2.O.Of_signal.unpack
+        else stage2
+      in
       let stage3 = Stage3.hierarchical ~config scope { clock; stage2 } in
       Stage3.O.Of_signal.pack stage3
       |> Field_ops_lib.Named_register.named_register
            ~scope
            ~clock
-           ~slr:config.slr_assignments.stage3
+           ~slr:slr_assignments.stage3
       |> Field_ops_lib.Named_register.named_register
            ~scope
            ~clock
-           ~slr:config.slr_assignments.output
+           ~slr:slr_assignments.output
       |> Stage3.O.Of_signal.unpack
     in
     { O.valid_out; p3 = { x = x3; y = y3; z = z3; t = t3 } }
