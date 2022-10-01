@@ -1,0 +1,6 @@
+(rule
+ (target twisted_edwards_mixed_add_precompute_full.v)
+ (deps ../../bin/generate/verilog.exe)
+ (mode promote)
+ (action
+  (run %{deps} twisted-edwards-mixed-add-precompute-full -o %{target})))
