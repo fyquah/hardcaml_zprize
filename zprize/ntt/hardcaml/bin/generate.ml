@@ -11,6 +11,13 @@ let command_kernel =
           "-log-blocks"
           (optional_with_default 0 int)
           ~doc:" Log number of parallel blocks"
+      and memory_layout =
+        flag
+          "-memory-layout"
+          (optional_with_default
+             Zprize_ntt.Memory_layout.Normal_layout_single_port
+             Zprize_ntt.Memory_layout.arg)
+          ~doc:" Memory layout"
       in
       fun () ->
         let module Kernel_for_vitis =
@@ -19,6 +26,7 @@ let command_kernel =
             let support_4step_twiddle = true
             let logcores = 3
             let logblocks = logblocks
+            let memory_layout = memory_layout
           end)
         in
         let module Circuit =

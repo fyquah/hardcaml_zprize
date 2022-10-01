@@ -17,6 +17,13 @@ let command_top =
           "-log-blocks"
           (optional_with_default 0 int)
           ~doc:" Log number of parallel blocks"
+      and memory_layout =
+        flag
+          "-memory-layout"
+          (optional_with_default
+             Zprize_ntt.Memory_layout.Normal_layout_single_port
+             Zprize_ntt.Memory_layout.arg)
+          ~doc:" Memory layout"
       and waves = flag "-waves" no_arg ~doc:" Display interactive waveform"
       and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed" in
       fun () ->
@@ -28,6 +35,7 @@ let command_top =
             let logcores = logcores
             let logblocks = logblocks
             let support_4step_twiddle = true
+            let memory_layout = memory_layout
           end)
         in
         let input_coefs =
@@ -55,6 +63,13 @@ let command_kernel_for_vitis =
           "-log-blocks"
           (optional_with_default 0 int)
           ~doc:" Log number of parallel blocks"
+      and memory_layout =
+        flag
+          "-memory-layout"
+          (optional_with_default
+             Zprize_ntt.Memory_layout.Normal_layout_single_port
+             Zprize_ntt.Memory_layout.arg)
+          ~doc:" Memory layout"
       and waves = flag "-waves" no_arg ~doc:" Display interactive waveform"
       and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed"
       and verilator =
@@ -74,6 +89,7 @@ let command_kernel_for_vitis =
             let logcores = 3
             let logblocks = logblocks
             let support_4step_twiddle = true
+            let memory_layout = memory_layout
           end)
         in
         let input_coefs =
