@@ -293,7 +293,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
     });
 
     bench("Doing NTT (phase2)", [&]() {
-  enqueue_phase2_work(buffer);
+        enqueue_phase2_work(buffer);
         OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
     });
 
@@ -307,7 +307,6 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
           memcpy(out, buffer->output_data(), row_size * row_size * sizeof(uint64_t));
           break;
         case MemoryLayout::OPTIMIZED_LAYOUT: {
-          std::cout << "Here" << std::endl;
           ntt_postprocessing(out, buffer->output_data(), row_size, log_blocks);
           break;
         }
