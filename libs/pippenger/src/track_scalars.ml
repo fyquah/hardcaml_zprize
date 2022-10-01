@@ -31,8 +31,9 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
       then pipe
       else (
         let d =
-          Scalar.map ~f:(reg spec ~enable:shift) d
-          (* -- ("scl$" ^ Int.to_string n) *)
+          Scalar.(
+            map ~f:(reg spec ~enable:shift) d
+            |> Of_signal.apply_names ~prefix:("scl$" ^ Int.to_string n))
         in
         build_pipe (n + 1) d (d :: pipe))
     in

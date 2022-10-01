@@ -53,7 +53,7 @@ let command_random =
               (affine_point_bits : int)
               (datapath_depth : int)
               (num_inputs : int)];
-        let module Test = Pippenger_test.Test_pippenger.Test (Config) in
+        let module Test = Pippenger_test.Test_pippenger.Test (Config) (Config) in
         let data =
           if debug then Test.debug_inputs num_inputs else Test.random_inputs num_inputs
         in

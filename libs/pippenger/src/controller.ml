@@ -191,7 +191,6 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
                        i.scalar_valid
                        [ (* process an input scalar across all windows *)
                          executing_scalar <-- vdd
-                       ; maybe_scalar_read
                        ; sm.set_next Execute_scalar
                        ]
                        [ (* nothing to do - wait and try again *)
