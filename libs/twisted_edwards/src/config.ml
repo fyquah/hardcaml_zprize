@@ -13,10 +13,11 @@ module Slr_assignments = struct
   type t =
     { input : int option
     ; stage0 : int option
-    ; stage1a : int option
-    ; stage1b : int option
+    ; stage1 : int option
     ; stage2 : int option
     ; stage3 : int option
+    ; stage4 : int option
+    ; stage5 : int option
     ; output : int option
     }
 end
@@ -29,6 +30,7 @@ type fn = Ec_fpn_ops_config.fn =
 type t =
   { multiply : fn
   ; reduce : fn
+  ; coarse_reduce : fn
   ; adder_stages : int
   ; subtractor_stages : int
   ; doubler_stages : int
@@ -40,12 +42,29 @@ type t =
   ; slr_assignments : Slr_assignments.t
   }
 
+let coarse_reduce config ~scope ~clock ~enable x =
+  config.coarse_reduce.impl ~scope ~clock ~enable x None
+;;
+
 let reduce config ~scope ~clock ~enable x =
   config.reduce.impl ~scope ~clock ~enable x None
 ;;
 
-let multiply_latency ~reduce (t : t) =
-  t.multiply.latency + if reduce then t.reduce.latency else 0
+module Reduce = struct
+  type t =
+    | None
+    | Coarse
+    | Fine
+end
+
+let multiply_latency ~(reduce : Reduce.t) (t : t) =
+  let reduce_latency =
+    match reduce with
+    | None -> 0
+    | Coarse -> t.coarse_reduce.latency
+    | Fine -> t.reduce.latency
+  in
+  t.multiply.latency + reduce_latency
 ;;
 
 module For_bls12_377 = struct
@@ -53,10 +72,11 @@ module For_bls12_377 = struct
     (* Only one modulo mult in SLR1, everything else in SLR2 *)
     { Slr_assignments.input = Some 1
     ; stage0 = Some 1
-    ; stage1a = Some 1
-    ; stage1b = Some 2
+    ; stage1 = Some 2
     ; stage2 = Some 2
     ; stage3 = Some 2
+    ; stage4 = Some 2
+    ; stage5 = Some 2
     ; output = Some 1
     }
   ;;
@@ -68,6 +88,7 @@ module For_bls12_377 = struct
     in
     { multiply
     ; reduce = barrett_reduce
+    ; coarse_reduce = barrett_reduce_coarse
     ; adder_stages = 3
     ; subtractor_stages = 3
     ; doubler_stages = 3
@@ -87,6 +108,7 @@ module For_bls12_377 = struct
     in
     { multiply
     ; reduce = barrett_reduce
+    ; coarse_reduce = barrett_reduce_coarse
     ; adder_stages = 3
     ; subtractor_stages = 3
     ; doubler_stages = 3

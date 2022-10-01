@@ -38,7 +38,6 @@ let command_random =
         let rand_state = Random.State.make [| seed |] in
         Random.set_state rand_state;
         let module Config = struct
-          let window_size_bits = window_size_bits
           let num_windows = num_windows
           let affine_point_bits = affine_point_bits
           let datapath_depth = datapath_depth
@@ -53,7 +52,11 @@ let command_random =
               (affine_point_bits : int)
               (datapath_depth : int)
               (num_inputs : int)];
-        let module Test = Pippenger_test.Test_pippenger.Test (Config) in
+        let module Scalar_config = struct
+          let window_size_bits = window_size_bits
+        end
+        in
+        let module Test = Pippenger_test.Test_pippenger.Test (Config) (Scalar_config) in
         let data =
           if debug then Test.debug_inputs num_inputs else Test.random_inputs num_inputs
         in

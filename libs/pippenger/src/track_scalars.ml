@@ -25,15 +25,12 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
   end
 
   let build_pipe ( -- ) ~depth spec shift scalar =
-    let _unused = ( -- ) in
     let rec build_pipe n d pipe =
       if n = depth
       then pipe
       else (
-        let d =
-          Scalar.map ~f:(reg spec ~enable:shift) d
-          (* -- ("scl$" ^ Int.to_string n) *)
-        in
+        let d = Scalar.map ~f:(reg spec ~enable:shift) d in
+        ignore (d.scalar -- ("scl$" ^ Int.to_string n));
         build_pipe (n + 1) d (d :: pipe))
     in
     build_pipe 0 scalar [] |> List.rev |> Array.of_list
