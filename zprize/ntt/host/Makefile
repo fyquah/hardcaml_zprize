@@ -3,7 +3,7 @@ CXXFLAGS+=-I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -O3 -g -std=c
 CXXFLAGS+=-I$(COMMON_DIR)/includes/xcl2
 CXXFLAGS+=-fmessage-length=0
 CXXFLAGS+=-L/opt/xilinx/xrt/lib -pthread -lOpenCL -lrt -lstdc++ -lxrt_coreutil
-COMMON_SRCS=$(COMMON_DIR)/includes/xcl2/xcl2.cpp reference.cpp driver.cpp
+COMMON_SRCS=$(COMMON_DIR)/includes/xcl2/xcl2.cpp reference.cpp driver.cpp ntt_preprocessing.o ntt_postprocessing.o
 
 all: test_random.exe evaluate_given.exe bench_throughput.exe bench_latency.exe
 

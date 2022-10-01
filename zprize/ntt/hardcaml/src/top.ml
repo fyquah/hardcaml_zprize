@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Top_config.S) = struct
   include Config
   module Four_step = Hardcaml_ntt.Four_step.Make (Config)
   module Axi_stream = Four_step.Axi_stream
@@ -56,6 +56,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         scope
         { Store_sm.I.clock = i.clock
         ; clear = i.clear
+        ; first_4step_pass = i.first_4step_pass
         ; tready = i.data_out_dest.tready
         ; start = start_output
         }
@@ -70,7 +71,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         x
     in
     let cores =
-      Four_step.create
+      Four_step.hierarchy
         ~build_mode
         scope
         { Four_step.I.clock = i.clock

@@ -21,27 +21,37 @@ enum class CoreType {
   NTT_2_24
 };
 
+enum class MemoryLayout {
+  NORMAL_LAYOUT,
+  OPTIMIZED_LAYOUT
+};
+
 std::ostream& operator<<(std::ostream &os, CoreType);
+
+std::ostream& operator<<(std::ostream &os, MemoryLayout);
+
+MemoryLayout memory_layout_from_string(std::string);
 
 class NttFpgaDriverArg {
 private:
-  NttFpgaDriverArg(CoreType core_type, uint64_t log_row_size);
+  NttFpgaDriverArg(CoreType core_type, MemoryLayout, uint64_t log_row_size);
 
 public:
   const CoreType core_type;
+  const MemoryLayout memory_layout;
   const uint64_t log_row_size;
 
   uint64_t row_size();
 
   uint64_t num_elements();
 
-  static NttFpgaDriverArg create_ntt_2_24();
+  static NttFpgaDriverArg create_ntt_2_24(MemoryLayout);
 
-  static NttFpgaDriverArg create_ntt_2_18();
+  static NttFpgaDriverArg create_ntt_2_18(MemoryLayout);
 
-  static NttFpgaDriverArg create_ntt_2_12();
+  static NttFpgaDriverArg create_ntt_2_12(MemoryLayout);
 
-  static NttFpgaDriverArg create_reverse(uint64_t log_row_size);
+  static NttFpgaDriverArg create_reverse(MemoryLayout, uint64_t log_row_size);
 };
 
 class NttFpgaDriver {
@@ -76,6 +86,7 @@ public:
 
 private:
   const CoreType core_type;
+  const MemoryLayout memory_layout;
   const uint64_t log_row_size;
   const uint64_t row_size;
   const uint64_t matrix_size;
