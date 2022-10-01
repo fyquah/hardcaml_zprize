@@ -18,3 +18,4 @@ ipx::associate_bus_interfaces -busif host_scalars_to_fpga -clock ap_clk $core
 
 #set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]
 
+set_param synth.elaboration.rodinMoreOptions "rt::set_parameter synRetiming true"
