@@ -90,6 +90,7 @@ struct
     let fifo0 =
       Hardcaml_xilinx.Fifo_sync.create
         ~build_mode
+        ~showahead:true
         ~overflow_check:true
         ~underflow_check:true
         ~scope
@@ -104,6 +105,7 @@ struct
     let fifo1 =
       Hardcaml_xilinx.Fifo_sync.create
         ~build_mode
+        ~showahead:true
         ~overflow_check:true
         ~underflow_check:true
         ~scope
