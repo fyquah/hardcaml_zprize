@@ -9,6 +9,7 @@ module Make (Config : Config.S) = struct
   module Msm_result_to_host = Msm_result_to_host.Make (Config)
   module Host_to_msm = Host_to_msm.Make (Config)
   module Merge_axi_streams = Merge_axi_streams.Make (Config)
+  module Scalar_transformation = Scalar_transformation.Make (Config)
 
   module I = struct
     type 'a t =
@@ -47,21 +48,35 @@ module Make (Config : Config.S) = struct
     =
     let clock = ap_clk in
     let clear = ~:ap_rst_n in
-    let scalar_and_input_point_ready = wire 1 in
+    (* transform the scalars off the wire *)
+    let transformed_scalars_to_fpga_dest = Axi512.Stream.Dest.Of_signal.wires () in
+    let { Scalar_transformation.O.transformed_scalars_to_fpga = host_scalars_to_fpga
+        ; host_scalars_to_fpga_dest
+        }
+      =
+      Scalar_transformation.hierarchical
+        scope
+        { clock; clear; host_scalars_to_fpga; transformed_scalars_to_fpga_dest }
+    in
+    (* merge the axi streams *)
     let host_to_fpga_dest = Axi512.Stream.Dest.Of_signal.wires () in
-    let merge_axi_streams =
+    let { Merge_axi_streams.O.host_to_fpga
+        ; host_scalars_to_fpga_dest = transformed_scalars_to_fpga_dest'
+        ; ddr_points_to_fpga_dest
+        }
+      =
       Merge_axi_streams.hierarchical
         scope
         { clock; clear; host_scalars_to_fpga; ddr_points_to_fpga; host_to_fpga_dest }
     in
+    Axi512.Stream.Dest.Of_signal.( <== )
+      transformed_scalars_to_fpga_dest
+      transformed_scalars_to_fpga_dest';
+    let scalar_and_input_point_ready = wire 1 in
     let host_to_msm =
       Host_to_msm.hierarchical
         scope
-        { clock
-        ; clear
-        ; host_to_fpga = merge_axi_streams.host_to_fpga
-        ; scalar_and_input_point_ready
-        }
+        { clock; clear; host_to_fpga; scalar_and_input_point_ready }
     in
     Axi512.Stream.Dest.Of_signal.( <== ) host_to_fpga_dest host_to_msm.host_to_fpga_dest;
     let result_point_ready = wire 1 in
@@ -97,8 +112,8 @@ module Make (Config : Config.S) = struct
         }
     in
     result_point_ready <== msm_result_to_host.result_point_ready;
-    { O.host_scalars_to_fpga_dest = merge_axi_streams.host_scalars_to_fpga_dest
-    ; ddr_points_to_fpga_dest = merge_axi_streams.ddr_points_to_fpga_dest
+    { O.host_scalars_to_fpga_dest
+    ; ddr_points_to_fpga_dest
     ; fpga_to_host = msm_result_to_host.fpga_to_host
     }
   ;;

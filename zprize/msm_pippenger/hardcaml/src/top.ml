@@ -34,7 +34,7 @@ module Make (Config : Config.S) = struct
   end
 
   module Mixed_add = Mixed_add_precompute.Make (Num_bits)
-  module Scalar_transformation = Scalar_transformation.Make (Config) (Num_bits)
+  module Scalar_transformation = Scalar_transformation.Make (Config)
 
   let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction_full
   let adder_latency = Mixed_add.latency adder_config
@@ -137,30 +137,13 @@ module Make (Config : Config.S) = struct
     let ( -- ) = Scope.naming scope in
     let open Always in
     (* preprocess the scalar *)
-    let controller_ready = wire 1 in
-    let { Scalar_transformation.O.scalar
-        ; scalar_negatives
-        ; scalar_valid
-        ; last_scalar
-        ; input_point
-        ; scalar_and_input_point_ready
-        }
-      =
-      Scalar_transformation.hierarchical
-        scope
-        { clock
-        ; clear
-        ; scalar
-        ; scalar_valid
-        ; last_scalar
-        ; input_point
-        ; scalar_and_input_point_ready = controller_ready
-        }
-    in
     let spec = Reg_spec.create ~clock () in
     let spec_with_clear = Reg_spec.create ~clear ~clock () in
     let sm = State_machine.create (module State) spec_with_clear in
     let ctrl_start = Variable.reg spec_with_clear ~width:1 in
+    let scalar, scalar_negatives =
+      Scalar_transformation.unpack_to_windows_and_negatives (module Signal) scalar
+    in
     let ctrl =
       Full_controller.hierarchical
         scope
@@ -413,11 +396,10 @@ module Make (Config : Config.S) = struct
     fifo_q_has_space
     <== (fifo_q.used <:. fifo_capacity - ram_lookup_latency - ram_read_latency - 2);
     last_result_point <== (msb fifo_q.q &: ~:(fifo_q.empty));
-    controller_ready <== (ctrl.scalar_read &: sm.is Working);
     { O.result_point = Mixed_add.Xyzt.Of_signal.unpack (lsbs fifo_q.q)
     ; result_point_valid = ~:(fifo_q.empty)
     ; last_result_point
-    ; scalar_and_input_point_ready
+    ; scalar_and_input_point_ready = ctrl.scalar_read &: sm.is Working
     }
   ;;
 
