@@ -71,7 +71,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   let axi_bits = 512
   let aligned_to = 64
   let aligned_field_bits = Int.round_up Config.field_bits ~to_multiple_of:aligned_to
-  let aligned_scalar_bits = Int.round_up Config.scalar_bits ~to_multiple_of:aligned_to
+  let _aligned_scalar_bits = Int.round_up Config.scalar_bits ~to_multiple_of:aligned_to
   let drop_t = false
 
   let num_clocks_per_output =
