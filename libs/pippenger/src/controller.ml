@@ -145,7 +145,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
     let push_stalled_point = Var.wire ~default:gnd in
     let pop_stalled_point = Var.wire ~default:gnd in
     let is_in_pipeline = reg spec tracker.is_in_pipeline in
-    let scalar_read = Var.wire ~default:gnd in
+    let scalar_read = Var.reg spec ~width:1 in
     let flushing = Var.reg spec ~width:1 in
     ignore (flushing.value -- "flushing" : Signal.t);
     let on_last_window ~processing_scalars =
@@ -154,16 +154,18 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
           (window.value ==:. num_windows - 1)
           [ window <--. 0
           ; sm.set_next Choose_mode
-          ; (if processing_scalars
-            then proc [ scalar_read <-- vdd; flushing <-- i.last_scalar ]
-            else scalar_read <-- gnd)
+          ; (if processing_scalars then proc [ flushing <-- i.last_scalar ] else proc [])
           ])
+    in
+    let maybe_scalar_read =
+      Always.(when_ (window.value ==:. num_windows - 1) [ scalar_read <-- vdd ])
     in
     let executing_stalled = Var.wire ~default:gnd in
     let executing_scalar = Var.wire ~default:gnd in
     Always.(
       compile
-        [ sm.switch
+        [ scalar_read <-- gnd
+        ; sm.switch
             [ ( Start
               , [ flushing <-- gnd
                 ; window <--. 0
@@ -189,6 +191,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
                        i.scalar_valid
                        [ (* process an input scalar across all windows *)
                          executing_scalar <-- vdd
+                       ; maybe_scalar_read
                        ; sm.set_next Execute_scalar
                        ]
                        [ (* nothing to do - wait and try again *)
@@ -212,7 +215,11 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
                 ; sm.set_next Wait_scalar
                 ; on_last_window ~processing_scalars:true
                 ] )
-            ; Wait_scalar, [ executing_scalar <-- vdd; sm.set_next Execute_scalar ]
+            ; ( Wait_scalar
+              , [ executing_scalar <-- vdd
+                ; maybe_scalar_read
+                ; sm.set_next Execute_scalar
+                ] )
             ; ( Execute_stalled
               , [ executing_stalled <-- vdd
                 ; shift_pipeline <-- vdd

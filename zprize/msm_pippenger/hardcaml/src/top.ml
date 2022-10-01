@@ -169,6 +169,7 @@ module Make (Config : Config.S) = struct
     let ctrl_start = Variable.reg spec_with_clear ~width:1 in
     let ctrl =
       Full_controller.hierarchical
+        ~build_mode
         scope
         { Full_controller.I.clock
         ; clear
