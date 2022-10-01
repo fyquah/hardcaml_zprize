@@ -72,7 +72,7 @@ struct
 
   let fifo_capacity = (* Native BRAM depth*) 512
 
-  let create ~build_mode scope (i : _ I.t) : _ O.t =
+  let create scope (i : _ I.t) : _ O.t =
     let ctrl0_scalar = Array.slice i.scalar 0 ctrl0_windows in
     let ctrl1_scalar =
       Array.slice i.scalar ctrl0_windows (ctrl0_windows + ctrl1_windows)
@@ -89,7 +89,6 @@ struct
     let fifo1_rd = wire 1 in
     let fifo0 =
       Hardcaml_xilinx.Fifo_sync.create
-        ~build_mode
         ~overflow_check:true
         ~underflow_check:true
         ~scope
@@ -103,7 +102,6 @@ struct
     in
     let fifo1 =
       Hardcaml_xilinx.Fifo_sync.create
-        ~build_mode
         ~overflow_check:true
         ~underflow_check:true
         ~scope
@@ -172,8 +170,8 @@ struct
     }
   ;;
 
-  let hierarchical ~build_mode scope =
+  let hierarchical scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ~name:"full_controller" ~scope (create ~build_mode)
+    H.hierarchical ~name:"full_controller" ~scope create
   ;;
 end
