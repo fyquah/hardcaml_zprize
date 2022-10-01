@@ -76,7 +76,7 @@ let estimate_delta_error_2_to_n levels =
 
 let golden_config_2222 =
   let open Level in
-  [ { radix = Radix_2; k = (fun _ -> 186) }
+  [ { radix = Radix_2; k = (fun _ -> 187) }
   ; { radix = Radix_2; k = (fun _ -> 94) }
   ; { radix = Radix_2; k = (fun _ -> 48) }
   ; { radix = Radix_2; k = (fun _ -> 24) }
@@ -110,12 +110,12 @@ let%expect_test "Delta error on 2222" =
     (Z.to_string (estimate_delta_error_2_to_n golden_config_2222));
   [%expect
     {|
-    w=378 lo=0 k=186
-    w=192 lo=186 k=94
-    w=98 lo=280 k=48
-    w=50 lo=328 k=24
-    Ground multiplier width = 26
-    Delta error = 7 * (2^377) |}]
+    w=378 lo=0 k=187
+    w=191 lo=187 k=94
+    w=97 lo=281 k=48
+    w=49 lo=329 k=24
+    Ground multiplier width = 25
+    Delta error = 13 * (2^377) |}]
 ;;
 
 let build_precompute_two num_bits =

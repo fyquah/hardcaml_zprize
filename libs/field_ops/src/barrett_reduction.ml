@@ -44,58 +44,110 @@ module Config = struct
 
   let approx_msb_mult_2222 =
     let open Approx_msb_multiplier.Config in
-    { levels =
-        [ { k = (fun _ -> 186)
-          ; for_karatsuba =
-              { radix = Radix_2
-              ; pre_adder_stages = 1
-              ; (* [middle_adder_stages] here is irrel. *)
-                middle_adder_stages = 1
-              ; (* Adding up to 390 bit results *)
-                post_adder_stages = 5
-              }
-          }
-        ; { k = (fun _ -> 94)
-          ; for_karatsuba =
-              { radix = Radix_2
-              ; pre_adder_stages = 1
-              ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
+    match Which_config.t with
+    | Heavy_pipelining ->
+      { levels =
+          [ { k = (fun _ -> 187)
+            ; for_karatsuba =
+                { radix = Radix_2
+                ; pre_adder_stages = 1
+                ; (* [middle_adder_stages] here is irrel. *)
+                  middle_adder_stages = 1
+                ; (* Adding up to 390 bit results *)
+                  post_adder_stages = 5
+                }
+            }
+          ; { k = (fun _ -> 94)
+            ; for_karatsuba =
+                { radix = Radix_2
+                ; pre_adder_stages = 1
+                ; (* intermediate results has width of 42-50 bits. 1 stage pipeline
                    is sufficient.
                 *)
-                middle_adder_stages = 1
-              ; post_adder_stages = 2
-              }
-          }
-        ; { k = (fun _ -> 48)
-          ; for_karatsuba =
-              { radix = Radix_2
-              ; pre_adder_stages = 1
-              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                  middle_adder_stages = 1
+                ; post_adder_stages = 2
+                }
+            }
+          ; { k = (fun _ -> 48)
+            ; for_karatsuba =
+                { radix = Radix_2
+                ; pre_adder_stages = 1
+                ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                    is ok.
                 *)
-                middle_adder_stages = 1
-              ; post_adder_stages = 1
-              }
-          }
-        ; { k = (fun _ -> 24)
-          ; for_karatsuba =
-              { radix = Radix_2
-              ; pre_adder_stages = 1
-              ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                  middle_adder_stages = 0
+                ; post_adder_stages = 1
+                }
+            }
+          ; { k = (fun _ -> 24)
+            ; for_karatsuba =
+                { radix = Radix_2
+                ; pre_adder_stages = 1
+                ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                      is ok.
                 *)
-                middle_adder_stages = 1
-              ; post_adder_stages = 1
-              }
-          }
-        ]
-    ; ground_multiplier =
-        Mixed
-          { latency = 2
-          ; lut_only_hamming_weight_threshold = Some 6
-          ; hybrid_hamming_weight_threshold = None
-          }
-    }
+                  middle_adder_stages = 0
+                ; post_adder_stages = 1
+                }
+            }
+          ]
+      ; ground_multiplier =
+          Mixed
+            { latency = 2
+            ; lut_only_hamming_weight_threshold = Some 6
+            ; hybrid_hamming_weight_threshold = None
+            }
+      }
+    | Medium_pipelining ->
+      { levels =
+          [ { k = (fun _ -> 187)
+            ; for_karatsuba =
+                { radix = Radix_2
+                ; pre_adder_stages = 1
+                ; (* [middle_adder_stages] here is irrel. *)
+                  middle_adder_stages = 3
+                ; (* Adding up to 390 bit results *)
+                  post_adder_stages = 3
+                }
+            }
+          ; { k = (fun _ -> 94)
+            ; for_karatsuba =
+                { radix = Radix_2
+                ; pre_adder_stages = 1
+                ; middle_adder_stages = 2
+                ; post_adder_stages = 2
+                }
+            }
+          ; { k = (fun _ -> 48)
+            ; for_karatsuba =
+                { radix = Radix_2
+                ; pre_adder_stages = 1
+                ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                   is ok.
+                *)
+                  middle_adder_stages = 0
+                ; post_adder_stages = 1
+                }
+            }
+          ; { k = (fun _ -> 24)
+            ; for_karatsuba =
+                { radix = Radix_2
+                ; pre_adder_stages = 1
+                ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                     is ok.
+                *)
+                  middle_adder_stages = 0
+                ; post_adder_stages = 1
+                }
+            }
+          ]
+      ; ground_multiplier =
+          Mixed
+            { latency = 2
+            ; lut_only_hamming_weight_threshold = Some 6
+            ; hybrid_hamming_weight_threshold = None
+            }
+      }
   ;;
 
   let approx_msb_mult_332 =
@@ -180,45 +232,87 @@ module Config = struct
 
   let lsb_mult_2222 =
     let open Half_width_multiplier.Config in
-    { levels =
-        [ { radix = Radix_2
-          ; pre_adder_stages = 1
-          ; (* [middle_adder_stages] here is irrel. *)
-            middle_adder_stages = 1
-          ; post_adder_stages = 5
-          }
-        ; { radix = Radix_2
-          ; pre_adder_stages = 1
-          ; (* intermediate results has width of 42 bits. 1 stage pipeline
+    match Which_config.t with
+    | Heavy_pipelining ->
+      { levels =
+          [ { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; (* [middle_adder_stages] here is irrel. *)
+              middle_adder_stages = 1
+            ; post_adder_stages = 5
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; (* intermediate results has width of 42 bits. 1 stage pipeline
                  is sufficient.
             *)
-            middle_adder_stages = 1
-          ; post_adder_stages = 2
-          }
-        ; { radix = Radix_2
-          ; pre_adder_stages = 1
-          ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+              middle_adder_stages = 1
+            ; post_adder_stages = 2
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                  is ok.
             *)
-            middle_adder_stages = 1
-          ; post_adder_stages = 1
-          }
-        ; { radix = Radix_2
-          ; pre_adder_stages = 1
-          ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+              middle_adder_stages = 0
+            ; post_adder_stages = 1
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
                  is ok.
             *)
-            middle_adder_stages = 1
-          ; post_adder_stages = 1
-          }
-        ]
-    ; ground_multiplier =
-        Mixed
-          { latency = 2
-          ; lut_only_hamming_weight_threshold = Some 6
-          ; hybrid_hamming_weight_threshold = None
-          }
-    }
+              middle_adder_stages = 0
+            ; post_adder_stages = 1
+            }
+          ]
+      ; ground_multiplier =
+          Mixed
+            { latency = 2
+            ; lut_only_hamming_weight_threshold = Some 6
+            ; hybrid_hamming_weight_threshold = None
+            }
+      }
+    | Medium_pipelining ->
+      { levels =
+          [ { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; (* [middle_adder_stages] here is irrel. *)
+              middle_adder_stages = 3
+            ; post_adder_stages = 3
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; (* intermediate results has width of 42 bits. 1 stage pipeline
+                 is sufficient.
+            *)
+              middle_adder_stages = 1
+            ; post_adder_stages = 2
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                 is ok.
+            *)
+              middle_adder_stages = 0
+            ; post_adder_stages = 1
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; (* intermediate results is tiny. middle_adder_stages=1 (or even 0?)
+                 is ok.
+            *)
+              middle_adder_stages = 0
+            ; post_adder_stages = 1
+            }
+          ]
+      ; ground_multiplier =
+          Mixed
+            { latency = 2
+            ; lut_only_hamming_weight_threshold = Some 6
+            ; hybrid_hamming_weight_threshold = None
+            }
+      }
   ;;
 
   let for_bls12_377 =

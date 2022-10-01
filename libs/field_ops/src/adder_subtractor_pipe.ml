@@ -315,7 +315,7 @@ let sub ?name ?instance ~stages ~scope ~enable ~clock xs =
 
 let mixed_no_carry ?name ?instance ~stages ~scope ~enable ~clock ~init items =
   match stages with
-  | 1 ->
+  | 0 | 1 ->
     List.fold ~init items ~f:(fun acc item ->
       match item with
       | Term_and_op.Add x -> Signal.( +: ) acc x
