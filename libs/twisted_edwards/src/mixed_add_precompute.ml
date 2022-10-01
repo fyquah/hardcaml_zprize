@@ -96,33 +96,6 @@ module Make (Num_bits : Num_bits.S) = struct
 
   let concat_result { Adder_subtractor_pipe.O.carry; result } = carry @: result
 
-  (*let mod_add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
-    let spec = Reg_spec.create ~clock () in
-    let stages = config.adder_stages in
-    Modulo_adder_pipe.hierarchical
-      ~scope
-      ~clock
-      ~enable:vdd
-      ~stages:config.adder_stages
-      ~p:config.p
-      a
-      b
-    |> fun x ->
-    let n = latency config - Modulo_adder_pipe.latency ~stages in
-    assert (n >= 0);
-    if n = 0 then x else pipeline spec ~n ~enable:vdd x
-  ;;
-
-  let mod_sub_pipe ~scope:_ ~latency ~(config : Config.t) ~clock a b =
-    let spec = Reg_spec.create ~clock () in
-    let stages = config.subtractor_stages in
-    Modulo_subtractor_pipe.create ~clock ~enable:vdd ~stages ~p:config.p a b
-    |> fun x ->
-    let n = latency config - Modulo_adder_pipe.latency ~stages in
-    assert (n >= 0);
-    if n = 0 then x else pipeline spec ~n ~enable:vdd x
-  ;;*)
-
   let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
     assert (width a = width b);
     let spec = Reg_spec.create ~clock () in
