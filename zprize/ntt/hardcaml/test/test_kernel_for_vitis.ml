@@ -263,6 +263,7 @@ let%expect_test "vitis kernel test" =
     let logblocks = 0
     let support_4step_twiddle = true
     let memory_layout = Zprize_ntt.Memory_layout.Optimised_layout_single_port
+    let log_num_streams = 0
   end
   in
   let module Test = Make (Config) in
@@ -283,6 +284,7 @@ let%expect_test "2 blocks" =
     let logblocks = 1
     let support_4step_twiddle = true
     let memory_layout = Zprize_ntt.Memory_layout.Optimised_layout_single_port
+    let log_num_streams = 0
   end
   in
   let module Test = Make (Config) in
@@ -303,6 +305,7 @@ let%expect_test "normal layout" =
     let logblocks = 1
     let support_4step_twiddle = true
     let memory_layout = Zprize_ntt.Memory_layout.Normal_layout_single_port
+    let log_num_streams = 0
   end
   in
   let module Test = Make (Config) in

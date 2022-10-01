@@ -36,6 +36,7 @@ let command_top =
             let logblocks = logblocks
             let support_4step_twiddle = true
             let memory_layout = memory_layout
+            let log_num_streams = 0
           end)
         in
         let input_coefs =
@@ -90,6 +91,7 @@ let command_kernel_for_vitis =
             let logblocks = logblocks
             let support_4step_twiddle = true
             let memory_layout = memory_layout
+            let log_num_streams = 0
           end)
         in
         let input_coefs =

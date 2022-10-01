@@ -27,6 +27,7 @@ let command_kernel =
             let logcores = 3
             let logblocks = logblocks
             let memory_layout = memory_layout
+            let log_num_streams = 0
           end)
         in
         let module Circuit =

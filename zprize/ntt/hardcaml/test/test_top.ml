@@ -252,6 +252,7 @@ let run_test ~waves ~logn ~logcores ~logblocks =
     let logblocks = logblocks
     let support_4step_twiddle = true
     let memory_layout = Zprize_ntt.Memory_layout.Optimised_layout_single_port
+    let log_num_streams = 0
   end
   in
   let module Test = Make (Config) in
