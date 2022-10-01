@@ -70,7 +70,7 @@ struct
       end)
       (Scalar_config)
 
-  let fifo_capacity = (* Native BRAM depth*) 512
+  let fifo_capacity = 16
 
   let create scope (i : _ I.t) : _ O.t =
     let ctrl0_scalar = Array.slice i.scalar 0 ctrl0_windows in
@@ -88,7 +88,7 @@ struct
     let fifo0_rd = wire 1 in
     let fifo1_rd = wire 1 in
     let fifo0 =
-      Hardcaml_xilinx.Fifo_sync.create
+      Fifo.create_showahead_with_extra_reg
         ~overflow_check:true
         ~underflow_check:true
         ~scope
@@ -101,7 +101,7 @@ struct
         ()
     in
     let fifo1 =
-      Hardcaml_xilinx.Fifo_sync.create
+      Fifo.create_showahead_with_extra_reg
         ~overflow_check:true
         ~underflow_check:true
         ~scope
