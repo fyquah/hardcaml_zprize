@@ -7,7 +7,7 @@ module Make (Config : Config.S) = struct
   module Compact_stream = Compact_stream.Make (Config)
   module Top = Top.Make (Config)
   module Msm_result_to_host = Msm_result_to_host.Make (Config)
-  module Host_to_msm = Host_to_msm.Make (Config)
+  module Host_to_msm_simple = Host_to_msm_simple.Make (Config)
   module Merge_axi_streams = Merge_axi_streams.Make (Config)
   module Scalar_transformation = Scalar_transformation.Make (Config)
 
@@ -74,7 +74,7 @@ module Make (Config : Config.S) = struct
       transformed_scalars_to_fpga_dest';
     let scalar_and_input_point_ready = wire 1 in
     let host_to_msm =
-      Host_to_msm.hierarchical
+      Host_to_msm_simple.hierarchical
         scope
         { clock; clear; host_to_fpga; scalar_and_input_point_ready }
     in
