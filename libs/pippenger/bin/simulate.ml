@@ -24,6 +24,7 @@ let command_random =
     [%map_open.Command
       let waves = flag "-waves" no_arg ~doc:" show waveform"
       and verbose = flag "-verbose" no_arg ~doc:" show detailed results"
+      and debug = flag "-debug" no_arg ~doc:" use debug inputs"
       and can_stall = flag "-stall" no_arg ~doc:" random input stalls"
       and num_inputs = anon ("NUM_INPUTS" %: int)
       and window_size_bits =
@@ -44,14 +45,21 @@ let command_random =
           let log_stall_fifo_depth = 2
         end
         in
-        let module Test =
-          Pippenger_test.Test_pippenger.Test
-            (Config)
-            (struct
-              let window_size_bits = window_size_bits
-            end)
+        let module Scalar_config = struct
+          let window_size_bits = window_size_bits
+        end
         in
-        let data = Test.random_inputs num_inputs in
+        let module Test = Pippenger_test.Test_pippenger.Test (Config) (Scalar_config) in
+        print_s
+          [%message
+            (window_size_bits : int)
+              (num_windows : int)
+              (affine_point_bits : int)
+              (datapath_depth : int)
+              (num_inputs : int)];
+        let data =
+          if debug then Test.debug_inputs num_inputs else Test.random_inputs num_inputs
+        in
         let waves = Test.(test ~waves ~can_stall ~verbose data) in
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
@@ -65,6 +73,7 @@ let () =
          ; command_test_pippenger "no-stalls" test_no_stalls
          ; command_test_pippenger "with-stalls" test_with_stalls
          ; command_test_pippenger "fully-stall-window0" test_fully_stall_window0
+         ; command_test_pippenger "with-twenty-ones" test_with_twenty_ones
          ; "random", command_random
          ])
 ;;

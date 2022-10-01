@@ -24,7 +24,10 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     then
       let module V = Hardcaml_verilator.With_interface (Top.I) (Top.O) in
       V.create ~clock_names:[ "clock" ] ~cache_dir:"/tmp/top/" ~verbose:true create
-    else Sim.create ~config:Cyclesim.Config.trace_all create
+    else
+      Sim.create
+        ~config:{ Cyclesim.Config.trace_all with deduplicate_signals = false }
+        create
   ;;
 
   type result =
@@ -148,6 +151,7 @@ let%expect_test "Test over small input size and small number of scalars" =
     let scalar_bits = 9
     let controller_log_stall_fifo_depth = 2
     let num_windows = 4
+    let window_ram_partition_settings = None
   end
   in
   let module Test = Make (Config) in
