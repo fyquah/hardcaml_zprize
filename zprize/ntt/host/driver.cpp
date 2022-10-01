@@ -82,8 +82,10 @@ public:
 
 NttFpgaDriverArg::NttFpgaDriverArg(CoreType core_type,
                                    MemoryLayout memory_layout,
-                                   uint64_t log_row_size)
-  : core_type(core_type), memory_layout(memory_layout), log_row_size(log_row_size)
+                                   uint64_t log_row_size,
+                                   uint64_t log_blocks)
+  : core_type(core_type), memory_layout(memory_layout), log_row_size(log_row_size),
+    log_blocks(log_blocks)
 {
 }
 
@@ -95,30 +97,36 @@ uint64_t NttFpgaDriverArg::num_elements() {
   return row_size() * row_size();
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_reverse(MemoryLayout memory_layout, uint64_t log_row_size)
+NttFpgaDriverArg NttFpgaDriverArg::create_reverse(MemoryLayout memory_layout,
+                                                  uint64_t log_row_size,
+                                                  uint64_t log_blocks)
 {
-  return NttFpgaDriverArg(CoreType::REVERSE, memory_layout, log_row_size);
+  return NttFpgaDriverArg(CoreType::REVERSE, memory_layout, log_row_size, log_blocks);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_24(MemoryLayout memory_layout)
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_24(MemoryLayout memory_layout,
+                                                   uint64_t log_blocks)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_24, memory_layout, 12);
+  return NttFpgaDriverArg(CoreType::NTT_2_24, memory_layout, 12, log_blocks);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_18(MemoryLayout memory_layout)
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_18(MemoryLayout memory_layout,
+                                                   uint64_t log_blocks)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_18, memory_layout, 9);
+  return NttFpgaDriverArg(CoreType::NTT_2_18, memory_layout, 9, log_blocks);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_12(MemoryLayout memory_layout)
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_12(MemoryLayout memory_layout,
+                                                   uint64_t log_blocks)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_12, memory_layout, 6);
+  return NttFpgaDriverArg(CoreType::NTT_2_12, memory_layout, 6, log_blocks);
 }
 
 NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) : 
     core_type(driver_arg.core_type),
     memory_layout(driver_arg.memory_layout),
     log_row_size(driver_arg.log_row_size),
+    log_blocks(driver_arg.log_blocks),
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
     loaded_xclbin(false),
@@ -299,14 +307,6 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
           memcpy(out, buffer->output_data(), row_size * row_size * sizeof(uint64_t));
           break;
         case MemoryLayout::OPTIMIZED_LAYOUT: {
-          uint64_t logblocks;
-          if (row_size == (1 << 12)) {
-            logblocks = 3;
-          } else if (row_size == (1 << 6)) {
-            logblocks = 2;
-          } else {
-            assert(false);
-          }
           ntt_postprocessing(out, buffer->output_data(), row_size, logblocks);
           break;
         }

@@ -34,24 +34,25 @@ MemoryLayout memory_layout_from_string(std::string);
 
 class NttFpgaDriverArg {
 private:
-  NttFpgaDriverArg(CoreType core_type, MemoryLayout, uint64_t log_row_size);
+  NttFpgaDriverArg(CoreType core_type, MemoryLayout, uint64_t log_row_size, uint64_t log_blocks);
 
 public:
   const CoreType core_type;
   const MemoryLayout memory_layout;
   const uint64_t log_row_size;
+  const uint64_t log_blocks;
 
   uint64_t row_size();
 
   uint64_t num_elements();
 
-  static NttFpgaDriverArg create_ntt_2_24(MemoryLayout);
+  static NttFpgaDriverArg create_ntt_2_24(MemoryLayout, uint64_t log_blocks);
 
-  static NttFpgaDriverArg create_ntt_2_18(MemoryLayout);
+  static NttFpgaDriverArg create_ntt_2_18(MemoryLayout, uint64_t log_blocks);
 
-  static NttFpgaDriverArg create_ntt_2_12(MemoryLayout);
+  static NttFpgaDriverArg create_ntt_2_12(MemoryLayout, uint64_t log_blocks);
 
-  static NttFpgaDriverArg create_reverse(MemoryLayout, uint64_t log_row_size);
+  static NttFpgaDriverArg create_reverse(MemoryLayout, uint64_t log_row_size, uint64_t log_blocks);
 };
 
 class NttFpgaDriver {
@@ -88,6 +89,7 @@ private:
   const CoreType core_type;
   const MemoryLayout memory_layout;
   const uint64_t log_row_size;
+  const uint64_t log_blocks;
   const uint64_t row_size;
   const uint64_t matrix_size;
   bool loaded_xclbin;
