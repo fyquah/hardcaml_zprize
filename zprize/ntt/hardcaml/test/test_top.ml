@@ -3,7 +3,7 @@ open Hardcaml
 open Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Zprize_ntt.Top_config.S) = struct
   module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
   module Top = Zprize_ntt.Top.Make (Config)
   module Sim = Cyclesim.With_interface (Top.I) (Top.O)
@@ -12,7 +12,6 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   let n = 1 lsl logn
   let logcores = Config.logcores
   let logblocks = Config.logblocks
-  let logtotal = logblocks + logcores
   let num_cores = 1 lsl logcores
   let log_passes = logn - logcores
   let num_passes = 1 lsl log_passes
@@ -78,71 +77,92 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     cycle ()
   ;;
 
-  let grouped n l = List.groupi l ~break:(fun i _ _ -> i % n = 0)
-
-  let get_result_blocks (results : Bits.t list) =
-    let results =
-      List.rev results
-      |> List.map ~f:(fun b -> Bits.split_lsb ~part_width:64 b)
-      |> List.concat
-      |> List.map ~f:(fun b -> Gf.Bits.of_bits b |> Gf.Bits.to_z |> Gf.Z.of_z)
-    in
-    results
-    |> grouped (1 lsl (logtotal + logtotal))
-    |> List.map ~f:(fun x ->
-         grouped (1 lsl logtotal) x |> List.map ~f:Array.of_list |> Array.of_list)
-  ;;
-
-  let get_results (results : Bits.t list) =
-    let blocks = ref (get_result_blocks results) in
-    let out = Array.init n ~f:(fun _ -> Array.init n ~f:(Fn.const Gf.Z.zero)) in
-    for block_col = 0 to (n lsr logtotal) - 1 do
-      for block_row = 0 to (n lsr logtotal) - 1 do
-        match !blocks with
-        | [] -> raise_s [%message "not enough result blocks"]
-        | block :: tl ->
-          for row = 0 to (1 lsl logtotal) - 1 do
-            for col = 0 to (1 lsl logtotal) - 1 do
-              out.((block_row lsl logtotal) + row).((block_col lsl logtotal) + col)
-                <- block.(row).(col)
-            done
-          done;
-          blocks := tl
+  let convert_to_first_pass_input_optimised_layout inputs =
+    let t = Array.init (n * n) ~f:(Fn.const Gf.Z.zero) in
+    let pos = ref 0 in
+    for block_col = 0 to (n lsr logcores) - 1 do
+      for row = 0 to n - 1 do
+        for i = 0 to num_cores - 1 do
+          t.(!pos) <- inputs.(row).((block_col * num_cores) + i);
+          Int.incr pos
+        done
       done
     done;
-    if not (List.is_empty !blocks) then raise_s [%message "too many blocks"];
-    out
+    assert (!pos = n * n);
+    t
   ;;
 
-  let _get_results results =
+  let convert_to_first_pass_input_normal_layout inputs =
+    let t = Array.init (n * n) ~f:(Fn.const Gf.Z.zero) in
+    let pos = ref 0 in
+    for block_col = 0 to (n lsr (logcores + logblocks)) - 1 do
+      for row = 0 to n - 1 do
+        for i = 0 to (num_cores * num_blocks) - 1 do
+          t.(!pos) <- inputs.(row).((block_col * (num_cores * num_blocks)) + i);
+          Int.incr pos
+        done
+      done
+    done;
+    assert (!pos = n * n);
+    t
+  ;;
+
+  let convert_to_first_pass_input =
+    match (Config.memory_layout : Zprize_ntt.Memory_layout.t) with
+    | Normal_layout_single_port -> convert_to_first_pass_input_normal_layout
+    | Optimised_layout_single_port -> convert_to_first_pass_input_optimised_layout
+    | Normal_layout_multi_port -> raise_s [%message "Not implemented"]
+  ;;
+
+  let convert_first_pass_output_to_matrix output =
+    let convert_packed_block t output ~pos ~row ~col =
+      for r = 0 to num_cores - 1 do
+        for c = 0 to num_cores - 1 do
+          t.(row + r).(col + c) <- output.(pos + c + (r * num_cores))
+        done
+      done
+    in
+    let convert_packed_blocks t output ~pos ~row ~col =
+      for block = 0 to num_blocks - 1 do
+        convert_packed_block
+          t
+          output
+          ~pos:(pos + (block * num_cores * num_cores))
+          ~row
+          ~col:(col + (block * num_cores))
+      done
+    in
+    (* Uncomment for debugging. *)
+    (* print_matrix [| output |]; *)
+    let t = Array.init n ~f:(fun _ -> Array.init n ~f:(Fn.const Gf.Z.zero)) in
+    for col = 0 to (1 lsl (logn - logcores - logblocks)) - 1 do
+      for row = 0 to (1 lsl (logn - logcores)) - 1 do
+        convert_packed_blocks
+          t
+          output
+          ~pos:
+            ((col * n * num_cores * num_blocks)
+            + (row * num_cores * num_cores * num_blocks))
+          ~row:(row * num_cores)
+          ~col:(col * num_cores * num_blocks)
+      done
+    done;
+    t
+  ;;
+
+  let get_first_pass_results (results : Bits.t list) =
     let results =
-      List.rev results
-      |> List.map ~f:(fun b -> Bits.split_lsb ~part_width:64 b |> Array.of_list)
-      |> Array.of_list
+      List.map (List.rev results) ~f:(fun x -> Bits.split_lsb ~part_width:64 x)
+      |> List.concat
     in
-    let n = 1 lsl logn in
-    let got_length =
-      Array.fold results ~init:0 ~f:(fun acc results -> acc + Array.length results)
+    let results =
+      Array.of_list
+        (List.map results ~f:(fun x -> Gf.Bits.of_bits x |> Gf.Bits.to_z |> Gf.Z.of_z))
     in
-    let expected_length = n * n in
-    if got_length <> expected_length
-    then
-      raise_s
-        [%message
-          "results length is incorrect" (got_length : int) (expected_length : int)];
-    Array.init n ~f:(fun row ->
-      let pass = row / num_cores in
-      let core = row % num_cores in
-      Array.init n ~f:(fun col ->
-        let idx = (pass * num_cores * (n / num_cores)) + col in
-        Gf.Bits.of_bits results.(idx).(core) |> Gf.Bits.to_z |> Gf.Z.of_z))
+    results
   ;;
 
-  let expected ~verbose ~first_4step_pass input_coefs hw_results =
-    let sw_results = copy_matrix input_coefs in
-    Array.iter sw_results ~f:Reference_model.inverse_dit;
-    if first_4step_pass then twiddle sw_results;
-    let sw_results = transpose sw_results in
+  let print_results ~verbose ~input_coefs ~sw_results ~hw_results ~pass =
     if verbose
     then
       List.iter
@@ -151,20 +171,24 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
           printf "\n%s\n\n" n;
           print_matrix m);
     if [%equal: Gf.Z.t array array] hw_results sw_results
-    then print_s [%message "Hardware and software reference results match!"]
-    else raise_s [%message "ERROR: Hardware and software results do not match :("]
+    then
+      print_s [%message "Hardware and software reference results match!" (pass : string)]
+    else
+      raise_s
+        [%message "ERROR: Hardware and software results do not match :(" (pass : string)]
   ;;
 
-  let run
-    ?(verbose = false)
-    ?(waves = false)
-    ~first_4step_pass
-    (input_coefs : Z.t array array)
-    =
-    if verbose
-    then print_s [%message (logcores : int) (logblocks : int) (log_passes : int)];
-    let sim, waves, inputs, outputs = create_sim waves in
-    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf.Z.of_z) in
+  let check_first_pass_output ~verbose input_coefs hw_results =
+    let hw_results = convert_first_pass_output_to_matrix hw_results in
+    (* column transform, followed by twiddles *)
+    let sw_results = transpose (copy_matrix input_coefs) in
+    Array.iter sw_results ~f:Reference_model.inverse_dit;
+    twiddle sw_results;
+    let sw_results = transpose sw_results in
+    print_results ~verbose ~input_coefs ~sw_results ~hw_results ~pass:"first"
+  ;;
+
+  let create_cycle sim (outputs : _ Top.O.t) =
     let results = ref [] in
     let cycles = ref 0 in
     let rec cycle ?(n = 1) () =
@@ -175,51 +199,35 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
       Int.incr cycles;
       if n <> 1 then cycle ~n:(n - 1) ()
     in
+    results, cycles, cycle
+  ;;
+
+  let run_first_pass ?(verbose = false) ?(waves = false) (input_coefs : Z.t array array) =
+    if verbose
+    then print_s [%message (logcores : int) (logblocks : int) (log_passes : int)];
+    let sim, waves, inputs, outputs = create_sim waves in
+    let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf.Z.of_z) in
+    let results, cycles, cycle = create_cycle sim outputs in
     start_sim inputs cycle;
-    inputs.first_4step_pass := Bits.of_bool first_4step_pass;
-    if first_4step_pass
-    then
-      for pass = 0 to (num_passes / num_blocks) - 1 do
-        (* wait for tready *)
-        while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
-          cycle ()
-        done;
-        for i = 0 to n - 1 do
-          for block = 0 to num_blocks - 1 do
-            let row_base_index = ((pass * num_blocks) + block) * num_cores in
-            inputs.data_in.tvalid := Bits.vdd;
-            inputs.data_in.tdata
-              := List.init num_cores ~f:(fun core ->
-                   input_coefs.(row_base_index + core).(i))
-                 |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
-                 |> Bits.concat_lsb;
-            cycle ()
-          done
-        done;
-        inputs.data_in.tvalid := Bits.gnd;
-        (* A few cycles of flushing after each pass *)
-        cycle ~n:4 ()
-      done
-    else
-      for pass = 0 to num_passes - 1 do
-        (* wait for tready *)
-        while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
-          cycle ()
-        done;
-        for i = 0 to n - 1 do
-          let row_base_index = pass * num_cores in
-          inputs.data_in.tvalid := Bits.vdd;
-          inputs.data_in.tdata
-            := List.init num_cores ~f:(fun core ->
-                 input_coefs.(row_base_index + core).(i))
-               |> List.map ~f:(fun z -> Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z z)))
-               |> Bits.concat_lsb;
-          cycle ()
-        done;
-        inputs.data_in.tvalid := Bits.gnd;
-        (* A few cycles of flushing after each pass *)
-        cycle ~n:4 ()
+    inputs.first_4step_pass := Bits.of_bool true;
+    let coefs = convert_to_first_pass_input input_coefs in
+    while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
+      cycle ()
+    done;
+    for i = 0 to (Array.length coefs lsr logcores) - 1 do
+      while not (Bits.to_bool !(outputs.data_in_dest.tready)) do
+        cycle ()
       done;
+      inputs.data_in.tvalid := Bits.vdd;
+      inputs.data_in.tdata
+        := List.init num_cores ~f:(fun j ->
+             coefs.((i lsl logcores) + j) |> Gf.Z.to_z |> Gf.Bits.of_z |> Gf.Bits.to_bits)
+           |> Bits.concat_lsb;
+      cycle ()
+    done;
+    inputs.data_in.tvalid := Bits.gnd;
+    (* A few cycles of flushing after each pass *)
+    cycle ~n:4 ();
     (* wait for the core to complete. *)
     while not (Bits.to_bool !(outputs.done_)) do
       cycle ()
@@ -227,45 +235,31 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     cycle ~n:4 ();
     print_s [%message (!cycles : int)];
     (try
-       let hw_results = get_results !results in
-       expected ~verbose ~first_4step_pass input_coefs hw_results
+       let hw_results = get_first_pass_results !results in
+       check_first_pass_output ~verbose input_coefs hw_results
      with
      | e -> print_s [%message "RAISED :(" (e : exn)]);
     waves
   ;;
+
+  let run ?verbose ?waves input_coefs = run_first_pass ?verbose ?waves input_coefs
 end
 
-module Config = struct
-  let logn = 5
-  let logcores = 3
-  let logblocks = 0
-  let support_4step_twiddle = true
-end
-
-module Test = Make (Config)
-
-let run_test ~waves ~logn ~logcores ~logblocks ~support_4step_twiddle ~first_4step_pass =
+let run_test ~waves ~logn ~logcores ~logblocks =
   let module Config = struct
     let logn = logn
     let logcores = logcores
     let logblocks = logblocks
-    let support_4step_twiddle = support_4step_twiddle || first_4step_pass
+    let support_4step_twiddle = true
+    let memory_layout = Zprize_ntt.Memory_layout.Optimised_layout_single_port
   end
   in
   let module Test = Make (Config) in
-  Test.run ~waves ~first_4step_pass (Test.random_input_coef_matrix ())
+  Test.run ~waves (Test.random_input_coef_matrix ())
 ;;
 
-let%expect_test "single core, no twiddles" =
-  let waves =
-    run_test
-      ~waves:false
-      ~logn:4
-      ~logcores:0
-      ~logblocks:0
-      ~support_4step_twiddle:false
-      ~first_4step_pass:false
-  in
+let%expect_test "single core" =
+  let waves = run_test ~waves:false ~logn:4 ~logcores:0 ~logblocks:0 in
   Option.iter
     waves
     ~f:
@@ -274,114 +268,52 @@ let%expect_test "single core, no twiddles" =
          ~display_width:94
          ~display_height:80
          ~wave_width:(-1));
-  [%expect {|
-    (!cycles 1156)
-    "Hardware and software reference results match!" |}]
-;;
-
-let%expect_test "8 cores, no twiddles" =
-  ignore
-    (run_test
-       ~waves:false
-       ~logn:4
-       ~logcores:3
-       ~logblocks:0
-       ~support_4step_twiddle:false
-       ~first_4step_pass:false
-      : Waveform.t option);
-  [%expect {|
-    (!cycles 190)
-    "Hardware and software reference results match!" |}]
-;;
-
-let%expect_test "2 cores, 2 blocks, no twiddles" =
-  ignore
-    (run_test
-       ~waves:false
-       ~logn:4
-       ~logcores:1
-       ~logblocks:1
-       ~support_4step_twiddle:false
-       ~first_4step_pass:false
-      : Waveform.t option);
-  [%expect
-    {|
-    (!cycles 364)
-    "Hardware and software reference results match!" |}]
-;;
-
-let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
-  ignore
-    (run_test
-       ~waves:false
-       ~logn:5
-       ~logcores:2
-       ~logblocks:2
-       ~support_4step_twiddle:true
-       ~first_4step_pass:true
-      : Waveform.t option);
-  ignore
-    (run_test
-       ~waves:false
-       ~logn:5
-       ~logcores:2
-       ~logblocks:2
-       ~support_4step_twiddle:true
-       ~first_4step_pass:false
-      : Waveform.t option);
-  [%expect
-    {|
-    (!cycles 617)
-    "Hardware and software reference results match!"
-    (!cycles 570)
-    "Hardware and software reference results match!" |}]
-;;
-
-let%expect_test "other configurations with twiddles" =
-  ignore
-    (run_test
-       ~waves:false
-       ~logn:5
-       ~logcores:0
-       ~logblocks:2
-       ~support_4step_twiddle:true
-       ~first_4step_pass:true
-      : Waveform.t option);
-  ignore
-    (run_test
-       ~waves:false
-       ~logn:5
-       ~logcores:2
-       ~logblocks:0
-       ~support_4step_twiddle:true
-       ~first_4step_pass:true
-      : Waveform.t option);
-  ignore
-    (run_test
-       ~waves:false
-       ~logn:5
-       ~logcores:1
-       ~logblocks:3
-       ~support_4step_twiddle:true
-       ~first_4step_pass:true
-      : Waveform.t option);
-  ignore
-    (run_test
-       ~waves:false
-       ~logn:5
-       ~logcores:3
-       ~logblocks:1
-       ~support_4step_twiddle:true
-       ~first_4step_pass:true
-      : Waveform.t option);
   [%expect
     {|
     (!cycles 1661)
-    "Hardware and software reference results match!"
+    ("Hardware and software reference results match!" (pass first)) |}]
+;;
+
+let%expect_test "8 cores" =
+  ignore (run_test ~waves:false ~logn:4 ~logcores:3 ~logblocks:0 : Waveform.t option);
+  [%expect
+    {|
+    (!cycles 247)
+    ("Hardware and software reference results match!" (pass first)) |}]
+;;
+
+let%expect_test "2 cores, 2 blocks" =
+  ignore (run_test ~waves:false ~logn:4 ~logcores:1 ~logblocks:1 : Waveform.t option);
+  [%expect
+    {|
+    (!cycles 481)
+    ("Hardware and software reference results match!" (pass first)) |}]
+;;
+
+let%expect_test "4 cores, 4 blocks, twiddles 1st and 2nd stages" =
+  ignore (run_test ~waves:false ~logn:5 ~logcores:2 ~logblocks:2 : Waveform.t option);
+  [%expect
+    {|
+    (!cycles 617)
+    ("Hardware and software reference results match!" (pass first)) |}]
+;;
+
+let%expect_test "other configurations with twiddles" =
+  ignore (run_test ~waves:false ~logn:4 ~logcores:0 ~logblocks:0 : Waveform.t option);
+  ignore (run_test ~waves:false ~logn:5 ~logcores:0 ~logblocks:2 : Waveform.t option);
+  ignore (run_test ~waves:false ~logn:5 ~logcores:2 ~logblocks:0 : Waveform.t option);
+  ignore (run_test ~waves:false ~logn:5 ~logcores:1 ~logblocks:3 : Waveform.t option);
+  ignore (run_test ~waves:false ~logn:5 ~logcores:3 ~logblocks:1 : Waveform.t option);
+  [%expect
+    {|
+    (!cycles 1661)
+    ("Hardware and software reference results match!" (pass first))
+    (!cycles 1661)
+    ("Hardware and software reference results match!" (pass first))
     (!cycles 1469)
-    "Hardware and software reference results match!"
-    (!cycles 1058)
-    "Hardware and software reference results match!"
+    ("Hardware and software reference results match!" (pass first))
+    (!cycles 1057)
+    ("Hardware and software reference results match!" (pass first))
     (!cycles 489)
-    "Hardware and software reference results match!" |}]
+    ("Hardware and software reference results match!" (pass first)) |}]
 ;;

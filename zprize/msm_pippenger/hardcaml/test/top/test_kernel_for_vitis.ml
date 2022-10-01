@@ -93,6 +93,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     |> Int.round_up ~to_multiple_of:axi_bits
   ;;
 
+  let aligned_scalar_bits = Config.scalar_bits |> Int.round_up ~to_multiple_of:aligned_to
+
   let run ?sim ?(waves = true) ~seed ~timeout ~verilator num_inputs () =
     let cycle_cnt = ref 0 in
     let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
@@ -107,6 +109,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     Cyclesim.cycle sim;
+    i.fpga_to_host_dest.tready := Bits.vdd;
     let points =
       Array.map inputs ~f:(fun input ->
         let b =
@@ -128,8 +131,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         Array.map inputs ~f:(fun input -> Bits.uresize input.scalar aligned_scalar_bits)
         |> Bits.of_array
       in
-      Bits.uresize b (Int.round_up (Bits.width b) ~to_multiple_of:axi_bits)
-      |> Bits.split_lsb ~part_width:axi_bits
+      let b = Bits.uresize b (Int.round_up (Bits.width b) ~to_multiple_of:axi_bits) in
+      Bits.split_lsb ~part_width:axi_bits b
     in
     cycle_cnt := 0;
     let rec send_data data _ : unit Tb_axi_send.t =
@@ -139,20 +142,14 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         let%bind _ = Tb_axi_send.cycle Tb_axi_send.input_zero in
         return ())
       else (
-        let rec wait_for_tvalid _ : Tb_axi_send.O_data.t Tb_axi_send.t =
-          (* Hardcoded 20% for tvalid to go low. *)
-          let tvalid = if Random.int 100 > 80 then Bits.gnd else Bits.vdd in
-          let%bind o =
-            Tb_axi_send.cycle
-              { Tb_axi_send.input_hold with
-                tvalid
-              ; tdata = List.hd_exn data
-              ; tlast = (if List.length data = 1 then Bits.vdd else Bits.gnd)
-              }
-          in
-          if Bits.is_vdd tvalid then return o else wait_for_tvalid ()
+        let%bind o =
+          Tb_axi_send.cycle
+            { Tb_axi_send.input_hold with
+              tvalid = Bits.vdd
+            ; tdata = List.hd_exn data
+            ; tlast = (if List.length data = 1 then Bits.vdd else Bits.gnd)
+            }
         in
-        let%bind o = wait_for_tvalid () in
         let rec wait_for_tready (o : Tb_axi_send.O_data.t) =
           if Bits.is_vdd o.before_edge.tready
           then return ()
@@ -163,12 +160,11 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         let%bind () = wait_for_tready o in
         send_data (List.tl_exn data) o)
     in
+    let cc = ref 0 in
     let open! Tb_axi_recv.Let_syntax in
-    let rec recv_data data tready (output : Tb_axi_recv.O_data.t)
-      : Bits.t list Tb_axi_recv.t
-      =
-      let result = Tb_axi_recv.O_data.before_edge output in
-      if not (Bits.is_vdd result.tvalid && Bits.is_vdd tready)
+    let rec recv_data data (output : Tb_axi_recv.O_data.t) : Bits.t list Tb_axi_recv.t =
+      let result = Tb_axi_recv.O_data.after_edge output in
+      if Bits.to_int result.tvalid <> 1
       then wait_for_next_cycle data
       else (
         let data = result.tdata :: data in
@@ -176,9 +172,9 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         then return (List.rev data)
         else wait_for_next_cycle data)
     and wait_for_next_cycle data =
-      let tready = if Random.int 100 > 80 then Bits.gnd else Bits.vdd in
-      let%bind output = Tb_axi_recv.cycle { tready } in
-      recv_data data tready output
+      Int.incr cc;
+      let%bind output = Tb_axi_recv.cycle { tready = Bits.vdd } in
+      recv_data data output
     in
     let open! Tb.Let_syntax in
     let testbench _ =
@@ -210,7 +206,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
                 Tb_axi_recv.merge_inputs ~parent:parent.fpga_to_host_dest ~child
             })
           ~outputs:(fun parent -> parent.O.fpga_to_host)
-          (recv_data [] !(i.fpga_to_host_dest.tready))
+          (recv_data [])
       in
       let%bind data = Tb.wait_for receive_finished in
       let%bind () = Tb.wait_for send_scalars_finished in
@@ -223,12 +219,16 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let bucket = ref (Config_utils.num_buckets 0) in
     let window = ref 0 in
     Option.iter recv_data ~f:(fun recv_data ->
+      let data = List.to_array recv_data in
       let points =
-        Bits.split_lsb
-          (Bits.concat_lsb recv_data)
-          ~part_width:(num_clocks_per_output * axi_bits)
+        Array.init
+          (Array.length data / num_clocks_per_output)
+          ~f:(fun point ->
+            Bits.of_array
+              (Array.init num_clocks_per_output ~f:(fun point_word ->
+                 data.((point * num_clocks_per_output) + point_word))))
       in
-      List.iter points ~f:(fun point ->
+      Array.iter points ~f:(fun point ->
         let to_z b = Bits.to_constant b |> Constant.to_z ~signedness:Unsigned in
         let extended : Utils.Twisted_edwards.extended =
           { x = to_z (Bits.select point (Config.field_bits - 1) 0)

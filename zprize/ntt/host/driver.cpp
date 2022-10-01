@@ -1,6 +1,8 @@
 #include <assert.h>
 
 #include "driver.h"
+#include "ntt_preprocessing.h"
+#include "ntt_postprocessing.h"
 
 namespace argpos {
   const uint64_t GMEM_INPUT = 3;
@@ -9,6 +11,7 @@ namespace argpos {
   const uint64_t ROW_SIZE = 6;
   const uint64_t PHASE = 7;
 };  // argpos
+
 
 std::ostream& operator<<(std::ostream &os, CoreType core_type)
 {
@@ -30,6 +33,36 @@ std::ostream& operator<<(std::ostream &os, CoreType core_type)
 }
 
 
+std::ostream& operator<<(std::ostream &os, MemoryLayout memory_layout)
+{
+  switch (memory_layout) {
+  case MemoryLayout::NORMAL_LAYOUT:
+    return os << "NORMAL_LAYOUT";
+
+  case MemoryLayout::OPTIMIZED_LAYOUT:
+    return os << "OPTIMIZED_LAYOUT";
+  }
+
+  assert(false);
+}
+
+MemoryLayout memory_layout_from_string(std::string s)
+{
+  if (s == "NORMAL_LAYOUT") {
+    return MemoryLayout::NORMAL_LAYOUT;
+  }
+
+  if (s == "OPTIMIZED_LAYOUT") {
+    return MemoryLayout::NORMAL_LAYOUT;
+  }
+
+  std::string error_message;
+  error_message.append("Failed to parse memory layout ");
+  error_message.append(s);
+  throw std::runtime_error(error_message);
+}
+
+
 class LogTimeTaken {
 private:
   const char *descr;
@@ -47,8 +80,10 @@ public:
 };
 
 
-NttFpgaDriverArg::NttFpgaDriverArg(CoreType core_type, uint64_t log_row_size)
-  : core_type(core_type), log_row_size(log_row_size)
+NttFpgaDriverArg::NttFpgaDriverArg(CoreType core_type,
+                                   MemoryLayout memory_layout,
+                                   uint64_t log_row_size)
+  : core_type(core_type), memory_layout(memory_layout), log_row_size(log_row_size)
 {
 }
 
@@ -60,28 +95,29 @@ uint64_t NttFpgaDriverArg::num_elements() {
   return row_size() * row_size();
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_reverse(uint64_t log_row_size)
+NttFpgaDriverArg NttFpgaDriverArg::create_reverse(MemoryLayout memory_layout, uint64_t log_row_size)
 {
-  return NttFpgaDriverArg(CoreType::REVERSE, log_row_size);
+  return NttFpgaDriverArg(CoreType::REVERSE, memory_layout, log_row_size);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_24()
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_24(MemoryLayout memory_layout)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_24, 12);
+  return NttFpgaDriverArg(CoreType::NTT_2_24, memory_layout, 12);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_18()
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_18(MemoryLayout memory_layout)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_18, 9);
+  return NttFpgaDriverArg(CoreType::NTT_2_18, memory_layout, 9);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_12()
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_12(MemoryLayout memory_layout)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_12, 6);
+  return NttFpgaDriverArg(CoreType::NTT_2_12, memory_layout, 6);
 }
 
 NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) : 
     core_type(driver_arg.core_type),
+    memory_layout(driver_arg.memory_layout),
     log_row_size(driver_arg.log_row_size),
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
@@ -229,15 +265,28 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
 
   bench("Evaluate NTT", [&]() {
     bench("Copy to internal page-aligned buffer", [&](){
-        memcpy(buffer->input_data(), in, sizeof(uint64_t) * data_length);
+        switch (memory_layout) {
+        case MemoryLayout::NORMAL_LAYOUT:
+          memcpy(buffer->input_data(), in, row_size * row_size * sizeof(uint64_t));
+          break;
+        case MemoryLayout::OPTIMIZED_LAYOUT:
+          ntt_preprocessing(buffer->input_data(), in, row_size);
+          break;
+        }
     });
 
     bench("Copying input points to device", [&]() {
         expert__transfer_data_to_fpga_blocking(buffer);
     });
 
-    bench("Doing NTT (phase1 + twiddling + phase2)", [&]() {
-        expert__evaluate_on_fpga_blocking(buffer);
+    bench("Doing NTT (phase1)", [&]() {
+        enqueue_phase1_work(buffer);
+        OCL_CHECK(err, err = buffer->ev_phase1_work.wait());
+    });
+
+    bench("Doing NTT (phase2)", [&]() {
+  enqueue_phase2_work(buffer);
+        OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
     });
 
     bench("Copying final result to host", [&]() {
@@ -245,7 +294,23 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
     });
 
     bench("Copy from internal page-aligned buffer", [&]() {
-      memcpy(out, buffer->output_data(), sizeof(uint64_t) * data_length);
+        switch (memory_layout) {
+        case MemoryLayout::NORMAL_LAYOUT:
+          memcpy(out, buffer->output_data(), row_size * row_size * sizeof(uint64_t));
+          break;
+        case MemoryLayout::OPTIMIZED_LAYOUT: {
+          uint64_t logblocks;
+          if (row_size == (1 << 12)) {
+            logblocks = 3;
+          } else if (row_size == (1 << 6)) {
+            logblocks = 2;
+          } else {
+            assert(false);
+          }
+          ntt_postprocessing(out, buffer->output_data(), row_size, logblocks);
+          break;
+        }
+        }
     });
   });
 
@@ -267,7 +332,10 @@ void NttFpgaDriver::simple_evaluate(uint64_t *out, const uint64_t *in, uint64_t 
 }
 
 void NttFpgaDriver::expert__evaluate_on_fpga_blocking(UserBuffer* buffer) {
+  std::cout << "Enqueued phase1 work and waiting" << std::endl;
   enqueue_phase1_work(buffer);
+  OCL_CHECK(err, err = buffer->ev_phase1_work.wait());
+  std::cout << "Enqueued phase2 work and waiting" << std::endl;
   enqueue_phase2_work(buffer);
   OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
 }

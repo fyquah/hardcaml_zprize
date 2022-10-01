@@ -23,6 +23,7 @@ run_ntt_test(host_args_t host_args)
     << "Running ntt-fpga test with\n"
     << "  binaryFile =  "  << host_args.binaryFile << "\n"
     << "  core_type "      << driver_arg.core_type << "\n"
+    << "  memory_layout "  << driver_arg.memory_layout << "\n"
     << "  log_row_size = " << driver_arg.log_row_size << "\n";
 
   NttFpgaDriver driver(driver_arg);
@@ -115,6 +116,7 @@ run_ntt_test(host_args_t host_args)
 static const char *flag_xcl_bin_file   = "--xclbin";
 static const char *flag_log_row_size   = "--log-row-size";
 static const char *flag_core_type      = "--core-type";
+static const char *flag_memory_layout  = "--memory-layout";
 static const char *flag_num_test_cases = "--num-test-cases";
 
 static host_args_t
@@ -124,6 +126,7 @@ parse_args(int argc, char **argv)
   uint64_t log_row_size = 0;
   std::string error_message;
   char *core_type = nullptr;
+  char *memory_layout = nullptr;
   uint64_t num_test_cases = 1;
   
   auto print_usage = [=]() {
@@ -131,6 +134,7 @@ parse_args(int argc, char **argv)
       << argv[0] << " "
       << flag_xcl_bin_file << " <FILENAME> " 
       << flag_core_type    << " <REVERSE|NTT> "
+      << flag_memory_layout    << " <NORMAL_LAYOUT|OPTIMIZED_LAYOUT> "
       << "[" << flag_log_row_size << " <LOG-ROW-SIZE>] "
       << "[" << flag_num_test_cases << " <NUM-TEST-CASES>] "
       << std::endl;
@@ -175,6 +179,11 @@ parse_args(int argc, char **argv)
       continue;
     }
 
+    if (strcmp(*argv, flag_memory_layout) == 0) {
+      memory_layout = capture_next_arg(flag_memory_layout);
+      continue;
+    }
+
     print_usage();
     error_message
         .append("Unknown flag: ")
@@ -182,7 +191,7 @@ parse_args(int argc, char **argv)
     throw std::runtime_error(error_message);
   }
 
-  if (binaryFile.empty() || core_type == nullptr) {
+  if (binaryFile.empty() || core_type == nullptr || memory_layout == nullptr) {
     print_usage();
     error_message.append("Missing flags?");
     throw std::runtime_error(error_message);
@@ -191,6 +200,9 @@ parse_args(int argc, char **argv)
   // resolve the right driver_arg
 
   NttFpgaDriverArg driver_arg([&]() {
+    MemoryLayout parsed_memory_layout = memory_layout_from_string(
+        std::string(memory_layout));
+
     auto throw_if_log_row_size_set = [&]() {
       if (log_row_size) {
         error_message.append(flag_log_row_size);
@@ -200,15 +212,15 @@ parse_args(int argc, char **argv)
     };
     if (strcmp(core_type, "NTT-2_12") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_12();
+      return NttFpgaDriverArg::create_ntt_2_12(parsed_memory_layout);
 
     } else if (strcmp(core_type, "NTT-2_18") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_18();
+      return NttFpgaDriverArg::create_ntt_2_18(parsed_memory_layout);
 
     } else if (strcmp(core_type, "NTT-2_24") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_24();
+      return NttFpgaDriverArg::create_ntt_2_24(parsed_memory_layout);
 
     } else if (strcmp(core_type, "REVERSE") == 0) {
       if (!log_row_size) {
@@ -217,7 +229,7 @@ parse_args(int argc, char **argv)
         error_message.append(" must be specified as a non-zero value when core_type is REVERSE");
         throw std::runtime_error(error_message);
       }
-      return NttFpgaDriverArg::create_reverse(log_row_size);
+      return NttFpgaDriverArg::create_reverse(parsed_memory_layout, log_row_size);
 
     }
 
