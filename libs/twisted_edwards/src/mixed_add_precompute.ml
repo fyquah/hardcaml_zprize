@@ -111,7 +111,7 @@ module Make (Num_bits : Num_bits.S) = struct
     type 'a t =
       { p1 : 'a Xyzt.t [@rtlprefix "p1$"]
       ; p2 : 'a Xyt.t [@rtlprefix "p2$"]
-      ; subtract : 'a
+      ; subtract : 'a [@rtlname "input_subtract"]
       ; valid : 'a [@rtlname "input_valid"]
       }
     [@@deriving sexp_of, hardcaml]
@@ -132,7 +132,7 @@ module Make (Num_bits : Num_bits.S) = struct
         ; p2 : 'a Xyt.t [@rtlprefix "o_p2$"]
         ; y1_plus_x1 : 'a [@bits num_bits]
         ; y1_minus_x1 : 'a [@bits num_bits]
-        ; subtract : 'a
+        ; subtract : 'a [@rtlname "stage0_subtract"]
         ; valid : 'a [@rtlname "stage0_valid"]
         }
       [@@deriving sexp_of, hardcaml]
@@ -188,7 +188,7 @@ module Make (Num_bits : Num_bits.S) = struct
         { valid : 'a [@rtlname "stage_1avalid"]
         ; c_A : 'a [@bits num_bits]
         ; c_B : 'a [@bits num_bits]
-        ; subtract : 'a
+        ; subtract : 'a [@rtlname "stage1a_subtract"]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -255,7 +255,7 @@ module Make (Num_bits : Num_bits.S) = struct
       type 'a t =
         { c_C : 'a [@bits num_bits]
         ; c_D : 'a [@bits num_bits]
-        ; subtract : 'a
+        ; subtract : 'a [@rtlname "stage1b_subtract"]
         ; valid : 'a [@rtlname "stage1_valid"]
         }
       [@@deriving sexp_of, hardcaml]

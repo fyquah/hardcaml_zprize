@@ -233,7 +233,7 @@ module Make (Config : Config.S) = struct
               let o =
                 { Window_ram.Partition.window_size_bits =
                     List.init partition_setting.num_windows ~f:(fun i ->
-                      num_buckets (i + !window_offset))
+                      Int.ceil_log2 (num_buckets (i + !window_offset)))
                 ; slr =
                     Some
                       (match partition_setting.slr with
@@ -256,6 +256,7 @@ module Make (Config : Config.S) = struct
         List.init num_windows ~f:num_buckets
         |> List.max_elt ~compare:Int.compare
         |> Option.value_exn
+        |> Int.ceil_log2
       in
       Window_ram.hierarchical
         ~build_mode
