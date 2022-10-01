@@ -23,9 +23,8 @@ namespace prefetch {
 
 static void inline __attribute__ ((always_inline))
 ntt_preprocessing_impl(uint64_t *arg_dst, const uint64_t *arg_in, uint64_t row_size){
-  // uint64_t *dst = (uint64_t*) __builtin_assume_aligned((void*) arg_dst, 64);
-  // uint64_t *in  = (uint64_t*) __builtin_assume_aligned((void*) arg_in, 64);
-
+  uint64_t *dst = (uint64_t*) __builtin_assume_aligned((void*) arg_dst, 64);
+  uint64_t *in  = (uint64_t*) __builtin_assume_aligned((void*) arg_in, 64);
 
   for (uint64_t block_col = 0; block_col < row_size >> LOGCORES; block_col ++) {
     for (uint64_t row = 0; row < row_size; row += 1) {
