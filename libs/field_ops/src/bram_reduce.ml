@@ -60,6 +60,8 @@ module Make (Config : Config) = struct
 
     let mux_list =
       assert (log2_depth <= 9);
+      (* CR rahuly: very easy to generalize this *)
+      assert (Z.(equal p Field_ops_model.Approx_msb_multiplier_model.p));
       (* at most one BRAM deep *)
       (* we can knock off the top [log2_depth] bits here because we know what they are *)
       let tbl =
