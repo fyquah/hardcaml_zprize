@@ -1,10 +1,11 @@
 open Hardcaml
 
-module Make (Config : Hardcaml_ntt.Core_config.S) : sig
+module Make (Config : Top_config.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a
       ; clear : 'a
+      ; first_4step_pass : 'a
       ; tready : 'a
       ; start : 'a
       }

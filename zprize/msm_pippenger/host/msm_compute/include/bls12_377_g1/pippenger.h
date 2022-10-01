@@ -8,9 +8,17 @@ const int NUM_WINDOWS = 20;
 const int LOWER_WINDOW_SIZE = SCALAR_NUM_BITS / NUM_WINDOWS;
 const int NUM_HIGHER_WINDOWS = SCALAR_NUM_BITS - (LOWER_WINDOW_SIZE * NUM_WINDOWS);
 
-inline int NUM_WINDOW_BITS(int window_idx) { return ((window_idx < NUM_HIGHER_WINDOWS) ? LOWER_WINDOW_SIZE + 1 : LOWER_WINDOW_SIZE;
+inline int NUM_WINDOW_BITS(int window_idx) {
+  return ((window_idx < NUM_HIGHER_WINDOWS) ? LOWER_WINDOW_SIZE + 1 : LOWER_WINDOW_SIZE);
 }
-inline int NUM_BUCKETS(int window_idx) { return (1 << (NUM_WINDOW_BITS(window_idx))); }
+inline int NUM_BUCKETS(int window_idx) {
+  // -1 trick doesn't apply to last window
+  if (window_idx == NUM_WINDOWS - 1) {
+    return (1 << (NUM_WINDOW_BITS(window_idx))) - 1;
+  }
+
+  return 1 << (NUM_WINDOW_BITS(window_idx) - 1);
+}
 
 void triangleSumUpdate(bls12_377_g1::Xyzt &accum,
                        bls12_377_g1::Xyzt &running,

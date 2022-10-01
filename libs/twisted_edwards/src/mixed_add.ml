@@ -73,7 +73,7 @@ module Make (Num_bits : Num_bits.S) = struct
              ~enable
              ~n:
                (latency_without_arbitration config
-               - Config.multiply_latency ~reduce:true config))
+               - Config.multiply_latency ~reduce:Fine config))
   ;;
 
   let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
@@ -185,7 +185,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
@@ -234,7 +234,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
@@ -312,7 +312,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
@@ -382,7 +382,12 @@ module Make (Num_bits : Num_bits.S) = struct
     + Stage5.latency config
   ;;
 
-  let create ~(config : Config.t) scope { I.clock; valid_in; p1; p2; subtract } =
+  let create
+    ?build_mode:_
+    ~(config : Config.t)
+    scope
+    { I.clock; valid_in; p1; p2; subtract }
+    =
     if not config.arbitrated_multiplier
     then failwith "Mixed add only supports arbitrated mode";
     let { Stage5.x3; y3; z3; t3; valid = valid_out } =
@@ -397,8 +402,8 @@ module Make (Num_bits : Num_bits.S) = struct
     { O.valid_out; p3 = { x = x3; y = y3; z = z3; t = t3 } }
   ;;
 
-  let hierarchical ?instance ~config scope =
+  let hierarchical ?build_mode ?instance ~config scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ?instance ~name:"mixed_add" ~scope (create ~config)
+    H.hierarchical ?instance ~name:"mixed_add" ~scope (create ?build_mode ~config)
   ;;
 end

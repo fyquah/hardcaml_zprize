@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Top_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
@@ -64,17 +64,25 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let block =
       if logblocks = 0
       then gnd
-      else
-        mux2
-          i.first_4step_pass
-          (sel_bottom addr.value logblocks)
-          (drop_bottom addr.value logn)
+      else (
+        match memory_layout with
+        | Normal_layout_single_port ->
+          mux2
+            i.first_4step_pass
+            (sel_bottom addr.value logblocks)
+            (drop_bottom addr.value logn)
+        | Optimised_layout_single_port -> drop_bottom addr.value logn
+        | Normal_layout_multi_port -> raise_s [%message "not implemented"])
     in
     let addr =
-      mux2
-        i.first_4step_pass
-        (drop_bottom addr.value logblocks)
-        (sel_bottom addr.value logn)
+      match memory_layout with
+      | Normal_layout_single_port ->
+        mux2
+          i.first_4step_pass
+          (drop_bottom addr.value logblocks)
+          (sel_bottom addr.value logn)
+      | Optimised_layout_single_port -> sel_bottom addr.value logn
+      | Normal_layout_multi_port -> raise_s [%message "not implemented"]
     in
     let block1h = binary_to_onehot block in
     let mask_by_block x =

@@ -1,5 +1,5 @@
-The test harness currently only supports afi-0c117aa4642bded48
-(msm-1x-full-precompute-merge-axi-streams)
+The test harness currently only supports afi-071f40ea5e182fa8f
+(msm-halve-window-sizes-2)
 
 # Running Tests
 

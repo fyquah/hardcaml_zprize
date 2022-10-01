@@ -25,7 +25,6 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
   end
 
   let build_pipe ( -- ) ~depth spec shift scalar =
-    let _unused = ( -- ) in
     let rec build_pipe n d pipe =
       if n = depth
       then pipe
@@ -33,7 +32,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
         let d =
           Scalar.(
             map ~f:(reg spec ~enable:shift) d
-            |> Of_signal.apply_names ~prefix:("scl$" ^ Int.to_string n))
+            |> Of_signal.apply_names ~naming_op:(--) ~prefix:("scl$" ^ Int.to_string n))
         in
         build_pipe (n + 1) d (d :: pipe))
     in

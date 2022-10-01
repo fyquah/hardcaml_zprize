@@ -5,6 +5,8 @@ module Config : sig
     { approx_msb_multiplier_config : Approx_msb_multiplier.Config.t
     ; half_multiplier_config : Half_width_multiplier.Config.t
     ; subtracter_stages : int
+    ; num_correction_steps : int
+    ; include_fine_reduction : bool
     }
 
   val latency : t -> int
@@ -13,8 +15,10 @@ end
 
 module With_interface (M : sig
   val bits : int
+  val output_bits : int
 end) : sig
   val bits : int
+  val output_bits : int
 
   module I : sig
     type 'a t =
