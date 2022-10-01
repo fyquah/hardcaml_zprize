@@ -45,11 +45,6 @@ let command_random =
           let log_stall_fifo_depth = 2
         end
         in
-        let module Scalar_config = struct
-          let window_size_bits = window_size_bits
-        end
-        in
-        let module Test = Pippenger_test.Test_pippenger.Test (Config) (Scalar_config) in
         print_s
           [%message
             (window_size_bits : int)
@@ -57,6 +52,11 @@ let command_random =
               (affine_point_bits : int)
               (datapath_depth : int)
               (num_inputs : int)];
+        let module Scalar_config = struct
+          let window_size_bits = window_size_bits
+        end
+        in
+        let module Test = Pippenger_test.Test_pippenger.Test (Config) (Scalar_config) in
         let data =
           if debug then Test.debug_inputs num_inputs else Test.random_inputs num_inputs
         in
