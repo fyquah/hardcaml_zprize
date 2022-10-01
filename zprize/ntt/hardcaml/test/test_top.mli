@@ -1,7 +1,7 @@
 open! Core
 open Hardcaml
 
-module Make (Config : Hardcaml_ntt.Core_config.S) : sig
+module Make (Config : Zprize_ntt.Top_config.S) : sig
   open Hardcaml_ntt
 
   val random_input_coef_matrix : unit -> Z.t array array

@@ -3,7 +3,7 @@ open Hardcaml
 open Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Zprize_ntt.Top_config.S) = struct
   module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
   module Top = Zprize_ntt.Top.Make (Config)
   module Sim = Cyclesim.With_interface (Top.I) (Top.O)
@@ -223,21 +223,13 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
   let run ?verbose ?waves input_coefs = run_first_pass ?verbose ?waves input_coefs
 end
 
-module Config = struct
-  let logn = 5
-  let logcores = 3
-  let logblocks = 0
-  let support_4step_twiddle = true
-end
-
-module Test = Make (Config)
-
 let run_test ~waves ~logn ~logcores ~logblocks =
   let module Config = struct
     let logn = logn
     let logcores = logcores
     let logblocks = logblocks
     let support_4step_twiddle = true
+    let memory_layout = Zprize_ntt.Memory_layout.Optimised_layout_single_port
   end
   in
   let module Test = Make (Config) in

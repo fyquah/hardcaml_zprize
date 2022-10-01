@@ -3,7 +3,7 @@ open! Hardcaml
 open! Hardcaml_waveterm
 module Gf = Hardcaml_ntt.Gf
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Zprize_ntt.Top_config.S) = struct
   open Config
   module Kernel = Zprize_ntt.For_vitis.Make (Config)
   module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
@@ -260,6 +260,7 @@ let%expect_test "vitis kernel test" =
     let logcores = 3
     let logblocks = 0
     let support_4step_twiddle = true
+    let memory_layout = Zprize_ntt.Memory_layout.Optimised_layout_single_port
   end
   in
   let module Test = Make (Config) in
@@ -267,7 +268,8 @@ let%expect_test "vitis kernel test" =
   ignore
     (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
-  [%expect {|
+  [%expect
+    {|
     ("Hardware and software reference results match!" (pass first))
     "Hardware and software reference results match!" |}]
 ;;
@@ -278,6 +280,7 @@ let%expect_test "2 blocks" =
     let logcores = 3
     let logblocks = 1
     let support_4step_twiddle = true
+    let memory_layout = Zprize_ntt.Memory_layout.Optimised_layout_single_port
   end
   in
   let module Test = Make (Config) in
@@ -285,7 +288,8 @@ let%expect_test "2 blocks" =
   ignore
     (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
-  [%expect {|
+  [%expect
+    {|
     ("Hardware and software reference results match!" (pass first))
     "Hardware and software reference results match!" |}]
 ;;

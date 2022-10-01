@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Top_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
@@ -61,8 +61,19 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                 ] )
             ]
         ]);
-    let block = if logblocks = 0 then gnd else drop_bottom addr.value logn in
-    let addr = sel_bottom addr.value logn in
+    let block =
+      match memory_layout with
+      | Normal_layout_single_port | Normal_layout_multi_port ->
+        raise_s [%message "not implemented"]
+      | Optimised_layout_single_port ->
+        if logblocks = 0 then gnd else drop_bottom addr.value logn
+    in
+    let addr =
+      match memory_layout with
+      | Normal_layout_single_port | Normal_layout_multi_port ->
+        raise_s [%message "not implemented"]
+      | Optimised_layout_single_port -> sel_bottom addr.value logn
+    in
     let block1h = binary_to_onehot block in
     let mask_by_block x =
       if Config.logblocks = 0 then x else repeat x blocks &: block1h
