@@ -1,3 +1,3 @@
-#define LOGBLOCKS 3
+#define LOGBLOCKS 0
 #define LOGROWS 12
 
