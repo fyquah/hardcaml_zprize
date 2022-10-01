@@ -41,7 +41,7 @@ add_subdirectory(external)
 
 # ------ Libraries -----
 
-add_subdirectory(zprize_msm_fpga)
+add_subdirectory(naive_driver)
 add_subdirectory(msm_compute)
 
 # ------ Tests and executables ------
