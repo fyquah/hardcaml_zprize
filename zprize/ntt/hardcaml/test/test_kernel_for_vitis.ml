@@ -91,7 +91,7 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
     r
   ;;
 
-  let _convert_first_pass_output_to_stream coefs =
+  let convert_first_pass_output_to_stream coefs =
     let out = Array.init (Array.length coefs) ~f:(Fn.const Gf.Z.zero) in
     let outpos = ref 0 in
     let step1 = num_cores * num_cores * num_blocks in
@@ -100,7 +100,7 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
       for block_row = 0 to (n lsr (logcores + logblocks)) - 1 do
         let pos = (block_col * step1) + (block_row * step2) in
         for word = 0 to (num_cores * num_blocks) - 1 do
-          for j = 0 to num_cores do
+          for j = 0 to num_cores - 1 do
             out.(!outpos) <- coefs.(pos + (word * num_cores) + j);
             Int.incr outpos
           done
@@ -132,6 +132,31 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
     done
   ;;
 
+  let load_stream
+    ~wiggle_prob
+    (controller_to_compute : _ Kernel.Axi_stream.Source.t)
+    (controller_to_compute_dest : _ Kernel.Axi_stream.Dest.t)
+    cycle
+    coefs
+    =
+    for i = 0 to (Array.length coefs / num_cores) - 1 do
+      controller_to_compute.tvalid := Bits.gnd;
+      while not (random_bool ~p_true:wiggle_prob) do
+        cycle ()
+      done;
+      controller_to_compute.tvalid := Bits.vdd;
+      controller_to_compute.tdata
+        := List.init num_cores ~f:(fun j ->
+             Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z coefs.((i * num_cores) + j))))
+           |> Bits.concat_lsb;
+      while Bits.is_gnd !(controller_to_compute_dest.tready) do
+        cycle ()
+      done;
+      cycle ();
+      controller_to_compute.tvalid := Bits.gnd
+    done
+  ;;
+
   let run_first_pass
     ~wiggle_prob
     ~(inputs : _ Kernel.I.t)
@@ -151,22 +176,7 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
     cycle ();
     (* wait for tready *)
     assert (Bits.to_bool !(controller_to_compute_dest.tready));
-    for i = 0 to (Array.length coefs / num_cores) - 1 do
-      controller_to_compute.tvalid := Bits.gnd;
-      while not (random_bool ~p_true:wiggle_prob) do
-        cycle ()
-      done;
-      controller_to_compute.tvalid := Bits.vdd;
-      controller_to_compute.tdata
-        := List.init num_cores ~f:(fun j ->
-             Gf.Bits.to_bits (Gf.Bits.of_z (Gf.Z.to_z coefs.((i * num_cores) + j))))
-           |> Bits.concat_lsb;
-      while Bits.is_gnd !(controller_to_compute_dest.tready) do
-        cycle ()
-      done;
-      cycle ();
-      controller_to_compute.tvalid := Bits.gnd
-    done;
+    load_stream ~wiggle_prob controller_to_compute controller_to_compute_dest cycle coefs;
     sync_to_last_result ~cycle ~num_results;
     get_first_pass_results !results
   ;;
@@ -184,34 +194,7 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
     results := [];
     let controller_to_compute = inputs.controller_to_compute_phase_2 in
     let controller_to_compute_dest = outputs.controller_to_compute_phase_2_dest in
-    let step1 = num_cores * num_cores * num_blocks in
-    let step2 = n * num_cores * num_blocks in
-    for block_col = 0 to (n lsr logcores) - 1 do
-      for block_row = 0 to (n lsr (logcores + logblocks)) - 1 do
-        let pos = (block_col * step1) + (block_row * step2) in
-        for word = 0 to (num_cores * num_blocks) - 1 do
-          while not (random_bool ~p_true:wiggle_prob) do
-            controller_to_compute.tvalid := Bits.gnd;
-            cycle ()
-          done;
-          controller_to_compute.tvalid := Bits.vdd;
-          controller_to_compute.tdata
-            := List.init num_cores ~f:(fun j ->
-                 coefs.(pos + (word * num_cores) + j)
-                 |> Gf.Z.to_z
-                 |> Gf.Bits.of_z
-                 |> Gf.Bits.to_bits)
-               |> Bits.concat_lsb;
-          while Bits.is_gnd !(controller_to_compute_dest.tready) do
-            cycle ()
-          done;
-          cycle ()
-        done
-      done;
-      controller_to_compute.tvalid := Bits.gnd;
-      (* A few cycles of flushing after each pass *)
-      cycle ~n:4 ()
-    done;
+    load_stream ~wiggle_prob controller_to_compute controller_to_compute_dest cycle coefs;
     sync_to_last_result ~cycle ~num_results;
     get_second_pass_results !results
   ;;
@@ -260,7 +243,7 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
            ~wiggle_prob
            ~inputs
            ~outputs
-           ~coefs:pass1
+           ~coefs:(convert_first_pass_output_to_stream pass1)
            ~cycle
            ~num_results
            ~results
