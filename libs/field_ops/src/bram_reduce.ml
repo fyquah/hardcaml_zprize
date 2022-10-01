@@ -59,7 +59,7 @@ module Make (Config : Config) = struct
     let log2_depth = error_bits
 
     let mux_list =
-      assert (log2_depth <= 9);
+      assert (0 < log2_depth && log2_depth <= 9);
       (* CR rahuly: very easy to generalize this *)
       assert (Z.(equal p Field_ops_model.Approx_msb_multiplier_model.p));
       (* at most one BRAM deep *)
