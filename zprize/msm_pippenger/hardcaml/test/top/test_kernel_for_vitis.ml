@@ -5,6 +5,7 @@ open Msm_pippenger
 
 module Make (Config : Msm_pippenger.Config.S) = struct
   module Utils = Utils.Make (Config)
+  module Config_utils = Config_utils.Make (Config)
   module Top = Top.Make (Config)
   module Kernel = Kernel_for_vitis.Make (Config)
   module I = Kernel.I
@@ -70,6 +71,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   let axi_bits = 512
   let aligned_to = 64
   let aligned_field_bits = Int.round_up Config.field_bits ~to_multiple_of:aligned_to
+  let _aligned_scalar_bits = Int.round_up Config.scalar_bits ~to_multiple_of:aligned_to
   let drop_t = false
 
   let num_clocks_per_output =
@@ -98,7 +100,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
     let sim = sim_and_waves.sim in
     let i, _o = Cyclesim.inputs sim, Cyclesim.outputs sim in
-    let inputs = Utils.random_inputs ~precompute ~seed num_inputs in
+    let inputs =
+      Utils.random_inputs
+        ~precompute
+        ~seed
+        num_inputs
+        ~top_window_size:Config_utils.top_window_size
+    in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     Cyclesim.cycle sim;
     i.fpga_to_host_dest.tready := Bits.vdd;
@@ -208,7 +216,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     let recv_data = Tb.run_with_timeout ~timeout ~simulator:sim ~testbench () in
     if Option.is_none recv_data then print_s [%message "Simulation timed out!"];
     let result_points = ref [] in
-    let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
+    let bucket = ref (Config_utils.num_buckets 0) in
     let window = ref 0 in
     Option.iter recv_data ~f:(fun recv_data ->
       let data = List.to_array recv_data in
@@ -257,14 +265,10 @@ module Make (Config : Msm_pippenger.Config.S) = struct
           := if !bucket = 1
              then (
                Int.incr window;
-               let next_window_size_bits =
-                 if !window = Top.num_windows - 1
-                 then Top.last_window_size_bits
-                 else Config.window_size_bits
-               in
-               (1 lsl next_window_size_bits) - 1)
+               Config_utils.num_buckets !window)
              else !bucket - 1));
     print_s [%message "Got" (List.length !result_points : int)];
+    [%test_result: int] ~expect:Top.num_result_points (List.length !result_points);
     let result =
       { waves = sim_and_waves.waves; points = List.rev !result_points; inputs }
     in
@@ -297,15 +301,15 @@ let%expect_test "Test over small input size" =
     let field_bits = 377
     let scalar_bits = 12
     let controller_log_stall_fifo_depth = 2
-    let window_size_bits = 3
+    let num_windows = 4
   end
   in
   let module Test = Make (Config) in
   let _result = Test.run_test 8 in
   [%expect
     {|
-    (Expecting (Top.num_result_points 28))
-    (Got ("List.length (!result_points)" 28))
+    (Expecting (Top.num_result_points 19))
+    (Got ("List.length (!result_points)" 19))
     PASS |}]
 ;;
 
@@ -314,7 +318,7 @@ let test_back_to_back () =
     let field_bits = 377
     let scalar_bits = 13
     let controller_log_stall_fifo_depth = 2
-    let window_size_bits = 3
+    let num_windows = 4
   end
   in
   let module Test = Make (Config) in
@@ -331,13 +335,13 @@ let%expect_test "Test multiple back-back runs" =
   let _waves = test_back_to_back () in
   [%expect
     {|
-    (Expecting (Top.num_result_points 36))
-    (Got ("List.length (!result_points)" 36))
+    (Expecting (Top.num_result_points 23))
+    (Got ("List.length (!result_points)" 23))
     PASS
-    (Expecting (Top.num_result_points 36))
-    (Got ("List.length (!result_points)" 36))
+    (Expecting (Top.num_result_points 23))
+    (Got ("List.length (!result_points)" 23))
     PASS
-    (Expecting (Top.num_result_points 36))
-    (Got ("List.length (!result_points)" 36))
+    (Expecting (Top.num_result_points 23))
+    (Got ("List.length (!result_points)" 23))
     PASS |}]
 ;;

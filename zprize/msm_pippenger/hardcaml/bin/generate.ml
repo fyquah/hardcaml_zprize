@@ -30,13 +30,13 @@ let command_kernel =
           ~doc:
             "Override the number of scalar bits used in the algorithm, to simulate a \
              smaller number of window RAMs"
-      and window_bits_arg =
+      and num_windows_arg =
         flag
-          "-window-bits"
+          "-num-windows"
           (optional int)
           ~doc:
-            "Override the number of window bits used in the algorithm, to simulate a \
-             smaller number of buckets"
+            "Override the number of windows used in the algorithm, to simulate a smaller \
+             number of buckets"
       in
       fun () ->
         let module Kernel_for_vitis =
@@ -44,7 +44,7 @@ let command_kernel =
             include Config.Bls12_377
 
             let scalar_bits = Option.value scalar_bits_arg ~default:scalar_bits
-            let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
+            let num_windows = Option.value num_windows_arg ~default:num_windows
           end)
         in
         let module Circuit =

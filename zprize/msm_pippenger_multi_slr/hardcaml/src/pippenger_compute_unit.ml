@@ -77,20 +77,24 @@ module Make (C : Pippenger_compute_unit_config.S) = struct
   let ram_lookup_latency = 3
   let ram_write_latency = 3
 
-  module Controller = Controller.Make (struct
-    let window_size_bits = last_window_size_bits
-    let num_windows = num_windows
-    let affine_point_bits = input_point_bits
+  module Controller =
+    Controller.Make
+      (struct
+        let num_windows = num_windows
+        let affine_point_bits = input_point_bits
 
-    let pipeline_depth =
-      Int.round_up
-        (adder_latency + ram_lookup_latency + ram_read_latency + ram_write_latency + 2)
-        ~to_multiple_of:2
-      / 2
-    ;;
+        let pipeline_depth =
+          Int.round_up
+            (adder_latency + ram_lookup_latency + ram_read_latency + ram_write_latency + 2)
+            ~to_multiple_of:2
+          / 2
+        ;;
 
-    let log_stall_fifo_depth = controller_log_stall_fifo_depth
-  end)
+        let log_stall_fifo_depth = controller_log_stall_fifo_depth
+      end)
+      (struct
+        let window_size_bits = last_window_size_bits
+      end)
 
   module I = struct
     type 'a t =
@@ -147,12 +151,15 @@ module Make (C : Pippenger_compute_unit_config.S) = struct
        The last one might be larger. *)
     let scalar =
       Array.init num_windows ~f:(fun i ->
-        if i = num_windows - 1
-        then sel_top scalar last_window_size_bits
-        else
-          uresize
-            scalar.:+[window_size_bits * i, Some window_size_bits]
-            last_window_size_bits)
+        { Controller.Scalar.negative = gnd
+        ; scalar =
+            (if i = num_windows - 1
+            then sel_top scalar last_window_size_bits
+            else
+              uresize
+                scalar.:+[window_size_bits * i, Some window_size_bits]
+                last_window_size_bits)
+        })
     in
     let spec = Reg_spec.create ~clear ~clock () in
     let sm = State_machine.create (module State) spec in
@@ -236,7 +243,7 @@ module Make (C : Pippenger_compute_unit_config.S) = struct
                                 + adder_latency
                                 + ram_write_latency)
                               spec
-                              ctrl.bucket)))
+                              ctrl.bucket.scalar)))
                      address_bits
                }
              in
@@ -267,7 +274,7 @@ module Make (C : Pippenger_compute_unit_config.S) = struct
                      (mux2
                         (sm.is Read_result)
                         (sel_bottom bucket_address.value address_bits)
-                        (sel_bottom ctrl.bucket address_bits))
+                        (sel_bottom ctrl.bucket.scalar address_bits))
                }
              in
              Ram_port.(
@@ -300,6 +307,7 @@ module Make (C : Pippenger_compute_unit_config.S) = struct
                 spec
                 (mux2 ctrl.bubble (of_int 0) ctrl_affine_point_as_xyt)
                 ~n:(ram_lookup_latency + ram_read_latency))
+        ; subtract = gnd
         }
     in
     adder_valid_out <== adder.valid_out;

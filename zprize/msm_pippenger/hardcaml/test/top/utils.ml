@@ -5,6 +5,8 @@ module C = Twisted_edwards_model_lib.Conversions
 module Make (Config : Msm_pippenger.Config.S) = struct
   module Twisted_edwards = Twisted_edwards_model_lib.Twisted_edwards_curve
   module Weierstrass = Twisted_edwards_model_lib.Weierstrass_curve
+  module Config_utils = Msm_pippenger.Config_utils.Make (Config)
+  open Config_utils
 
   module Affine_point = struct
     type 'a t =
@@ -87,7 +89,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     | Some p -> Ark_bls12_377_g1.create ~x:p.x ~y:p.y ~infinity:false
   ;;
 
-  let random_inputs ?(precompute = false) ?(seed = 0) num_inputs =
+  let random_inputs ?(precompute = false) ?(seed = 0) ~top_window_size num_inputs =
     Random.init seed;
     Array.init num_inputs ~f:(fun _ ->
       let affine_point =
@@ -103,7 +105,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             affine_point_with_t
         else affine_point_with_t
       in
-      { Msm_input.scalar = Bits.random ~width:Config.scalar_bits
+      { Msm_input.scalar =
+          ((* ensure the top window is never all 1s - this is true for our actual 253-bit scalar *)
+           let top =
+             Random.int ((1 lsl top_window_size) - 1)
+             |> Bits.of_int ~width:top_window_size
+           in
+           Bits.(top @: random ~width:(Config.scalar_bits - top_window_size)))
       ; affine_point_with_t =
           { x = Bits.of_z ~width:Config.field_bits affine_point_with_t_for_fpga.x
           ; y = Bits.of_z ~width:Config.field_bits affine_point_with_t_for_fpga.y
@@ -146,7 +154,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       total_result
         := Ark_bls12_377_g1.add
              !total_result
-             (double !cnt2 ~times:(Config.window_size_bits * window_idx)));
+             (double !cnt2 ~times:window_bit_offsets.(window_idx)));
     !total_result
   ;;
 
@@ -170,5 +178,112 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     in
     Twisted_edwards.extended_to_affine extended ~has_t
     |> C.twisted_edwards_affine_to_weierstrass_affine bls12_377_twisted_edwards_params
+  ;;
+
+  module Reduced_scalar = struct
+    type t =
+      { scalar : Bits.t
+      ; negative : bool
+      }
+    [@@deriving sexp_of]
+  end
+
+  (*module Int_reduced_scalar = struct
+    type t = {
+      scalar : int
+    ; negative : bool
+    } [@@deriving sexp_of]
+
+    let of_reduced_scalar { Reduced_scalar.scalar; negative } : t = 
+      { scalar = Bits.to_int scalar; negative }
+  end*)
+
+  module Z = struct
+    include Z
+
+    let sexp_of_t t = Sexp.Atom ("0x" ^ Z.format "x" t)
+  end
+
+  let check_scalar_reduction scalar (reduced_scalars : Reduced_scalar.t array) =
+    let v =
+      Array.foldi reduced_scalars ~init:Z.zero ~f:(fun i acc v ->
+        let scalar_val = Bits.to_int v.scalar in
+        assert (scalar_val >= 0);
+        if scalar_val > num_buckets i
+        then raise_s [%message (i : int) (scalar_val : int) (num_buckets i : int)];
+        let sign_ = if v.negative then Z.minus_one else Z.one in
+        let base = window_bit_offsets.(i) in
+        (*print_s [%message (i :int) (scalar_val : int) (sign_ : Z.t) (base : int)];*)
+        let scalar_val = Z.of_int scalar_val in
+        Z.(acc + (sign_ * scalar_val * (one lsl base))))
+    in
+    let int_scalar = Bits.to_z ~signedness:Unsigned scalar in
+    if not Z.(equal v int_scalar)
+    then (
+      let split_scalar =
+        Array.map2_exn window_bit_sizes window_bit_offsets ~f:(fun size offset ->
+          Bits.(scalar.:+[offset, Some size]))
+      in
+      Array.iteri
+        (Array.zip_exn split_scalar reduced_scalars)
+        ~f:(fun i (orig, { scalar; negative }) ->
+        let orig = Bits.to_int orig in
+        let reduced_scalar = Bits.to_int scalar in
+        print_s
+          [%message
+            (i : int) (orig : Int.Hex.t) (reduced_scalar : Int.Hex.t) (negative : bool)]);
+      raise_s
+        [%message
+          (split_scalar : Bits.t array)
+            (reduced_scalars : Reduced_scalar.t array)
+            (v : Z.t)
+            (int_scalar : Z.t)])
+  ;;
+
+  let perform_scalar_reduction scalar =
+    assert (Bits.width scalar = Config.scalar_bits);
+    let carry = ref false in
+    let rec loop res =
+      let i = List.length res in
+      let size = window_bit_sizes.(i) in
+      let offset = window_bit_offsets.(i) in
+      (*print_s [%message (i : int) (size : int) (offset : int)];*)
+      let orig_slice =
+        Bits.(to_int scalar.:+[offset, Some size]) + if !carry then 1 else 0
+      in
+      if i = Config.num_windows - 1
+      then
+        { Reduced_scalar.scalar = Bits.of_int ~width:max_window_size_bits orig_slice
+        ; negative = false
+        }
+        :: res
+      else (
+        let signed_val =
+          if orig_slice >= 1 lsl size
+          then (
+            (* overflow after carry *)
+            assert (orig_slice = 1 lsl size);
+            carry := true;
+            0)
+          else if (* no overflow, check the width *)
+                  orig_slice >= 1 lsl (size - 1)
+          then (
+            carry := true;
+            orig_slice - (1 lsl size))
+          else (
+            carry := false;
+            orig_slice)
+        in
+        let reduced =
+          { Reduced_scalar.scalar =
+              Int.abs signed_val |> Bits.of_int ~width:max_window_size_bits
+          ; negative = signed_val < 0
+          }
+        in
+        loop (reduced :: res))
+    in
+    let ret = loop [] |> List.rev |> Array.of_list in
+    check_scalar_reduction scalar ret;
+    ret
   ;;
 end

@@ -37,7 +37,6 @@ let command_random =
         let rand_state = Random.State.make [| seed |] in
         Random.set_state rand_state;
         let module Config = struct
-          let window_size_bits = window_size_bits
           let num_windows = num_windows
           let affine_point_bits = affine_point_bits
           let datapath_depth = datapath_depth
@@ -45,7 +44,13 @@ let command_random =
           let log_stall_fifo_depth = 2
         end
         in
-        let module Test = Pippenger_test.Test_pippenger.Test (Config) in
+        let module Test =
+          Pippenger_test.Test_pippenger.Test
+            (Config)
+            (struct
+              let window_size_bits = window_size_bits
+            end)
+        in
         let data = Test.random_inputs num_inputs in
         let waves = Test.(test ~waves ~can_stall ~verbose data) in
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]

@@ -20,7 +20,7 @@ module type Test_adder = sig
     -> config:Config.t
     -> sim:Sim.t
     -> montgomery:bool
-    -> (Z.t Xyzt.t * Z.t Xyt.t) list
+    -> (Z.t Xyzt.t * Z.t Xyt.t * bool) list
     -> unit
 end
 
