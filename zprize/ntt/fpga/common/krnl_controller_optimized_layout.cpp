@@ -71,8 +71,8 @@ phase2_load:
 
         chunk_t v;
         v.data = gmem_in[
-          (block_col << (LOGCORES + LOGCORES + LOGBLOCKS))
-            + (block_row << (LOGROWS + LOGCORES + LOGBLOCKS))
+          (block_col << (LOGCORES + LOGBLOCKS))
+            + (block_row << (LOGROWS + LOGBLOCKS))
             + word
         ];
         v.user = 1;
