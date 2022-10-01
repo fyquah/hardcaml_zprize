@@ -76,8 +76,8 @@ let estimate_delta_error_2_to_n levels =
 
 let golden_config_2222 =
   let open Level in
-  [ { radix = Radix_2; k = (fun _ -> 187) }
-  ; { radix = Radix_2; k = (fun _ -> 94) }
+  [ { radix = Radix_2; k = (fun _ -> 189) }
+  ; { radix = Radix_2; k = (fun _ -> 96) }
   ; { radix = Radix_2; k = (fun _ -> 48) }
   ; { radix = Radix_2; k = (fun _ -> 24) }
   ]

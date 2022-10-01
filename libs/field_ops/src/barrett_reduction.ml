@@ -42,12 +42,16 @@ module Config = struct
     else 0
   ;;
 
+  let golden_config_2222 i =
+    (List.nth_exn Field_ops_model.Approx_msb_multiplier_model.golden_config_2222 i).k
+  ;;
+
   let approx_msb_mult_2222 =
     let open Approx_msb_multiplier.Config in
     match Which_config.t with
     | Heavy_pipelining ->
       { levels =
-          [ { k = (fun _ -> 187)
+          [ { k = golden_config_2222 0
             ; for_karatsuba =
                 { radix = Radix_2
                 ; pre_adder_stages = 1
@@ -57,7 +61,7 @@ module Config = struct
                   post_adder_stages = 5
                 }
             }
-          ; { k = (fun _ -> 94)
+          ; { k = golden_config_2222 1
             ; for_karatsuba =
                 { radix = Radix_2
                 ; pre_adder_stages = 1
@@ -68,7 +72,7 @@ module Config = struct
                 ; post_adder_stages = 2
                 }
             }
-          ; { k = (fun _ -> 48)
+          ; { k = golden_config_2222 2
             ; for_karatsuba =
                 { radix = Radix_2
                 ; pre_adder_stages = 1
@@ -79,7 +83,7 @@ module Config = struct
                 ; post_adder_stages = 1
                 }
             }
-          ; { k = (fun _ -> 24)
+          ; { k = golden_config_2222 3
             ; for_karatsuba =
                 { radix = Radix_2
                 ; pre_adder_stages = 1
@@ -100,7 +104,7 @@ module Config = struct
       }
     | Medium_pipelining ->
       { levels =
-          [ { k = (fun _ -> 187)
+          [ { k = golden_config_2222 0
             ; for_karatsuba =
                 { radix = Radix_2
                 ; pre_adder_stages = 1
@@ -110,7 +114,7 @@ module Config = struct
                   post_adder_stages = 3
                 }
             }
-          ; { k = (fun _ -> 94)
+          ; { k = golden_config_2222 1
             ; for_karatsuba =
                 { radix = Radix_2
                 ; pre_adder_stages = 1
@@ -118,7 +122,7 @@ module Config = struct
                 ; post_adder_stages = 2
                 }
             }
-          ; { k = (fun _ -> 48)
+          ; { k = golden_config_2222 2
             ; for_karatsuba =
                 { radix = Radix_2
                 ; pre_adder_stages = 1
@@ -129,7 +133,7 @@ module Config = struct
                 ; post_adder_stages = 1
                 }
             }
-          ; { k = (fun _ -> 24)
+          ; { k = golden_config_2222 3
             ; for_karatsuba =
                 { radix = Radix_2
                 ; pre_adder_stages = 1

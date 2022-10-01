@@ -87,7 +87,7 @@ let%expect_test "Quickcheck for 332 config" =
 let%expect_test "Quickcheck for 2222 config" =
   test_random
     ~levels:Approx_msb_multiplier_model.golden_config_2222
-    ~num_correction_steps:4
+    ~num_correction_steps:8
 ;;
 
 (*
