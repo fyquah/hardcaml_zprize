@@ -1,7 +1,7 @@
 open! Base
 open! Hardcaml
 
-module Core (Config : Config.S) : sig
+module Core (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a
@@ -21,7 +21,7 @@ module Core (Config : Config.S) : sig
   val hierarchy : window:int -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
 end
 
-module Make (Config : Config.S) : sig
+module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a

@@ -31,6 +31,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ; valid_in : 'a
       ; p1 : 'a Xyzt.t [@rtlprefix "p1$"]
       ; p2 : 'a Xyt.t [@rtlprefix "p2$"]
+      ; subtract : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -203,6 +204,7 @@ module Make (Num_bits : Num_bits.S) = struct
     type 'a t =
       { p1 : 'a Xyzt.t
       ; p2 : 'a Xyt.t
+      ; subtract : 'a
       ; valid : 'a
       }
   end
@@ -213,6 +215,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ; c_B : 'a
       ; c_C : 'a
       ; c_D : 'a
+      ; subtract : 'a
       ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -233,7 +236,7 @@ module Make (Num_bits : Num_bits.S) = struct
       latency_without_arbitration config + if config.arbitrated_multiplier then 1 else 0
     ;;
 
-    let create ~config ~scope ~clock { Datapath_input.p1; p2; valid } =
+    let create ~config ~scope ~clock { Datapath_input.p1; p2; subtract; valid } =
       [%test_result: int] (width p1.x) ~expect:num_bits;
       [%test_result: int] (width p1.y) ~expect:num_bits;
       [%test_result: int] (width p2.x) ~expect:num_bits;
@@ -256,7 +259,7 @@ module Make (Num_bits : Num_bits.S) = struct
         multiply ~include_fine_reduction ~latency ~config ~scope ~clock (p1.t, p2.t)
       in
       let scope = Scope.sub_scope scope "stage1" in
-      { c_A; c_B; c_C; c_D = pipe p1.z; valid = pipe valid }
+      { c_A; c_B; c_C; c_D = pipe p1.z; subtract = pipe subtract; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
   end
@@ -275,7 +278,7 @@ module Make (Num_bits : Num_bits.S) = struct
     let error = 1
     let latency (config : Config.t) = config.adder_stages
 
-    let create ~config ~scope ~clock { Stage0.c_A; c_B; c_C; c_D; valid } =
+    let create ~config ~scope ~clock { Stage0.c_A; c_B; c_C; c_D; subtract; valid } =
       [%test_result: int] (width c_A) ~expect:(num_bits + accumulated_error);
       [%test_result: int] (width c_B) ~expect:(num_bits + accumulated_error);
       [%test_result: int] (width c_C) ~expect:(num_bits + accumulated_error);
@@ -286,9 +289,13 @@ module Make (Num_bits : Num_bits.S) = struct
       (* Consider arb-ing here? *)
       let re s = uresize s (num_bits + accumulated_error + error) in
       let c_E = sub_pipe ~scope ~latency ~config ~clock c_B c_A |> re in
-      let c_F = sub_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
-      let c_G = add_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
+      let c_D_minus_c_C = sub_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
+      let c_D_plus_c_C = add_pipe ~scope ~latency ~config ~clock c_D c_C |> re in
       let c_H = add_pipe ~scope ~latency ~config ~clock c_B c_A |> re in
+      (* assign based on the sign of t2 *)
+      let subtract = pipe subtract in
+      let c_F = mux2 subtract c_D_plus_c_C c_D_minus_c_C in
+      let c_G = mux2 subtract c_D_minus_c_C c_D_plus_c_C in
       let scope = Scope.sub_scope scope "stage2" in
       { c_E; c_F; c_G; c_H; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
@@ -408,10 +415,19 @@ module Make (Num_bits : Num_bits.S) = struct
     ?(build_mode = Build_mode.Simulation)
     ~config
     scope
-    { I.clock; valid_in; p1; p2 }
+    { I.clock; valid_in; p1; p2; subtract }
     =
+    (* when we subtract, we want to output [p1-p2] instead of [p1+p2].
+     * Because p2 is coming from the host, we use
+     *    - [1/2 * (y - x)] in place of x
+     *    - [1/2 * (y + x)] in place of y
+     *    - [4d  * (t    )] in place of t
+     * So, because negating a point in twisted edwards is equivalent to negating the x coordinate, 
+     * we have to swap x,y and negate t. We push the t negation down the computation to avoid 
+     * adding another subtractor. *)
+    let p2 = Xyt.Of_signal.mux2 subtract { Xyt.x = p2.y; y = p2.x; t = p2.t } p2 in
     let { Stage4.x3; y3; z3; t3; valid = valid_out } =
-      { p1; p2; valid = valid_in }
+      { p1; p2; subtract; valid = valid_in }
       |> Stage0.create ~config ~scope ~clock
       |> Stage1.create ~config ~scope ~clock
       |> Stage2.create ~build_mode ~config ~scope ~clock
