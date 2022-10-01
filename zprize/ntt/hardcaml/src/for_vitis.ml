@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Top_config.S) = struct
   include Config
   module Four_step = Hardcaml_ntt.Four_step.Make (Config)
   module Axi_stream = Four_step.Axi_stream
@@ -48,7 +48,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let transposer_out_dest = Axi_stream.Dest.Of_signal.wires () in
     let transposer =
       Transposer.hierarchical
-        ~transposer_depth_in_cycles:(1 lsl logblocks)
+        ~transposer_depth_in_cycles:1
         scope
         { clock
         ; clear

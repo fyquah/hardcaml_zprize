@@ -335,6 +335,7 @@ module Make (Config : Config.S) = struct
       Mixed_add.hierarchical
         scope
         ~config:adder_config
+        ~build_mode
         { clock
         ; valid_in = pipeline spec adder_valid_in ~n
         ; p1 = Mixed_add.Xyzt.Of_signal.unpack port_b_q

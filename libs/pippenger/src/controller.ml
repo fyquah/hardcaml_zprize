@@ -57,8 +57,8 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
 
      Choose_mode [-> Execute_stalled point or Execute_scalar or Bubble_mode or Start]
 
-         - check if stalled fifo is ready, check if there is an available scalar
- 
+     - check if stalled fifo is ready, check if there is an available scalar
+
      Bubble_mode [-> Choose_mode]
 
      Execute_stalled_point [-> Wait_stalled_point or Choose_mode]
@@ -173,7 +173,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
                 ] )
             ; ( Choose_mode
               , [ (* latch the pipeline control at the start.  This tracks values
-                     for a few cycles longer than necesasry, but reduces the critical path *)
+                   for a few cycles longer than necesasry, but reduces the critical path *)
                   latch <--. 1
                 ; if_
                     flushing.value

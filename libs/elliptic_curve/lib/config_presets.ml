@@ -7,6 +7,10 @@ module For_bls12_377 = struct
   let montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
   let barrett_reduction_config = Barrett_reduction.Config.for_bls12_377
 
+  let barrett_coarse_reduction_config =
+    { Barrett_reduction.Config.for_bls12_377 with include_fine_reduction = false }
+  ;;
+
   let square : Ec_fpn_ops_config.fn =
     let config =
       { Squarer.Config.levels =
@@ -40,29 +44,55 @@ module For_bls12_377 = struct
 
   let multiply : Ec_fpn_ops_config.fn =
     let config =
-      Karatsuba_ofman_mult.Config.generate
-        [ { radix = Radix_2
-          ; pre_adder_stages = 2
-          ; middle_adder_stages = 4
-          ; post_adder_stages = 10
-          }
-        ; { radix = Radix_2
-          ; pre_adder_stages = 1
-          ; middle_adder_stages = 2
-          ; post_adder_stages = 5
-          }
-        ; { radix = Radix_2
-          ; pre_adder_stages = 1
-          ; middle_adder_stages = 1
-          ; post_adder_stages = 1
-          }
-        ; { radix = Radix_2
-          ; pre_adder_stages = 1
-          ; middle_adder_stages = 1
-          ; post_adder_stages = 1
-          }
-        ]
-        ~ground_multiplier:(Verilog_multiply { latency = 2 })
+      match Which_config.t with
+      | Heavy_pipelining ->
+        Karatsuba_ofman_mult.Config.generate
+          [ { radix = Radix_2
+            ; pre_adder_stages = 2
+            ; middle_adder_stages = 4
+            ; post_adder_stages = 10
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 2
+            ; post_adder_stages = 5
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 1
+            ; post_adder_stages = 1
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 0
+            ; post_adder_stages = 1
+            }
+          ]
+          ~ground_multiplier:(Verilog_multiply { latency = 2 })
+      | Medium_pipelining ->
+        Karatsuba_ofman_mult.Config.generate
+          [ { radix = Radix_2
+            ; pre_adder_stages = 2
+            ; middle_adder_stages = 3
+            ; post_adder_stages = 6
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 2
+            ; post_adder_stages = 3
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 0
+            ; post_adder_stages = 1
+            }
+          ; { radix = Radix_2
+            ; pre_adder_stages = 1
+            ; middle_adder_stages = 0
+            ; post_adder_stages = 1
+            }
+          ]
+          ~ground_multiplier:(Verilog_multiply { latency = 2 })
     in
     let latency = Karatsuba_ofman_mult.Config.latency config in
     let impl ~scope ~clock ~enable x y =
@@ -87,8 +117,10 @@ module For_bls12_377 = struct
     { impl; latency }
   ;;
 
-  let barrett_reduce : Ec_fpn_ops_config.fn =
-    let config = barrett_reduction_config in
+  let barrett_reduce_base ~coarse : Ec_fpn_ops_config.fn =
+    let config =
+      if coarse then barrett_coarse_reduction_config else barrett_reduction_config
+    in
     let impl ~scope ~clock ~enable mult_value y =
       assert (Option.is_none y);
       let { With_valid.valid = _; value } =
@@ -106,13 +138,18 @@ module For_bls12_377 = struct
     { impl; latency }
   ;;
 
+  let barrett_reduce = barrett_reduce_base ~coarse:false
+  let barrett_reduce_coarse = barrett_reduce_base ~coarse:true
+
   let ec_fpn_ops_with_montgomery_reduction =
     let reduce = montgomery_reduce in
-    { Ec_fpn_ops_config.multiply; square; reduce; p }
+    let coarse_reduce = montgomery_reduce in
+    { Ec_fpn_ops_config.multiply; square; reduce; coarse_reduce; p }
   ;;
 
   let ec_fpn_ops_with_barrett_reduction =
     let reduce = barrett_reduce in
-    { Ec_fpn_ops_config.multiply; square; reduce; p }
+    let coarse_reduce = barrett_reduce_coarse in
+    { Ec_fpn_ops_config.multiply; square; reduce; coarse_reduce; p }
   ;;
 end
