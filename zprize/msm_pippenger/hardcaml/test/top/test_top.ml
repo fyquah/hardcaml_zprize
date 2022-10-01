@@ -5,6 +5,7 @@ open Msm_pippenger
 
 module Make (Config : Msm_pippenger.Config.S) = struct
   module Utils = Utils.Make (Config)
+  module Config_utils = Config_utils.Make (Config)
   module Top = Top.Make (Config)
   module I = Top.I
   module O = Top.O
@@ -49,7 +50,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     i.clear := Bits.gnd;
     Cyclesim.cycle sim;
     reset_cycle_cnt ();
-    let inputs = Utils.random_inputs ~precompute ~seed num_inputs in
+    let inputs =
+      Utils.random_inputs
+        ~precompute
+        ~seed
+        num_inputs
+        ~top_window_size:Config_utils.top_window_size
+    in
     Array.iteri inputs ~f:(fun idx input ->
       Top.Mixed_add.Xyt.iter2
         i.input_point
@@ -76,7 +83,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     done;
     i.result_point_ready := Bits.vdd;
     reset_cycle_cnt ();
-    let bucket = ref ((1 lsl Config.window_size_bits) - 1) in
+    let bucket = ref (Config_utils.num_buckets 0) in
     let window = ref 0 in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     while !result_point_cnt < Top.num_result_points && !cycle_cnt < timeout do
@@ -106,17 +113,13 @@ module Make (Config : Msm_pippenger.Config.S) = struct
           := if !bucket = 1
              then (
                Int.incr window;
-               let next_window_size_bits =
-                 if !window = Top.num_windows - 1
-                 then Top.last_window_size_bits
-                 else Config.window_size_bits
-               in
-               (1 lsl next_window_size_bits) - 1)
+               Config_utils.num_buckets !window)
              else !bucket - 1);
       Cyclesim.cycle sim;
       Int.incr cycle_cnt
     done;
     print_s [%message "Got" (List.length !result_points : int)];
+    [%test_result: int] ~expect:Top.num_result_points (List.length !result_points);
     reset_cycle_cnt ();
     Cyclesim.cycle sim;
     let result = { waves; points = List.rev !result_points; inputs } in
@@ -147,7 +150,7 @@ let%expect_test "Test over small input size and small number of scalars" =
     let field_bits = 377
     let scalar_bits = 9
     let controller_log_stall_fifo_depth = 2
-    let window_size_bits = 2
+    let num_windows = 4
     let window_ram_partition_settings = None
   end
   in
@@ -156,11 +159,11 @@ let%expect_test "Test over small input size and small number of scalars" =
   print_s [%message (result.points : Test.Utils.window_bucket_point list)];
   [%expect
     {|
-    (Expecting (Top.num_result_points 16))
-    (Got ("List.length (!result_points)" 16))
+    (Expecting (Top.num_result_points 11))
+    (Got ("List.length (!result_points)" 11))
     PASS
     (result.points
-     (((point ()) (bucket 3) (window 0))
+     (((point ()) (bucket 4) (window 0)) ((point ()) (bucket 3) (window 0))
       ((point
         (((x
            0x15519d706bc4a7f8f5040b7a0fed1c0bf6b5352c982a43a2b4cb2873efb4ed423c42771548e4a42104e7eed7001a701)
@@ -172,18 +175,15 @@ let%expect_test "Test over small input size and small number of scalars" =
         (((x
            0x15519d706bc4a7f8f5040b7a0fed1c0bf6b5352c982a43a2b4cb2873efb4ed423c42771548e4a42104e7eed7001a701)
           (y
-           0x6fc267222a824a554287790181ab66409855e518b3eb724187c0a643fb5a4661146d32e8b3baf700a8fed07e67bcfc))))
-       (bucket 3) (window 1))
-      ((point ()) (bucket 2) (window 1)) ((point ()) (bucket 1) (window 1))
-      ((point ()) (bucket 3) (window 2)) ((point ()) (bucket 2) (window 2))
+           0x13e77def59a8ea070f87e476b1f9dd4d98a840de841281cdd6ba189760dedb9b5f6f011474c4509845fc12f81984305))))
+       (bucket 2) (window 1))
+      ((point ()) (bucket 1) (window 1)) ((point ()) (bucket 2) (window 2))
       ((point
         (((x
            0x15519d706bc4a7f8f5040b7a0fed1c0bf6b5352c982a43a2b4cb2873efb4ed423c42771548e4a42104e7eed7001a701)
           (y
-           0x6fc267222a824a554287790181ab66409855e518b3eb724187c0a643fb5a4661146d32e8b3baf700a8fed07e67bcfc))))
+           0x13e77def59a8ea070f87e476b1f9dd4d98a840de841281cdd6ba189760dedb9b5f6f011474c4509845fc12f81984305))))
        (bucket 1) (window 2))
-      ((point ()) (bucket 7) (window 3)) ((point ()) (bucket 6) (window 3))
-      ((point ()) (bucket 5) (window 3)) ((point ()) (bucket 4) (window 3))
       ((point ()) (bucket 3) (window 3)) ((point ()) (bucket 2) (window 3))
       ((point
         (((x

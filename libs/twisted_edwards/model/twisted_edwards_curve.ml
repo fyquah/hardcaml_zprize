@@ -71,12 +71,16 @@ let _add_not_equal
   { x = x3; y = y3; z = z3; t = t3 }
 ;;
 
+let negate ({ x; y; t } : affine_with_t) = { x = modulo_neg x; y; t = modulo_neg t }
+
 let add_unified
+  ?(subtract = false)
   { a = _; d; twisted_scale = _ }
   ({ x = x1; y = y1; z = z1; t = t1 } : extended)
-  ({ x = x2; y = y2; t = t2 } : affine_with_t)
+  (p2 : affine_with_t)
   : extended
   =
+  let ({ x = x2; y = y2; t = t2 } : affine_with_t) = if subtract then negate p2 else p2 in
   (* https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-3 *)
   let open Modulo_ops in
   let c_A = (y1 - x1) * (y2 - x2) in
@@ -138,10 +142,14 @@ let fpga_internal_representation_to_affine (p : extended) : affine =
 
 (* (2x1,2y1,4z1,t1) + ((y2-x2)/2,(y2+x2)/2,4d*t2) -> (2x3,2y3,4z3,t3) *)
 let add_unified_precomputed
+  ?(subtract = false)
   ({ x = x1; y = y1; z = z1; t = t1 } : extended)
-  ({ x = x_host; y = y_host; t = t_host } : affine_with_t)
+  (p2 : affine_with_t)
   : extended
   =
+  let ({ x = x_host; y = y_host; t = t_host } : affine_with_t) =
+    if subtract then { x = p2.y; y = p2.x; t = modulo_neg p2.t } else p2
+  in
   let open Modulo_ops in
   let c_A = (y1 - x1) * x_host in
   let c_B = (y1 + x1) * y_host in

@@ -25,24 +25,43 @@ end
 
 module Make (Config : Config.S) = struct
   open Config
+  open Config_utils.Make (Config)
 
   let precompute = true
 
-  module Mixed_add = Mixed_add_precompute.Make (struct
+  module Num_bits = struct
     let num_bits = field_bits
-  end)
+  end
+
+  module Mixed_add = Mixed_add_precompute.Make (Num_bits)
+  module Scalar_transformation = Scalar_transformation.Make (Config) (Num_bits)
 
   let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction_full
   let adder_latency = Mixed_add.latency adder_config
 
-  (* Integer divison so the last window might be slightly larger than the others. *)
-  let num_windows = scalar_bits / window_size_bits
-  let last_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
-
-  let num_result_points =
-    ((num_windows - 1) lsl window_size_bits) + (1 lsl last_window_size_bits) - num_windows
+  (* for now, assert that there are 1 or 2 window sizes *)
+  (*let () = assert((max_window_size_bits = min_window_size_bits) || (max_window_size_bits = min_window_size_bits + 1))
+  let max_window_indices = Array.filter_mapi window_size_bits ~f:(fun i v -> if (v = max_window_size_bits) then Some i else None)
+  let is_max_window window = 
+    (List.map max_window_indices ~f:(fun ind -> window ==:. ind)) |> reduce ~f:(|:)*)
+  (*let max_ram_addresses = Array.init num_windows ~f:(fun i -> num_buckets i - 1)*)
+  let num_buckets_mux v =
+    mux
+      v
+      (List.init num_windows ~f:(fun i ->
+         of_int (num_buckets i) ~width:max_window_size_bits))
   ;;
 
+  (*let max_ram_address window =
+    (* vivado should reduce this for our values? *)
+    mux
+      window
+      Array.(map max_ram_addresses ~f:(of_int ~width:max_window_size_bits) |> to_list)
+  ;;*)
+
+  let num_windows = num_windows
+  let num_result_points = List.(init num_windows ~f:num_buckets |> fold ~init:0 ~f:( + ))
+  let max_window_size_bits = max_window_size_bits
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
   let result_point_bits = Mixed_add.Xyzt.(fold port_widths ~init:0 ~f:( + ))
   let ram_read_latency = 3
@@ -123,16 +142,26 @@ module Make (Config : Config.S) = struct
     =
     let ( -- ) = Scope.naming scope in
     let open Always in
-    (* We want to split our [scalar_bits] input scalar into an array of windows.
-       The last one might be larger. *)
-    let scalar =
-      Array.init num_windows ~f:(fun i ->
-        if i = num_windows - 1
-        then sel_top scalar last_window_size_bits
-        else
-          uresize
-            scalar.:+[window_size_bits * i, Some window_size_bits]
-            last_window_size_bits)
+    (* preprocess the scalar *)
+    let controller_ready = wire 1 in
+    let { Scalar_transformation.O.scalar
+        ; scalar_negatives
+        ; scalar_valid
+        ; last_scalar
+        ; input_point
+        ; scalar_and_input_point_ready
+        }
+      =
+      Scalar_transformation.hierarchical
+        scope
+        { clock
+        ; clear
+        ; scalar
+        ; scalar_valid
+        ; last_scalar
+        ; input_point
+        ; scalar_and_input_point_ready = controller_ready
+        }
     in
     let spec = Reg_spec.create ~clock () in
     let spec_with_clear = Reg_spec.create ~clear ~clock () in
@@ -144,7 +173,9 @@ module Make (Config : Config.S) = struct
         { Full_controller.I.clock
         ; clear
         ; start = ctrl_start.value
-        ; scalar
+        ; scalar =
+            Array.map2_exn scalar scalar_negatives ~f:(fun scalar negative ->
+              { Full_controller.Scalar.scalar; negative })
         ; scalar_valid = (scalar_valid &: sm.is Working) -- "scalar_valid"
         ; last_scalar
         ; affine_point = Mixed_add.Xyt.Of_signal.pack input_point
@@ -159,7 +190,7 @@ module Make (Config : Config.S) = struct
     let window_address =
       Variable.reg spec_with_clear ~width:(num_bits_to_represent num_windows)
     in
-    let bucket_address = Variable.reg spec_with_clear ~width:last_window_size_bits in
+    let bucket_address = Variable.reg spec_with_clear ~width:max_window_size_bits in
     let adder_valid_out = wire 1 in
     let fifo_q_has_space = wire 1 in
     let port_a_q, port_b_q =
@@ -185,23 +216,34 @@ module Make (Config : Config.S) = struct
                   ]
                 else [ { slr = SLR0; num_windows } ]
             in
-            let num_partitions = List.length window_ram_partition_settings in
-            List.mapi
-              window_ram_partition_settings
-              ~f:(fun partition_index partition_setting ->
-              { Window_ram.Partition.window_size_bits =
-                  List.init partition_setting.num_windows ~f:(fun i ->
-                    if i = partition_setting.num_windows - 1
-                       && partition_index = num_partitions - 1
-                    then last_window_size_bits
-                    else window_size_bits)
-              ; slr =
-                  Some
-                    (match partition_setting.slr with
-                     | SLR0 -> 0
-                     | SLR1 -> 1
-                     | SLR2 -> 2)
-              })
+            let num_windows_from_partition_settings =
+              List.fold window_ram_partition_settings ~init:0 ~f:(fun acc p ->
+                acc + p.num_windows)
+            in
+            if num_windows_from_partition_settings <> num_windows
+            then
+              raise_s
+                [%message
+                  "Number of windows specified in ram partition settings does not match \
+                   num_windows!"
+                    (num_windows : int)
+                    (window_ram_partition_settings : Config_intf.partition_setting list)];
+            let window_offset = ref 0 in
+            List.map window_ram_partition_settings ~f:(fun partition_setting ->
+              let o =
+                { Window_ram.Partition.window_size_bits =
+                    List.init partition_setting.num_windows ~f:(fun i ->
+                      num_buckets (i + !window_offset))
+                ; slr =
+                    Some
+                      (match partition_setting.slr with
+                       | SLR0 -> 0
+                       | SLR1 -> 1
+                       | SLR2 -> 2)
+                }
+              in
+              window_offset := !window_offset + partition_setting.num_windows;
+              o)
           ;;
 
           let data_bits = Signal.width adder_p3
@@ -210,6 +252,11 @@ module Make (Config : Config.S) = struct
           let ram_output_latency = ram_output_latency
         end)
       in
+      let address_bits =
+        List.init num_windows ~f:num_buckets
+        |> List.max_elt ~compare:Int.compare
+        |> Option.value_exn
+      in
       Window_ram.hierarchical
         ~build_mode
         ~b_write_data:(Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram)
@@ -217,81 +264,81 @@ module Make (Config : Config.S) = struct
         { Window_ram.I.clock
         ; clear
         ; port_a =
-            { write_enables =
-                List.init num_windows ~f:(fun window ->
-                  let ctrl_window_en = ctrl.window ==:. window in
-                  pipeline
+            (let pre_transform_address =
+               mux2
+                 (sm.is Read_result)
+                 bucket_address.value
+                 (pipeline
                     ~n:
                       (ram_read_latency
                       + ram_output_latency
                       + adder_latency
                       + ram_write_latency)
                     spec
-                    ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_a_we"))
-            ; read_enables =
-                List.init num_windows ~f:(fun window ->
-                  (sm.is Read_result
-                  &: (window_address.value ==:. window)
-                  &: fifo_q_has_space)
-                  -- "port_a_re")
-            ; data = adder_p3 -- "port_a_d"
-            ; address =
-                sel_bottom
-                  (mux2
-                     (sm.is Read_result)
-                     bucket_address.value
-                     (pipeline
-                        ~n:
-                          (ram_read_latency
-                          + ram_output_latency
-                          + adder_latency
-                          + ram_write_latency)
-                        spec
-                        ctrl.bucket
-                     -- "ctrl.bucket"))
-                  last_window_size_bits
-            ; read_window = window_address.value
-            }
+                    ctrl.bucket.scalar
+                 -- "ctrl.bucket")
+             in
+             { write_enables =
+                 List.init num_windows ~f:(fun window ->
+                   let ctrl_window_en = ctrl.window ==:. window in
+                   pipeline
+                     ~n:
+                       (ram_read_latency
+                       + ram_output_latency
+                       + adder_latency
+                       + ram_write_latency)
+                     spec
+                     ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_a_we"))
+             ; read_enables =
+                 List.init num_windows ~f:(fun window ->
+                   (sm.is Read_result
+                   &: (window_address.value ==:. window)
+                   &: fifo_q_has_space)
+                   -- "port_a_re")
+             ; data = adder_p3 -- "port_a_d"
+             ; address =
+                 uresize
+                   (scalar_to_ram_index (module Signal) pre_transform_address)
+                   address_bits
+             ; read_window = window_address.value
+             })
         ; port_b =
-            { write_enables =
-                List.init num_windows ~f:(fun window ->
-                  (sm.is Read_result
-                  &: (window_address.value ==:. window)
-                  &: fifo_q_has_space)
-                  -- "port_b_we")
-            ; read_enables =
-                List.init num_windows ~f:(fun window ->
-                  let ctrl_window_en = ctrl.window ==:. window in
-                  (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
-            ; data = Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram
-            ; address =
-                mux2
-                  (sm.is Read_result)
-                  (sel_bottom bucket_address.value last_window_size_bits
-                  -- "bucket.address")
-                  (sel_bottom ctrl.bucket last_window_size_bits -- "ctrl.bucket")
-            ; read_window = ctrl.window
-            }
+            (let pre_transform_address =
+               mux2
+                 (sm.is Read_result)
+                 (bucket_address.value -- "bucket.address")
+                 (ctrl.bucket.scalar -- "ctrl.bucket")
+             in
+             { write_enables =
+                 List.init num_windows ~f:(fun window ->
+                   (sm.is Read_result
+                   &: (window_address.value ==:. window)
+                   &: fifo_q_has_space)
+                   -- "port_b_we")
+             ; read_enables =
+                 List.init num_windows ~f:(fun window ->
+                   let ctrl_window_en = ctrl.window ==:. window in
+                   (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
+             ; data = Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram
+             ; address =
+                 uresize
+                   (scalar_to_ram_index (module Signal) pre_transform_address)
+                   address_bits
+             ; read_window = ctrl.window
+             })
         }
       |> fun (window_ram : _ Window_ram.O.t) -> window_ram.port_a_q, window_ram.port_b_q
     in
     let adder =
+      let n = ram_lookup_latency + ram_read_latency + ram_output_latency in
       Mixed_add.hierarchical
         scope
         ~config:adder_config
         { clock
-        ; valid_in =
-            pipeline
-              spec
-              adder_valid_in
-              ~n:(ram_lookup_latency + ram_read_latency + ram_output_latency)
+        ; valid_in = pipeline spec adder_valid_in ~n
         ; p1 = Mixed_add.Xyzt.Of_signal.unpack port_b_q
-        ; p2 =
-            Mixed_add.Xyt.Of_signal.(
-              pipeline
-                spec
-                ctrl_affine_point_as_xyt
-                ~n:(ram_lookup_latency + ram_read_latency + ram_output_latency))
+        ; p2 = Mixed_add.Xyt.Of_signal.(pipeline spec ctrl_affine_point_as_xyt ~n)
+        ; subtract = pipeline spec ctrl.bucket.negative ~n
         }
     in
     adder_valid_out <== adder.valid_out;
@@ -318,12 +365,12 @@ module Make (Config : Config.S) = struct
       [ sm.switch
           [ (* We initialize the RAM to identity by doing a "fake" ram read in the Read_result state. *)
             ( Init_to_identity
-            , [ bucket_address <--. (1 lsl window_size_bits) - 1
+            , [ bucket_address <--. num_buckets 0
               ; window_address <--. 0
               ; sm.set_next Read_result
               ] )
           ; ( Idle
-            , [ bucket_address <--. 0
+            , [ bucket_address <--. 0 (* CR rayesantharao: will this cause issues? *)
               ; window_address <--. 0
               ; wait_count <--. 0
               ; done_l <--. 0
@@ -345,7 +392,7 @@ module Make (Config : Config.S) = struct
                        + ram_write_latency
                        - 1)
                   [ window_address <--. 0
-                  ; bucket_address <--. (1 lsl window_size_bits) - 1
+                  ; bucket_address <--. num_buckets 0
                   ; sm.set_next Read_result
                   ]
               ] )
@@ -356,10 +403,7 @@ module Make (Config : Config.S) = struct
                   ; when_
                       (bucket_address.value ==:. 1)
                       [ window_address <-- window_address.value -- "window_address" +:. 1
-                      ; if_
-                          (window_address.value ==:. num_windows - 2)
-                          [ bucket_address <--. (1 lsl last_window_size_bits) - 1 ]
-                          [ bucket_address <--. (1 lsl window_size_bits) - 1 ]
+                      ; bucket_address <-- num_buckets_mux (window_address.value +:. 1)
                       ; when_
                           (window_address.value ==:. num_windows - 1)
                           [ bucket_address <--. 0
@@ -412,10 +456,11 @@ module Make (Config : Config.S) = struct
         <:. fifo_capacity - ram_lookup_latency - ram_read_latency - ram_output_latency - 2
         );
     last_result_point <== (msb fifo_q.q &: ~:(fifo_q.empty));
+    controller_ready <== (ctrl.scalar_read &: sm.is Working);
     { O.result_point = Mixed_add.Xyzt.Of_signal.unpack (lsbs fifo_q.q)
     ; result_point_valid = ~:(fifo_q.empty)
     ; last_result_point
-    ; scalar_and_input_point_ready = ctrl.scalar_read &: sm.is Working
+    ; scalar_and_input_point_ready
     }
   ;;
 
