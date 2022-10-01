@@ -7,7 +7,7 @@ module Make (Config : Config.S) = struct
   module Compact_stream = Compact_stream.Make (Config)
   module Top = Top.Make (Config)
   module Msm_result_to_host = Msm_result_to_host.Make (Config)
-  module Host_to_msm = Host_to_msm.Make (Config)
+  module Host_to_msm_simple = Host_to_msm_simple.Make (Config)
   module Merge_axi_streams = Merge_axi_streams.Make (Config)
 
   module I = struct
@@ -55,7 +55,7 @@ module Make (Config : Config.S) = struct
         { clock; clear; host_scalars_to_fpga; ddr_points_to_fpga; host_to_fpga_dest }
     in
     let host_to_msm =
-      Host_to_msm.hierarchical
+      Host_to_msm_simple.hierarchical
         scope
         { clock
         ; clear
