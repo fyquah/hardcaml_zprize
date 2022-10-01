@@ -320,7 +320,7 @@ let mixed_no_carry ?name ?instance ~stages ~scope ~enable ~clock ~init items =
       match item with
       | Term_and_op.Add x -> Signal.( +: ) acc x
       | Term_and_op.Sub x -> Signal.( -: ) acc x)
-    |> reg ~enable (Reg_spec.create ~clock ())
+    |> pipeline ~n:stages ~enable (Reg_spec.create ~clock ())
   | _ -> mixed ?name ?instance ~stages ~scope ~enable ~clock ~init items |> O.result
 ;;
 
