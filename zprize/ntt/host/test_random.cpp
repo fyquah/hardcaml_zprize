@@ -24,7 +24,8 @@ run_ntt_test(host_args_t host_args)
     << "  binaryFile =  "  << host_args.binaryFile << "\n"
     << "  core_type "      << driver_arg.core_type << "\n"
     << "  memory_layout "  << driver_arg.memory_layout << "\n"
-    << "  log_row_size = " << driver_arg.log_row_size << "\n";
+    << "  log_row_size = " << driver_arg.log_row_size << "\n"
+    << "  log_blocks = "   << driver_arg.log_blocks << "\n";
 
   NttFpgaDriver driver(driver_arg);
   driver.load_xclbin(host_args.binaryFile);
@@ -161,26 +162,12 @@ parse_args(int argc, char **argv)
     }
 
     if (strcmp(*argv, flag_log_row_size) == 0) {
-      uint64_t parsed = std::stoull(capture_next_arg(flag_log_row_size));
-      if (parsed == 0) {
-        error_message
-          .append(flag_log_row_size)
-          .append(" expects a positive numerical argument!");
-        throw std::runtime_error(error_message);
-      }
-      log_row_size = parsed;
+      log_row_size = std::stoull(capture_next_arg(flag_log_row_size));
       continue;
     }
 
     if (strcmp(*argv, flag_log_blocks) == 0) {
-      uint64_t parsed = std::stoull(capture_next_arg(flag_log_blocks));
-      if (parsed == 0) {
-        error_message
-          .append(flag_log_blocks)
-          .append(" expects a positive numerical argument!");
-        throw std::runtime_error(error_message);
-      }
-      log_row_size = parsed;
+      log_blocks = std::stoull(capture_next_arg(flag_log_blocks));
       continue;
     }
 

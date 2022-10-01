@@ -307,7 +307,8 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
           memcpy(out, buffer->output_data(), row_size * row_size * sizeof(uint64_t));
           break;
         case MemoryLayout::OPTIMIZED_LAYOUT: {
-          ntt_postprocessing(out, buffer->output_data(), row_size, logblocks);
+          std::cout << "Here" << std::endl;
+          ntt_postprocessing(out, buffer->output_data(), row_size, log_blocks);
           break;
         }
         }
