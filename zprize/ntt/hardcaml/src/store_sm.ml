@@ -84,29 +84,27 @@ module Make (Config : Top_config.S) = struct
         ]);
     let addr = lsbs addr.value in
     let block =
-      match memory_layout with
-      | Normal_layout_single_port | Normal_layout_multi_port ->
-        raise_s [%message "not implemented"]
-      | Optimised_layout_single_port ->
-        if logblocks = 0
-        then gnd
-        else
+      if logblocks = 0
+      then gnd
+      else (
+        match memory_layout with
+        | Normal_layout_single_port | Optimised_layout_single_port ->
           mux2
             i.first_4step_pass
             (sel_bottom (drop_bottom addr logcores) logblocks)
             (sel_bottom addr logblocks)
+        | Normal_layout_multi_port -> raise_s [%message "not implemented"])
     in
     let addr =
       match memory_layout with
-      | Normal_layout_single_port | Normal_layout_multi_port ->
-        raise_s [%message "not implemented"]
-      | Optimised_layout_single_port ->
+      | Normal_layout_single_port | Optimised_layout_single_port ->
         mux2
           i.first_4step_pass
           (if logcores = 0
           then drop_bottom addr logblocks
           else drop_bottom addr (logblocks + logcores) @: sel_bottom addr logcores)
           (drop_bottom addr logblocks)
+      | Normal_layout_multi_port -> raise_s [%message "not implemented"]
     in
     let block1h = binary_to_onehot block in
     let mask_by_block x =

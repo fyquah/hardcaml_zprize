@@ -77,7 +77,7 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
     cycle ()
   ;;
 
-  let convert_to_first_pass_input inputs =
+  let convert_to_first_pass_input_optimised_layout inputs =
     let t = Array.init (n * n) ~f:(Fn.const Gf.Z.zero) in
     let pos = ref 0 in
     for block_col = 0 to (n lsr logcores) - 1 do
@@ -92,7 +92,29 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
     t
   ;;
 
-  let convert_from_first_pass_output output =
+  let convert_to_first_pass_input_normal_layout inputs =
+    let t = Array.init (n * n) ~f:(Fn.const Gf.Z.zero) in
+    let pos = ref 0 in
+    for block_col = 0 to (n lsr (logcores + logblocks)) - 1 do
+      for row = 0 to n - 1 do
+        for i = 0 to (num_cores * num_blocks) - 1 do
+          t.(!pos) <- inputs.(row).((block_col * (num_cores * num_blocks)) + i);
+          Int.incr pos
+        done
+      done
+    done;
+    assert (!pos = n * n);
+    t
+  ;;
+
+  let convert_to_first_pass_input =
+    match (Config.memory_layout : Zprize_ntt.Memory_layout.t) with
+    | Normal_layout_single_port -> convert_to_first_pass_input_normal_layout
+    | Optimised_layout_single_port -> convert_to_first_pass_input_optimised_layout
+    | Normal_layout_multi_port -> raise_s [%message "Not implemented"]
+  ;;
+
+  let convert_first_pass_output_to_matrix output =
     let convert_packed_block t output ~pos ~row ~col =
       for r = 0 to num_cores - 1 do
         for c = 0 to num_cores - 1 do
@@ -157,7 +179,7 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
   ;;
 
   let check_first_pass_output ~verbose input_coefs hw_results =
-    let hw_results = convert_from_first_pass_output hw_results in
+    let hw_results = convert_first_pass_output_to_matrix hw_results in
     (* column transform, followed by twiddles *)
     let sw_results = transpose (copy_matrix input_coefs) in
     Array.iter sw_results ~f:Reference_model.inverse_dit;

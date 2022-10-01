@@ -91,6 +91,25 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
     r
   ;;
 
+  let _convert_first_pass_output_to_stream coefs =
+    let out = Array.init (Array.length coefs) ~f:(Fn.const Gf.Z.zero) in
+    let outpos = ref 0 in
+    let step1 = num_cores * num_cores * num_blocks in
+    let step2 = n * num_cores * num_blocks in
+    for block_col = 0 to (n lsr logcores) - 1 do
+      for block_row = 0 to (n lsr (logcores + logblocks)) - 1 do
+        let pos = (block_col * step1) + (block_row * step2) in
+        for word = 0 to (num_cores * num_blocks) - 1 do
+          for j = 0 to num_cores do
+            out.(!outpos) <- coefs.(pos + (word * num_cores) + j);
+            Int.incr outpos
+          done
+        done
+      done
+    done;
+    out
+  ;;
+
   (* Check the final results using a standard full size ntt. *)
   let check_second_pass_output ~verbose input_coefs hw_results =
     let sw_results = reference_intt input_coefs in
@@ -281,6 +300,26 @@ let%expect_test "2 blocks" =
     let logblocks = 1
     let support_4step_twiddle = true
     let memory_layout = Zprize_ntt.Memory_layout.Optimised_layout_single_port
+  end
+  in
+  let module Test = Make (Config) in
+  let input_coefs = Test.random_input_coef_matrix () in
+  ignore
+    (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
+      : Waveform.t option);
+  [%expect
+    {|
+    ("Hardware and software reference results match!" (pass first))
+    "Hardware and software reference results match!" |}]
+;;
+
+let%expect_test "normal layout" =
+  let module Config = struct
+    let logn = 5
+    let logcores = 3
+    let logblocks = 1
+    let support_4step_twiddle = true
+    let memory_layout = Zprize_ntt.Memory_layout.Normal_layout_single_port
   end
   in
   let module Test = Make (Config) in

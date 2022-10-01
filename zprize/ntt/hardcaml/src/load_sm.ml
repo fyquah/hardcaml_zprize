@@ -62,17 +62,27 @@ module Make (Config : Top_config.S) = struct
             ]
         ]);
     let block =
-      match memory_layout with
-      | Normal_layout_single_port | Normal_layout_multi_port ->
-        raise_s [%message "not implemented"]
-      | Optimised_layout_single_port ->
-        if logblocks = 0 then gnd else drop_bottom addr.value logn
+      if logblocks = 0
+      then gnd
+      else (
+        match memory_layout with
+        | Normal_layout_single_port ->
+          mux2
+            i.first_4step_pass
+            (sel_bottom addr.value logblocks)
+            (drop_bottom addr.value logn)
+        | Optimised_layout_single_port -> drop_bottom addr.value logn
+        | Normal_layout_multi_port -> raise_s [%message "not implemented"])
     in
     let addr =
       match memory_layout with
-      | Normal_layout_single_port | Normal_layout_multi_port ->
-        raise_s [%message "not implemented"]
+      | Normal_layout_single_port ->
+        mux2
+          i.first_4step_pass
+          (drop_bottom addr.value logblocks)
+          (sel_bottom addr.value logn)
       | Optimised_layout_single_port -> sel_bottom addr.value logn
+      | Normal_layout_multi_port -> raise_s [%message "not implemented"]
     in
     let block1h = binary_to_onehot block in
     let mask_by_block x =
