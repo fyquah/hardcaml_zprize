@@ -53,7 +53,7 @@ let command_mixed_add_precompute_barrett_reduction_arbitrated =
 ;;
 
 let command_mixed_add_precompute_barrett_reduction_full =
-  command_base_mixed_add_barrett_reduction_full
+  command_base_mixed_add_barrett_reduction
     (module Twisted_edwards_lib.Mixed_add_precompute)
     ~arbitrated:false
     ~name:"twisted_edwards_mixed_add_precompute"
