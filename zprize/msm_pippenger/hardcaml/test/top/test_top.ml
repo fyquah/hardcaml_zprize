@@ -62,7 +62,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         ; t = input.affine_point_with_t.t
         }
         ~f:( := );
-      i.scalar := input.scalar;
+      i.scalar := Utils.convert_scalar input.scalar;
       i.scalar_valid := Bits.vdd;
       if idx = num_inputs - 1 then i.last_scalar := Bits.vdd;
       while Bits.is_gnd !(o.scalar_and_input_point_ready) && !cycle_cnt < timeout do

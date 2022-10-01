@@ -286,4 +286,14 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     check_scalar_reduction scalar ret;
     ret
   ;;
+
+  let convert_scalar s =
+    let open Bits in
+    let reduced_scalars = perform_scalar_reduction s in
+    Array.map2_exn reduced_scalars window_bit_sizes ~f:(fun { scalar; negative } size ->
+      let v = uresize scalar size in
+      if negative then negate v else v)
+    |> Array.to_list
+    |> concat_lsb
+  ;;
 end
