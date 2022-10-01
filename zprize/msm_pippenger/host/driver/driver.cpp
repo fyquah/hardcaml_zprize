@@ -30,7 +30,7 @@
 #define UINT32_PER_INPUT_POINT (BYTES_PER_INPUT_POINT / 4)
 #define UINT32_PER_INPUT_SCALAR (BYTES_PER_INPUT_SCALAR / 4)
 
-#define NUM_OUTPUT_POINTS 90091
+#define NUM_OUTPUT_POINTS 69631
 #define OUTPUT_SIZE_IN_BYTES (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS)
 #define OUTPUT_SIZE_IN_UINT32 (OUTPUT_SIZE_IN_BYTES / 4)
 
@@ -210,8 +210,9 @@ public:
       // perform triangle sum
       post_processing_values.accum.setToIdentity();
       post_processing_values.running.setToIdentity();
-      for (uint64_t bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1 /* skip bucket 0 */;
-           bucket_idx--) {
+
+      // need signed int because of >= check
+      for (int64_t bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 0; bucket_idx--) {
         // receive fpga point
         post_processing_values.bucket_sum.import_from_fpga_vector(
             source_kernel_output + (NUM_32B_WORDS_PER_OUTPUT * point_idx));
@@ -234,6 +235,7 @@ public:
           );
       bit_offset += CUR_WINDOW_LEN;
     }
+    // std::cout << point_idx << std::endl;
     if (point_idx != NUM_OUTPUT_POINTS) {
       printf("ERROR IN point_idx\n");
     }
