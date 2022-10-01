@@ -1,0 +1,4 @@
+(rule
+ (mode promote)
+ (action
+  (copy ../../common/krnl_controller_optimized_layout.cpp krnl_controller.cpp)))
