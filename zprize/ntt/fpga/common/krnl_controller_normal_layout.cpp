@@ -7,6 +7,7 @@
 
 #define NUM_BLOCKS (1 << LOGBLOCKS)
 #define MEMORY_DWIDTH 512
+#define LOGCORES 3
 
 typedef ap_axiu<MEMORY_DWIDTH, 1, 0, 0> chunk_t;
 
