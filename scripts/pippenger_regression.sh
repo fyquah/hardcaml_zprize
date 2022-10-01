@@ -8,3 +8,4 @@ dune exec libs/pippenger/bin/simulate.exe  -- random -affine-point-bits 32 -data
 dune exec libs/pippenger/bin/simulate.exe  -- random -affine-point-bits 32 -datapath-depth 20 -num-windows 3 -window-size-bits 8 10_000 
 dune exec libs/pippenger/bin/simulate.exe  -- random -affine-point-bits 32 -datapath-depth 20 -num-windows 4 -window-size-bits 8 10_000 
 dune exec libs/pippenger/bin/simulate.exe  -- random -affine-point-bits 32 -datapath-depth 211 -num-windows 3 -window-size-bits 12 100_000 
+dune exec libs/pippenger/bin/simulate.exe  -- random -affine-point-bits 32 -datapath-depth 211 -num-windows 3 -window-size-bits 12 100_000 -stall

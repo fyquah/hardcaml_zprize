@@ -29,8 +29,11 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
       if n = depth
       then pipe
       else (
-        let d = Scalar.map ~f:(reg spec ~enable:shift) d in
-        ignore (d.scalar -- ("scl$" ^ Int.to_string n));
+        let d =
+          Scalar.(
+            map ~f:(reg spec ~enable:shift) d
+            |> Of_signal.apply_names ~naming_op:(--) ~prefix:("scl$" ^ Int.to_string n))
+        in
         build_pipe (n + 1) d (d :: pipe))
     in
     build_pipe 0 scalar [] |> List.rev |> Array.of_list
