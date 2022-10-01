@@ -17,6 +17,7 @@ type t =
   ; a : Z.t
   ; d : Z.t
   ; output_pipeline_stages : int
+  ; arbitrated_multiplier : bool
   }
 
 val reduce
@@ -30,5 +31,6 @@ val reduce
 val multiply_latency : reduce:bool -> t -> int
 
 module For_bls12_377 : sig
-  val with_barrett_reduction : t Lazy.t
+  val with_barrett_reduction_arbitrated : t Lazy.t
+  val with_barrett_reduction_full : t Lazy.t
 end

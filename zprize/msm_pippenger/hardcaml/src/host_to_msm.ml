@@ -61,13 +61,6 @@ module Make (Config : Config.S) = struct
       >= xyt_aligned_bits + Int.round_up Config.scalar_bits ~to_multiple_of:aligned_to)
   ;;
 
-  module State = struct
-    type t =
-      | Idle
-      | Working
-    [@@deriving sexp_of, compare, enumerate]
-  end
-
   let create scope (i : _ I.t) : _ O.t =
     let ( -- ) = Scope.naming scope in
     (* We downconvert to 256 bits for SLR crossings. *)
@@ -81,25 +74,29 @@ module Make (Config : Config.S) = struct
         ; dn_dest = Axi256.Stream.Dest.Of_always.value compact_dn_dest
         }
     in
-    let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
+    let spec = Reg_spec.create ~clock:i.clock () in
+    let spec_with_clear = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
     let open Always in
     (* Two input buffers so that we can keep the controller fed with points. *)
-    let buffer_w_select = Variable.reg spec ~width:1 in
-    let buffer_r_select = Variable.reg spec ~width:1 in
+    let buffer_w_select = Variable.reg spec_with_clear ~width:1 in
+    let buffer_r_select = Variable.reg spec_with_clear ~width:1 in
     let input_l0 = Variable.reg spec ~width:input_bits in
     let input_l1 = Variable.reg spec ~width:input_bits in
-    let tlast0 = Variable.reg spec ~width:1 in
-    let tlast1 = Variable.reg spec ~width:1 in
-    let scalar_valid0 = Variable.reg spec ~width:1 in
-    let scalar_valid1 = Variable.reg spec ~width:1 in
-    let sm = State_machine.create (module State) spec in
+    let tlast0 = Variable.reg spec_with_clear ~width:1 in
+    let tlast1 = Variable.reg spec_with_clear ~width:1 in
+    let scalar_valid0 = Variable.reg spec_with_clear ~width:1 in
+    let scalar_valid1 = Variable.reg spec_with_clear ~width:1 in
     let input_point_and_scalar =
       sel_bottom
         (mux2 buffer_r_select.value input_l1.value input_l0.value)
         (xyt_aligned_bits + Config.scalar_bits)
     in
-    let valid_input_bits0 = Variable.reg spec ~width:(num_bits_to_represent input_bits) in
-    let valid_input_bits1 = Variable.reg spec ~width:(num_bits_to_represent input_bits) in
+    let valid_input_bits0 =
+      Variable.reg spec_with_clear ~width:(num_bits_to_represent input_bits)
+    in
+    let valid_input_bits1 =
+      Variable.reg spec_with_clear ~width:(num_bits_to_represent input_bits)
+    in
     let maybe_shift_input =
       [ compact_dn_dest.tready
         <-- (mux2 buffer_w_select.value valid_input_bits1.value valid_input_bits0.value
@@ -146,7 +143,6 @@ module Make (Config : Config.S) = struct
     ignore (buffer_w_select.value -- "buffer_w_select" : Signal.t);
     ignore (scalar_valid0.value -- "scalar_valid0" : Signal.t);
     ignore (scalar_valid1.value -- "scalar_valid1" : Signal.t);
-    ignore (sm.current -- "state" : Signal.t);
     compile
       [ when_
           i.scalar_and_input_point_ready

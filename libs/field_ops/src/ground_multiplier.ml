@@ -9,6 +9,11 @@ module Config = struct
         { latency : int
         ; lut_only_hamming_weight_threshold : int
         }
+    | Mixed of
+        { latency : int
+        ; lut_only_hamming_weight_threshold : int option
+        ; hybrid_hamming_weight_threshold : int option
+        }
     | Specialized_43_bit_multiply
   [@@deriving sexp_of]
 
@@ -16,21 +21,22 @@ module Config = struct
     | Verilog_multiply { latency } -> latency
     | Hybrid_dsp_and_luts { latency; lut_only_hamming_weight_threshold = _ } -> latency
     | Specialized_43_bit_multiply -> 5
+    | Mixed { latency; _ } -> latency
   ;;
 end
 
 let long_multiplication_with_addition
-    (type a)
-    (module Comb : Comb.S with type t = a)
-    ~pivot
-    big
+  (type a)
+  (module Comb : Comb.S with type t = a)
+  ~pivot
+  big
   =
   let open Comb in
   let output_width = width pivot + width big in
   let addition_terms =
     List.filter_mapi (bits_lsb pivot) ~f:(fun i b ->
-        let term = mux2 b (concat_msb_e [ big; zero i ]) (zero (i + width big)) in
-        if is_vdd (term ==:. 0) then None else Some term)
+      let term = mux2 b (concat_msb_e [ big; zero i ]) (zero (i + width big)) in
+      if is_vdd (term ==:. 0) then None else Some term)
   in
   match addition_terms with
   | [] -> zero output_width
@@ -51,9 +57,9 @@ let long_multiplication_with_addition_for_signal ~pivot big =
   let output_width = width pivot + width big in
   let addition_terms =
     List.filter_mapi (bits_lsb pivot) ~f:(fun i b ->
-        if is_vdd (b ==:. 0)
-        then None
-        else Some (With_shift.create ~shift:i (mux2 b big (zero (width big)))))
+      if is_vdd (b ==:. 0)
+      then None
+      else Some (With_shift.create ~shift:i (mux2 b big (zero (width big)))))
   in
   match opt_to_bits pivot with
   | None ->
@@ -65,46 +71,46 @@ let long_multiplication_with_addition_for_signal ~pivot big =
     (match
        Naf.bits_lsb pivot
        |> List.filter_mapi ~f:(fun shift bit ->
-              match bit with
-              | Naf.Bit.Zero -> None
-              | Naf.Bit.Pos_one -> Some (`Add (With_shift.create ~shift big))
-              | Naf.Bit.Neg_one -> Some (`Sub (With_shift.create ~shift big)))
+            match bit with
+            | Naf.Bit.Zero -> None
+            | Naf.Bit.Pos_one -> Some (`Add (With_shift.create ~shift big))
+            | Naf.Bit.Neg_one -> Some (`Sub (With_shift.create ~shift big)))
        |> List.rev
      with
-    | [] -> zero output_width
-    | [ hd ] ->
-      (match hd with
-      | `Add hd -> With_shift.to_signal (With_shift.uresize hd output_width)
-      | `Sub hd ->
-        assert (With_shift.width hd = Signal.width big);
-        With_shift.mixed
-          ~init:(With_shift.create ~shift:(Naf.width pivot) big)
-          [ `Sub (With_shift.uresize hd (Naf.width pivot + Signal.width big)) ]
-        |> Fn.flip With_shift.uresize output_width
-        |> With_shift.to_signal)
-    | init :: items ->
-      let addition_term_bits =
-        let maximum_addition_term_width =
-          List.map addition_terms ~f:With_shift.width
-          |> List.max_elt ~compare:Int.compare
-          |> Option.value_exn
-        in
-        let num_terms = List.length addition_terms in
-        maximum_addition_term_width + Int.ceil_log2 num_terms
-      in
-      let init =
-        match init with
-        | `Add x -> With_shift.uresize x addition_term_bits
-        | `Sub _ -> assert false
-      in
-      let items =
-        List.map items ~f:(fun x ->
-            match x with
-            | `Add x -> `Add (With_shift.uresize x addition_term_bits)
-            | `Sub x -> `Sub (With_shift.uresize x addition_term_bits))
-      in
-      With_shift.uresize (With_shift.mixed ~init items) output_width
-      |> With_shift.to_signal)
+     | [] -> zero output_width
+     | [ hd ] ->
+       (match hd with
+        | `Add hd -> With_shift.to_signal (With_shift.uresize hd output_width)
+        | `Sub hd ->
+          assert (With_shift.width hd = Signal.width big);
+          With_shift.mixed
+            ~init:(With_shift.create ~shift:(Naf.width pivot) big)
+            [ `Sub (With_shift.uresize hd (Naf.width pivot + Signal.width big)) ]
+          |> Fn.flip With_shift.uresize output_width
+          |> With_shift.to_signal)
+     | init :: items ->
+       let addition_term_bits =
+         let maximum_addition_term_width =
+           List.map addition_terms ~f:With_shift.width
+           |> List.max_elt ~compare:Int.compare
+           |> Option.value_exn
+         in
+         let num_terms = List.length addition_terms in
+         maximum_addition_term_width + Int.ceil_log2 num_terms
+       in
+       let init =
+         match init with
+         | `Add x -> With_shift.uresize x addition_term_bits
+         | `Sub _ -> assert false
+       in
+       let items =
+         List.map items ~f:(fun x ->
+           match x with
+           | `Add x -> `Add (With_shift.uresize x addition_term_bits)
+           | `Sub x -> `Sub (With_shift.uresize x addition_term_bits))
+       in
+       With_shift.uresize (With_shift.mixed ~init items) output_width
+       |> With_shift.to_signal)
 ;;
 
 let should_multiply_top_with_luts b =
@@ -143,7 +149,7 @@ let hybrid_dsp_and_luts_umul a b =
     result)
 ;;
 
-let hybrid_dsp_and_luts_umul ~lut_only_hamming_weight_threshold a b =
+let hybrid_dsp_and_luts_umul_maybe_lut_only ~lut_only_hamming_weight_threshold a b =
   match b with
   | Signal.Const { constant; signal_id = _ } ->
     if Naf.hamming_weight (Naf.of_bits constant) < lut_only_hamming_weight_threshold
@@ -155,13 +161,35 @@ let hybrid_dsp_and_luts_umul ~lut_only_hamming_weight_threshold a b =
   | _ -> hybrid_dsp_and_luts_umul a b
 ;;
 
+let mixed_multiplication
+  ~lut_only_hamming_weight_threshold
+  ~hybrid_hamming_weight_threshold
+  a
+  b
+  =
+  let result =
+    match b with
+    | Signal.Const { constant; signal_id = _ } ->
+      let hamming_weight = Naf.hamming_weight (Naf.of_bits constant) in
+      assert (hamming_weight >= 0);
+      if hamming_weight < Option.value ~default:(-1) lut_only_hamming_weight_threshold
+      then long_multiplication_with_addition_for_signal ~pivot:b a
+      else if hamming_weight < Option.value ~default:(-1) hybrid_hamming_weight_threshold
+      then hybrid_dsp_and_luts_umul a b
+      else a *: b
+    | _ -> a *: b
+  in
+  assert (width a + width b = width result);
+  result
+;;
+
 (* Maybe delete this? Don't think this is that useful..*)
 let specialized_43_bit_multiply
-    (type a)
-    (module Comb : Comb.S with type t = a)
-    ~pipe
-    (x : a)
-    (y : a)
+  (type a)
+  (module Comb : Comb.S with type t = a)
+  ~pipe
+  (x : a)
+  (y : a)
   =
   let open Comb in
   assert (width x = width y);
@@ -216,10 +244,21 @@ let create ~clock ~enable ~config a b =
     (* TODO(fyquah): either annotate this with backwards retiming, or
      * balance the register stages better.
      *)
-    pipeline ~n:latency (hybrid_dsp_and_luts_umul ~lut_only_hamming_weight_threshold a b)
+    pipeline
+      ~n:latency
+      (hybrid_dsp_and_luts_umul_maybe_lut_only ~lut_only_hamming_weight_threshold a b)
   | Config.Specialized_43_bit_multiply ->
     let pipe ~n x = pipeline ~n x in
     specialized_43_bit_multiply (module Signal) ~pipe a b
+  | Config.Mixed
+      { latency; lut_only_hamming_weight_threshold; hybrid_hamming_weight_threshold } ->
+    (* TODO(fyquah): We are at the mercy of retiming here. *)
+    mixed_multiplication
+      ~lut_only_hamming_weight_threshold
+      ~hybrid_hamming_weight_threshold
+      a
+      b
+    |> pipeline ~n:latency
 ;;
 
 module For_testing = struct
