@@ -80,6 +80,7 @@ run_ntt_test(host_args_t host_args)
             << " Obtained = " << obtained_output[i]
             << std::endl;
           found_mismatch = 1;
+          break;
         }
       }
       if (found_mismatch) {
