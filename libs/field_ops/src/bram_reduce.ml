@@ -34,7 +34,7 @@ module Make (Config : Config) = struct
       { clock : 'a
       ; coarse_value : 'a [@bits num_bits + error_bits]
       }
-    [@@deriving sexp_of, hardcaml]
+    [@@deriving sexp_of, hardcaml ~rtlprefix:"i$"]
   end
 
   module O = struct
@@ -53,7 +53,7 @@ module Make (Config : Config) = struct
         ; coarse_value : 'a [@bits num_bits]
         ; top_zero : 'a
         }
-      [@@deriving sexp_of, hardcaml]
+      [@@deriving sexp_of, hardcaml ~rtlprefix:"o"]
     end
 
     let log2_depth = error_bits
