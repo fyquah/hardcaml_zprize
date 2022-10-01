@@ -12,7 +12,8 @@ end
 module Slr_assignments = struct
   type t =
     { input : int option
-    ; stage0 : int option
+    ; stage0a : int option
+    ; stage0b : int option
     ; stage1 : int option
     ; stage2 : int option
     ; stage3 : int option
@@ -71,12 +72,20 @@ module For_bls12_377 = struct
   let slr_assignments =
     (* Only one modulo mult in SLR1, everything else in SLR2 *)
     { Slr_assignments.input = Some 1
-    ; stage0 = Some 1
+    ; stage0a = Some 1
+    (** 0a has 2 multiplies *)
+    ; stage0b = Some 2
+    (** 0b has 1 multiply *)
     ; stage1 = Some 2
+    (** Stage1 has addition and subtractions *)
     ; stage2 = Some 2
+    (** Stage2 is correction *)
     ; stage3 = Some 2
+    (** Stage3 has 4 multiplies *)
     ; stage4 = Some 2
+    (** Stage4 has a bunch of addition and subs *)
     ; stage5 = Some 2
+    (** Stage5 is correction *)
     ; output = Some 1
     }
   ;;

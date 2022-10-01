@@ -5,7 +5,8 @@ open Signal
 module Slr_assignments : sig
   type t =
     { input : int option
-    ; stage0 : int option
+    ; stage0a : int option
+    ; stage0b : int option
     ; stage1 : int option
     ; stage2 : int option
     ; stage3 : int option

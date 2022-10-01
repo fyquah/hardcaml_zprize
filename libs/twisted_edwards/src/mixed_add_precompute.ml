@@ -252,7 +252,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  module Stage0 = struct
+  module Stage0a = struct
     let include_fine_reduction = false
 
     (* CR rahul: need to get this correctly from the config - it's the log2 of error introduced by 
@@ -271,8 +271,6 @@ module Make (Num_bits : Num_bits.S) = struct
       type 'a t =
         { c_A : 'a [@bits num_bits + error]
         ; c_B : 'a [@bits num_bits + error]
-        ; c_C : 'a [@bits num_bits + error]
-        ; c_D : 'a [@bits num_bits]
         ; subtract : 'a [@rtlname "stage0_subtract"]
         ; valid : 'a [@rtlname "stage0_valid"]
         }
@@ -312,11 +310,8 @@ module Make (Num_bits : Num_bits.S) = struct
           (p1.x, p2.x)
           (p1.y, p2.y)
       in
-      let c_C =
-        multiply ~include_fine_reduction ~latency ~config ~scope ~clock (p1.t, p2.t)
-      in
-      let scope = Scope.sub_scope scope "stage1" in
-      { c_A; c_B; c_C; c_D = pipe p1.z; subtract = pipe subtract; valid = pipe valid }
+      let scope = Scope.sub_scope scope "stage0a" in
+      { c_A; c_B; subtract = pipe subtract; valid = pipe valid }
       |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
 
@@ -324,24 +319,94 @@ module Make (Num_bits : Num_bits.S) = struct
       let module H = Hierarchy.In_scope (I) (O) in
       H.hierarchical
         ~scope
-        ~name:"mixed_add_precompute_stage_0"
+        ~name:"mixed_add_precompute_stage_0a"
         ?instance:
-          (match config.slr_assignments.stage0 with
+          (match config.slr_assignments.stage0a with
            | None -> None
-           | Some slr -> Some (sprintf "mixed_add_precompute_stage_0_SLR%d" slr))
+           | Some slr -> Some (sprintf "mixed_add_precompute_stage_0a_SLR%d" slr))
+        (create ~config)
+        i
+    ;;
+  end
+
+  module Stage0b = struct
+    let include_fine_reduction = false
+
+    (* CR rahul: need to get this correctly from the config - it's the log2 of error introduced by 
+     * the msb approximation *)
+    let error = if include_fine_reduction then 0 else 4
+
+    module I = struct
+      type 'a t =
+        { clock : 'a
+        ; datapath_input : 'a Datapath_input.t
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O = struct
+      type 'a t =
+        { c_C : 'a [@bits num_bits + error]
+        ; c_D : 'a [@bits num_bits]
+        ; subtract : 'a [@rtlname "stage0b_subtract"]
+        ; valid : 'a [@rtlname "stage0b_valid"]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    let latency_without_arbitration (config : Config.t) =
+      Config.multiply_latency
+        ~reduce:(if include_fine_reduction then Fine else Coarse)
+        config
+    ;;
+
+    let latency (config : Config.t) =
+      latency_without_arbitration config + if config.arbitrated_multiplier then 1 else 0
+    ;;
+
+    let create
+      ~config
+      scope
+      { I.clock; datapath_input = { Datapath_input.p1; p2; subtract; valid } }
+      =
+      [%test_result: int] (width p1.x) ~expect:num_bits;
+      [%test_result: int] (width p1.y) ~expect:num_bits;
+      [%test_result: int] (width p2.x) ~expect:num_bits;
+      [%test_result: int] (width p2.y) ~expect:num_bits;
+      let spec = Reg_spec.create ~clock () in
+      let pipe = pipeline spec ~n:(latency config) in
+      let c_C =
+        multiply ~include_fine_reduction ~latency ~config ~scope ~clock (p1.t, p2.t)
+      in
+      let scope = Scope.sub_scope scope "stage0b" in
+      { c_C; c_D = pipe p1.z; subtract = pipe subtract; valid = pipe valid }
+      |> O.map2 O.port_names ~f:(fun name x -> Scope.naming scope x name)
+    ;;
+
+    let hierarchical ~(config : Config.t) scope i =
+      let module H = Hierarchy.In_scope (I) (O) in
+      H.hierarchical
+        ~scope
+        ~name:"mixed_add_precompute_stage_0b"
+        ?instance:
+          (match config.slr_assignments.stage0b with
+           | None -> None
+           | Some slr -> Some (sprintf "mixed_add_precompute_stage_0b_SLR%d" slr))
         (create ~config)
         i
     ;;
   end
 
   module Stage1 = struct
-    let accumulated_error = Stage0.error
+    let () = assert (Stage0a.error = Stage0b.error)
+    let accumulated_error = Stage0a.error
     let error = 1
 
     module I = struct
       type 'a t =
         { clock : 'a
-        ; stage0 : 'a Stage0.O.t
+        ; stage0a : 'a Stage0a.O.t [@rtlprefix "stage0a$"]
+        ; stage0b : 'a Stage0b.O.t [@rtlprefix "stage0b$"]
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -359,7 +424,13 @@ module Make (Num_bits : Num_bits.S) = struct
 
     let latency (config : Config.t) = config.adder_stages
 
-    let create ~config scope { I.clock; stage0 = { c_A; c_B; c_C; c_D; subtract; valid } }
+    let create
+      ~config
+      scope
+      { I.clock
+      ; stage0a = { c_A; c_B; subtract; valid }
+      ; stage0b = { c_C; c_D; subtract = _; valid = _ }
+      }
       =
       [%test_result: int] (width c_A) ~expect:(num_bits + accumulated_error);
       [%test_result: int] (width c_B) ~expect:(num_bits + accumulated_error);
@@ -551,11 +622,11 @@ module Make (Num_bits : Num_bits.S) = struct
       let module H = Hierarchy.In_scope (I) (O) in
       H.hierarchical
         ~scope
-        ~name:"mixed_add_precompute_stage_3"
+        ~name:"mixed_add_precompute_stage_4"
         ?instance:
           (match config.slr_assignments.stage3 with
            | None -> None
-           | Some slr -> Some (sprintf "mixed_add_precompute_stage_3_SLR%d" slr))
+           | Some slr -> Some (sprintf "mixed_add_precompute_stage_4_SLR%d" slr))
         (create ~config)
         i
     ;;
@@ -583,11 +654,17 @@ module Make (Num_bits : Num_bits.S) = struct
 
   let latency (config : Config.t) =
     let slr_assignments = config.slr_assignments in
-    let needs_slr_crossing_input_to_stage0 =
-      needs_slr_crossing ~src:slr_assignments.input ~dst:slr_assignments.stage0
+    let needs_slr_crossing_input_to_stage0a =
+      needs_slr_crossing ~src:slr_assignments.input ~dst:slr_assignments.stage0a
     in
-    let needs_slr_crossing_stage0_to_1 =
-      needs_slr_crossing ~src:slr_assignments.stage0 ~dst:slr_assignments.stage1
+    let needs_slr_crossing_input_to_stage0b =
+      needs_slr_crossing ~src:slr_assignments.input ~dst:slr_assignments.stage0b
+    in
+    let needs_slr_crossing_stage0a_to_1 =
+      needs_slr_crossing ~src:slr_assignments.stage0a ~dst:slr_assignments.stage1
+    in
+    let needs_slr_crossing_stage0b_to_1 =
+      needs_slr_crossing ~src:slr_assignments.stage0b ~dst:slr_assignments.stage1
     in
     let needs_slr_crossing_stage1_to_2 =
       needs_slr_crossing ~src:slr_assignments.stage1 ~dst:slr_assignments.stage2
@@ -601,9 +678,13 @@ module Make (Num_bits : Num_bits.S) = struct
     let needs_slr_crossing_stage4_to_5 =
       needs_slr_crossing ~src:slr_assignments.stage4 ~dst:slr_assignments.stage5
     in
-    (if needs_slr_crossing_input_to_stage0 then 2 else 0)
-    + Stage0.latency config
-    + (if needs_slr_crossing_stage0_to_1 then 2 else 0)
+    assert (Stage0a.latency config = Stage0b.latency config);
+    Stage0a.latency config
+    + Int.max
+        ((if needs_slr_crossing_input_to_stage0a then 2 else 0)
+        + if needs_slr_crossing_stage0a_to_1 then 2 else 0)
+        ((if needs_slr_crossing_input_to_stage0b then 2 else 0)
+        + if needs_slr_crossing_stage0b_to_1 then 2 else 0)
     + Stage1.latency config
     + (if needs_slr_crossing_stage1_to_2 then 2 else 0)
     + Stage2.latency config
@@ -626,11 +707,17 @@ module Make (Num_bits : Num_bits.S) = struct
     =
     let slr_assignments = config.slr_assignments in
     let { Stage5.O.o_data = { x3; y3; z3; t3; valid = valid_out } } =
-      let needs_slr_crossing_input_to_stage0 =
-        needs_slr_crossing ~src:slr_assignments.input ~dst:slr_assignments.stage0
+      let needs_slr_crossing_input_to_stage0a =
+        needs_slr_crossing ~src:slr_assignments.input ~dst:slr_assignments.stage0a
       in
-      let needs_slr_crossing_stage0_to_1 =
-        needs_slr_crossing ~src:slr_assignments.stage0 ~dst:slr_assignments.stage1
+      let needs_slr_crossing_input_to_stage0b =
+        needs_slr_crossing ~src:slr_assignments.input ~dst:slr_assignments.stage0b
+      in
+      let needs_slr_crossing_stage0a_to_1 =
+        needs_slr_crossing ~src:slr_assignments.stage0a ~dst:slr_assignments.stage1
+      in
+      let needs_slr_crossing_stage0b_to_1 =
+        needs_slr_crossing ~src:slr_assignments.stage0b ~dst:slr_assignments.stage1
       in
       let needs_slr_crossing_stage1_to_2 =
         needs_slr_crossing ~src:slr_assignments.stage1 ~dst:slr_assignments.stage2
@@ -652,29 +739,75 @@ module Make (Num_bits : Num_bits.S) = struct
          * negate t. We push the t negation down the computation to avoid adding another modulo 
          * subtractor. *)
         let p2 = Xyt.Of_signal.mux2 subtract { Xyt.x = p2.y; y = p2.x; t = p2.t } p2 in
-        let datapath_input = { Datapath_input.p1; p2; subtract; valid = valid_in } in
-        if needs_slr_crossing_input_to_stage0
-        then
-          datapath_input
-          |> Datapath_input.Of_signal.pack
-          |> named_register slr_assignments.input
-          |> named_register slr_assignments.stage0
-          |> Datapath_input.Of_signal.unpack
-        else datapath_input
+        { Datapath_input.p1; p2; subtract; valid = valid_in }
       in
-      let stage0 = Stage0.hierarchical ~config scope { clock; datapath_input } in
-      let stage1 =
-        let stage0 =
-          if needs_slr_crossing_stage0_to_1
+      let stage0a =
+        let datapath_input =
+          if needs_slr_crossing_input_to_stage0a
           then
-            stage0
-            |> Stage0.O.Of_signal.pack
-            |> named_register slr_assignments.stage0
-            |> named_register slr_assignments.stage1
-            |> Stage0.O.Of_signal.unpack
-          else stage0
+            datapath_input
+            |> Datapath_input.Of_signal.pack
+            |> named_register slr_assignments.input
+            |> named_register slr_assignments.stage0a
+            |> Datapath_input.Of_signal.unpack
+          else datapath_input
         in
-        Stage1.hierarchical ~config scope { clock; stage0 }
+        Stage0a.hierarchical ~config scope { clock; datapath_input }
+      in
+      let stage0b =
+        let datapath_input =
+          if needs_slr_crossing_input_to_stage0b
+          then
+            datapath_input
+            |> Datapath_input.Of_signal.pack
+            |> named_register slr_assignments.input
+            |> named_register slr_assignments.stage0b
+            |> Datapath_input.Of_signal.unpack
+          else datapath_input
+        in
+        Stage0b.hierarchical ~config scope { clock; datapath_input }
+      in
+      let stage1 =
+        let stage0a =
+          if needs_slr_crossing_stage0a_to_1
+          then
+            stage0a
+            |> Stage0a.O.Of_signal.pack
+            |> named_register slr_assignments.stage0a
+            |> named_register slr_assignments.stage1
+            |> Stage0a.O.Of_signal.unpack
+          else stage0a
+        in
+        let stage0b =
+          if needs_slr_crossing_stage0b_to_1
+          then
+            stage0b
+            |> Stage0b.O.Of_signal.pack
+            |> named_register slr_assignments.stage0b
+            |> named_register slr_assignments.stage1
+            |> Stage0b.O.Of_signal.unpack
+          else stage0b
+        in
+        let lat_a =
+          (if needs_slr_crossing_input_to_stage0a then 2 else 0)
+          + if needs_slr_crossing_stage0a_to_1 then 2 else 0
+        in
+        let lat_b =
+          (if needs_slr_crossing_input_to_stage0b then 2 else 0)
+          + if needs_slr_crossing_stage0b_to_1 then 2 else 0
+        in
+        let lat = Int.max lat_a lat_b in
+        let stage0a =
+          Stage0a.O.map
+            ~f:(Signal.pipeline (Reg_spec.create ~clock ()) ~n:(lat - lat_a))
+            stage0a
+        in
+        let stage0b =
+          Stage0b.O.map
+            ~f:(Signal.pipeline (Reg_spec.create ~clock ()) ~n:(lat - lat_b))
+            stage0b
+        in
+        Stage1.hierarchical ~config scope { clock; stage0a; stage0b }
       in
       let stage2 =
         let stage1 =
