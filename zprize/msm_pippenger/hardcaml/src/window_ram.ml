@@ -57,7 +57,6 @@ struct
 
     type 'a t =
       { clock : 'a
-      ; clear : 'a
       ; port_a : 'a Ram_port.t [@rtlprefix "a$"]
       ; port_b : 'a Ram_port.t [@rtlprefix "b$"]
       }
@@ -92,9 +91,9 @@ struct
       |> Some
   ;;
 
-  let create ~build_mode ~b_write_data scope { I.clock; clear; port_a; port_b } =
+  let create ~build_mode ~b_write_data scope { I.clock; port_a; port_b } =
     (* TODO(fyquah): Do we need clear? *)
-    let spec = Reg_spec.create ~clock ~clear () in
+    let spec = Reg_spec.create ~clock () in
     let aqs, bqs =
       List.map2_exn window_offsets partitions ~f:(fun window_offset partition ->
         let module M =
@@ -121,30 +120,29 @@ struct
             ~b_write_data
             scope
             { clock
-            ; clear
             ; port_a =
                 { read_enables =
                     sublist port_a.read_enables
                     |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
                     |> concat_lsb
-                    |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> named_register ~scope ~clock ~clear ~slr:partition.slr
+                    |> named_register ~scope ~clock ~slr:centre_slr
+                    |> named_register ~scope ~clock ~slr:partition.slr
                     |> bits_lsb
                 ; write_enables =
                     sublist port_a.write_enables
                     |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
                     |> concat_lsb
-                    |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> named_register ~scope ~clock ~clear ~slr:partition.slr
+                    |> named_register ~scope ~clock ~slr:centre_slr
+                    |> named_register ~scope ~clock ~slr:partition.slr
                     |> bits_lsb
                 ; address =
                     pipeline spec ~n:(ram_lookup_latency - 2) port_a.address
-                    |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> named_register ~scope ~clock ~clear ~slr:partition.slr
+                    |> named_register ~scope ~clock ~slr:centre_slr
+                    |> named_register ~scope ~clock ~slr:partition.slr
                 ; data =
                     pipeline spec ~n:(ram_lookup_latency - 2) port_a.data
-                    |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> named_register ~scope ~clock ~clear ~slr:partition.slr
+                    |> named_register ~scope ~clock ~slr:centre_slr
+                    |> named_register ~scope ~clock ~slr:partition.slr
                 ; read_window =
                     (if Partition.num_windows partition = 1
                     then gnd
@@ -154,32 +152,32 @@ struct
                         ~n:(ram_lookup_latency - 2)
                         (port_a.read_window -:. window_offset)
                       |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
-                      |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                      |> named_register ~scope ~clock ~clear ~slr:partition.slr)
+                      |> named_register ~scope ~clock ~slr:centre_slr
+                      |> named_register ~scope ~clock ~slr:partition.slr)
                 }
             ; port_b =
                 { read_enables =
                     sublist port_b.read_enables
                     |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
                     |> concat_lsb
-                    |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> named_register ~scope ~clock ~clear ~slr:partition.slr
+                    |> named_register ~scope ~clock ~slr:centre_slr
+                    |> named_register ~scope ~clock ~slr:partition.slr
                     |> bits_lsb
                 ; write_enables =
                     sublist port_b.write_enables
                     |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
                     |> concat_lsb
-                    |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> named_register ~scope ~clock ~clear ~slr:partition.slr
+                    |> named_register ~scope ~clock ~slr:centre_slr
+                    |> named_register ~scope ~clock ~slr:partition.slr
                     |> bits_lsb
                 ; address =
                     pipeline spec ~n:(ram_lookup_latency - 2) port_b.address
-                    |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> named_register ~scope ~clock ~clear ~slr:partition.slr
+                    |> named_register ~scope ~clock ~slr:centre_slr
+                    |> named_register ~scope ~clock ~slr:partition.slr
                 ; data =
                     pipeline spec ~n:(ram_lookup_latency - 2) port_b.data
-                    |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                    |> named_register ~scope ~clock ~clear ~slr:partition.slr
+                    |> named_register ~scope ~clock ~slr:centre_slr
+                    |> named_register ~scope ~clock ~slr:partition.slr
                 ; read_window =
                     (if Partition.num_windows partition = 1
                     then gnd
@@ -187,17 +185,17 @@ struct
                       port_b.read_window -:. window_offset
                       |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
                       |> pipeline spec ~n:(ram_lookup_latency - 2)
-                      |> named_register ~scope ~clock ~clear ~slr:centre_slr
-                      |> named_register ~scope ~clock ~clear ~slr:partition.slr)
+                      |> named_register ~scope ~clock ~slr:centre_slr
+                      |> named_register ~scope ~clock ~slr:partition.slr)
                 }
             }
         in
         ( pipeline spec ~n:(ram_output_latency - 3) o.port_a_q
-          |> named_register ~scope ~clock ~clear ~slr:partition.slr
-          |> named_register ~scope ~clock ~clear ~slr:centre_slr
+          |> named_register ~scope ~clock ~slr:partition.slr
+          |> named_register ~scope ~clock ~slr:centre_slr
         , pipeline spec ~n:(ram_output_latency - 3) o.port_b_q
-          |> named_register ~scope ~clock ~clear ~slr:partition.slr
-          |> named_register ~scope ~clock ~clear ~slr:centre_slr ))
+          |> named_register ~scope ~clock ~slr:partition.slr
+          |> named_register ~scope ~clock ~slr:centre_slr ))
       |> List.unzip
     in
     (* [read_partition_a] and [read_partition_b] doesn't require SLR pinning,

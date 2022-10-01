@@ -35,7 +35,6 @@ struct
 
     type 'a t =
       { clock : 'a
-      ; clear : 'a
       ; port_a : 'a Ram_port.t [@rtlprefix "a$"]
       ; port_b : 'a Ram_port.t [@rtlprefix "b$"]
       }
@@ -50,7 +49,7 @@ struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  let create ~build_mode ~b_write_data scope { I.clock; clear; port_a; port_b } =
+  let create ~build_mode ~b_write_data scope { I.clock; port_a; port_b } =
     let ( -- ) = Scope.naming scope in
     let port_a_q, port_b_q =
       List.mapi window_size_bits ~f:(fun i window_size_bits ->
@@ -61,7 +60,7 @@ struct
           ~arch:Ultraram
           ~build_mode
           ~clock
-          ~clear
+          ~clear:gnd
           ~size:(1 lsl window_size_bits)
           ~port_a:
             (let port =
@@ -100,7 +99,7 @@ struct
          | _ ->
            mux
              (Signal.pipeline
-                (Reg_spec.create ~clock ~clear ())
+                (Reg_spec.create ~clock ())
                 ~n:ram_read_latency
                 port_a.read_window)
              port_a_q)
@@ -110,7 +109,7 @@ struct
          | _ ->
            mux
              (Signal.pipeline
-                (Reg_spec.create ~clock ~clear ())
+                (Reg_spec.create ~clock ())
                 ~n:ram_read_latency
                 port_b.read_window)
              port_b_q)

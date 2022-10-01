@@ -263,7 +263,6 @@ module Make (Config : Config.S) = struct
         ~b_write_data:(Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram)
         scope
         { Window_ram.I.clock
-        ; clear
         ; port_a =
             (let pre_transform_address =
                mux2
