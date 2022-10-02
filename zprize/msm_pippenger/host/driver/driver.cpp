@@ -517,7 +517,7 @@ class Driver {
         bool is_last_chunk = chunk_index == num_input_chunks() - 1;
 
         memcpy_in_scalars_chunk(scalars, scalars_start, num_points_in_chunk,
-                                chunk_index * max_num_points_per_chunk());
+                                chunk_index * max_num_points_per_chunk(), b);
         OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
                            {buffer_input_scalars[chunk_index]},
                            0 /* 0 means from host*/, nullptr));
