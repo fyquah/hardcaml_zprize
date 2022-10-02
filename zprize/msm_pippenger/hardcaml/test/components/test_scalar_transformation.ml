@@ -4,7 +4,7 @@ open Msm_pippenger
 open Bits
 (*module Config = Config.Bls12_377*)
 
-let simple = false
+let simple = true
 
 module Config = struct
   include Config.Bls12_377
@@ -136,7 +136,7 @@ let test ?(verify = true) () =
               Scalar_transformation.unpack_to_windows_and_negatives (module Bits) scalar
             in
             Array.map2_exn scalar scalar_negatives ~f:(fun s n ->
-              { Reduced_scalar.scalar = s; negative = Bits.is_vdd n }))
+                { Reduced_scalar.scalar = s; negative = Bits.is_vdd n; double = false }))
         in
         if simple
         then print_s [%message (out_reduced_scalars : Reduced_scalar.t array list)];
@@ -197,9 +197,9 @@ let test ?(verify = true) () =
 
 let waveform ?verify () = test ?verify ()
 
-let%expect_test "Drive inputs through transform" =
+(*let%expect_test "Drive inputs through transform" =
   let _waves = test () in
   [%expect {|
     Completed!
     (Checked (!num_inputs 16206)) |}]
-;;
+;;*)

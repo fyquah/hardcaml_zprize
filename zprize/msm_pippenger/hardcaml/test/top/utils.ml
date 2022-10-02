@@ -184,19 +184,27 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     type t =
       { scalar : Bits.t
       ; negative : bool
+      ; double : bool
       }
     [@@deriving sexp_of]
   end
 
-  (*module Int_reduced_scalar = struct
-    type t = {
-      scalar : int
-    ; negative : bool
-    } [@@deriving sexp_of]
+  module Int_reduced_scalar = struct
+    type t =
+      { scalar : int
+      ; negative : bool
+      ; double : bool
+      }
+    [@@deriving sexp_of]
 
-    let of_reduced_scalar { Reduced_scalar.scalar; negative } : t = 
-      { scalar = Bits.to_int scalar; negative }
-  end*)
+    let _of_reduced_scalar { Reduced_scalar.scalar; negative; double } : t =
+      { scalar = Bits.to_int scalar; negative; double }
+    ;;
+
+    let to_reduced_scalar ~width { scalar; negative; double } =
+      { Reduced_scalar.scalar = Bits.of_int scalar ~width; negative; double }
+    ;;
+  end
 
   module Z = struct
     include Z
@@ -205,6 +213,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   end
 
   let check_scalar_reduction scalar (reduced_scalars : Reduced_scalar.t array) =
+    print_s [%message (reduced_scalars : Reduced_scalar.t array)];
     let v =
       Array.foldi reduced_scalars ~init:Z.zero ~f:(fun i acc v ->
         let scalar_val = Bits.to_int v.scalar in
@@ -212,10 +221,11 @@ module Make (Config : Msm_pippenger.Config.S) = struct
         if scalar_val > num_buckets i
         then raise_s [%message (i : int) (scalar_val : int) (num_buckets i : int)];
         let sign_ = if v.negative then Z.minus_one else Z.one in
+        let double = if v.double then Z.of_int 2 else Z.one in
         let base = window_bit_offsets.(i) in
         (*print_s [%message (i :int) (scalar_val : int) (sign_ : Z.t) (base : int)];*)
         let scalar_val = Z.of_int scalar_val in
-        Z.(acc + (sign_ * scalar_val * (one lsl base))))
+        Z.(acc + (sign_ * double * scalar_val * (one lsl base))))
     in
     let int_scalar = Bits.to_z ~signedness:Unsigned scalar in
     if not Z.(equal v int_scalar)
@@ -226,12 +236,16 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       in
       Array.iteri
         (Array.zip_exn split_scalar reduced_scalars)
-        ~f:(fun i (orig, { scalar; negative }) ->
+        ~f:(fun i (orig, { scalar; negative; double }) ->
         let orig = Bits.to_int orig in
         let reduced_scalar = Bits.to_int scalar in
         print_s
           [%message
-            (i : int) (orig : Int.Hex.t) (reduced_scalar : Int.Hex.t) (negative : bool)]);
+            (i : int)
+              (orig : Int.Hex.t)
+              (reduced_scalar : Int.Hex.t)
+              (negative : bool)
+              (double : bool)]);
       raise_s
         [%message
           (split_scalar : Bits.t array)
@@ -241,9 +255,10 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   ;;
 
   let perform_scalar_reduction scalar =
+    print_s [%message "BEGIN"];
     assert (Bits.width scalar = Config.scalar_bits);
     let carry = ref false in
-    let rec loop res =
+    let rec loop_minus_one res =
       let i = List.length res in
       let size = window_bit_sizes.(i) in
       let offset = window_bit_offsets.(i) in
@@ -251,12 +266,12 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       let orig_slice =
         Bits.(to_int scalar.:+[offset, Some size]) + if !carry then 1 else 0
       in
+      carry := false;
       if i = Config.num_windows - 1
       then
-        { Reduced_scalar.scalar = Bits.of_int ~width:max_window_size_bits orig_slice
-        ; negative = false
-        }
+        { Int_reduced_scalar.scalar = orig_slice; negative = false; double = false }
         :: res
+        |> List.rev
       else (
         let signed_val =
           if orig_slice >= 1 lsl size
@@ -275,14 +290,77 @@ module Make (Config : Msm_pippenger.Config.S) = struct
             orig_slice)
         in
         let reduced =
-          { Reduced_scalar.scalar =
-              Int.abs signed_val |> Bits.of_int ~width:max_window_size_bits
+          { Int_reduced_scalar.scalar = Int.abs signed_val
           ; negative = signed_val < 0
+          ; double = false
           }
         in
-        loop (reduced :: res))
+        loop_minus_one (reduced :: res))
     in
-    let ret = loop [] |> List.rev |> Array.of_list in
+    let rec loop_two cur_window res =
+      let replace v = List.mapi res ~f:(fun i old -> if i = cur_window then v else old) in
+      let size = window_bit_sizes.(cur_window) in
+      let prev_reduction = if (cur_window = Config.num_windows - 1) then 0 else 1 in
+      let orig_scalar, orig_negative =
+        let { Int_reduced_scalar.scalar; negative; double } =
+          List.nth_exn res cur_window
+        in
+     print_s [%message "PRE CARRY" (cur_window :int) (scalar : Int.Hex.t) (negative :bool) (!carry: bool) ]; 
+        assert (not double);
+      if !carry then ((1 lsl (size - 1)) - scalar, not negative) else (scalar, negative)
+      in
+      carry := false;
+      print_s [%message " -> POST CARRY" (cur_window :int) (orig_scalar : Int.Hex.t) (orig_negative:bool)];
+      if cur_window = 0
+      then (
+        let v =
+          { Int_reduced_scalar.scalar = orig_scalar
+          ; negative = orig_negative
+          ; double = false
+          }
+        in
+        replace v)
+      else (
+        (* orig_scalar is the absolute value *)
+        let v =
+          if orig_scalar < 1 lsl (size - prev_reduction - 1)
+          then (
+            print_s [%message " -> No reduction"];
+            { Int_reduced_scalar.scalar = orig_scalar
+            ; negative = orig_negative
+            ; double = false
+            })
+          else if orig_scalar mod 2 = 0
+          then (
+            print_s [%message " -> Reduction, no carry"];
+            { Int_reduced_scalar.scalar = orig_scalar / 2
+            ; negative = orig_negative
+            ; double = true
+            })
+          else (
+            print_s [%message " -> Reduction + carry"];
+            carry := true;
+            let next_sign = (List.nth_exn res (cur_window - 1)).negative in
+            let orig_negative = if orig_negative then -1 else 1 in
+            let corrected_half_signed =
+              if next_sign
+              then ((orig_negative * orig_scalar) - 1) / 2
+              else ((orig_negative * orig_scalar) + 1) / 2
+            in
+            print_s [%message "  -> " (next_sign : bool) (corrected_half_signed : Int.Hex.t)];
+            { Int_reduced_scalar.scalar = Int.abs corrected_half_signed
+            ; negative = corrected_half_signed < 0
+            ; double = true
+            })
+        in
+        loop_two (cur_window - 1) (replace v))
+    in
+    let ret =
+      loop_minus_one []
+      |> loop_two (Config.num_windows - 1)
+      |> List.map ~f:(Int_reduced_scalar.to_reduced_scalar ~width:max_window_size_bits)
+      |> Array.of_list
+    in
     check_scalar_reduction scalar ret;
     ret
   ;;
@@ -290,7 +368,11 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   let convert_scalar s =
     let open Bits in
     let reduced_scalars = perform_scalar_reduction s in
-    Array.map2_exn reduced_scalars window_bit_sizes ~f:(fun { scalar; negative } size ->
+    Array.map2_exn
+      reduced_scalars
+      window_bit_sizes
+      ~f:(fun { scalar; negative; double } size ->
+      assert (not double);
       let v = uresize scalar size in
       if negative then negate v else v)
     |> Array.to_list

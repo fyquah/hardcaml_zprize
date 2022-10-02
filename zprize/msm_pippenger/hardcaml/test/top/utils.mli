@@ -69,6 +69,7 @@ module Make (Config : Msm_pippenger.Config.S) : sig
     type t =
       { scalar : Bits.t
       ; negative : bool
+      ; double : bool
       }
     [@@deriving sexp_of]
   end

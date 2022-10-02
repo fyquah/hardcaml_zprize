@@ -187,7 +187,14 @@ module Make (Config : Config.S) = struct
       let dn_scalars =
         Array.mapi up_scalar.value.scalars ~f:(fun j up_scalar ->
           let label = Printf.sprintf "scalar_%02d" j in
-          Scalar_transform.transform ( -- ) ~stage ~label ~reg_with_handshake up_scalar)
+          Array.iteri up_scalar.windows ~f:(fun i v ->
+            ignore (v -- Printf.sprintf "0_up$0_src$%s$windows$w_%02d" label i : Signal.t));
+          ignore (up_scalar.carry -- Printf.sprintf "0_up$0_src$%s$carry" label : Signal.t);
+          let dn_scalar = Scalar_transform.transform ( -- ) ~stage ~label ~reg_with_handshake up_scalar in
+      Array.iteri dn_scalar.windows ~f:(fun i v ->
+        ignore (v -- Printf.sprintf "1_dn$0_src$%s$windows$w_%02d" label i : Signal.t));
+      ignore (dn_scalar.carry -- Printf.sprintf "1_dn$0_src$%s$carry" label : Signal.t);
+          dn_scalar)
       in
       { O.dn_scalar = { With_valid.valid = dn_valid; value = { scalars = dn_scalars } }
       ; up_ready
@@ -208,9 +215,7 @@ module Make (Config : Config.S) = struct
       ( -- )
       (up_scalar : 'a Scalar_compute_array.Scalar_compute.t)
       =
-      Array.iteri up_scalar.windows ~f:(fun i v ->
-        ignore (v -- Printf.sprintf "0_up$0_src$%s$windows$w_%02d" label i : Signal.t));
-      ignore (up_scalar.carry -- Printf.sprintf "0_up$0_src$%s$carry" label : Signal.t);
+      let _, _ = label, (--) in
       (* compute window and carry widths *)
       let c_prev = window_bit_sizes.(stage - 1) in
       (* first perform the carry on the previous bucket *)
@@ -247,14 +252,71 @@ module Make (Config : Config.S) = struct
                   max_window_size_bits);
         { Scalar_compute_array.Scalar_compute.windows; carry }
       in
-      Array.iteri dn_scalar.windows ~f:(fun i v ->
-        ignore (v -- Printf.sprintf "1_dn$0_src$%s$windows$w_%02d" label i : Signal.t));
-      ignore (dn_scalar.carry -- Printf.sprintf "1_dn$0_src$%s$carry" label : Signal.t);
       dn_scalar
     ;;
 
     let name = "minus_one_stage"
   end
+
+  (*module Two_transform = struct
+    let transform
+      ~(stage : int)
+      ~(label : string)
+      ~(reg_with_handshake : 'a -> 'a)
+      ( -- )
+      (up_scalar : 'a Scalar_compute_array.Scalar_compute.t)
+      =
+      let prev_stage = stage + 1 in
+      (* compute window and carry widths *)
+      let c_prev = window_bit_sizes.(prev_stage) in
+      (* break out the abs value, sign of the previous value *)
+      let up_prev_signed = sel_bottom up_scalar.windows.(prev_stage) c_prev in
+      let up_prev_abs, up_prev_sign = 
+        negate (se up_prev_signed), msb up_prev_signed
+      in 
+      let 
+
+      (* first perform the carry on the previous bucket *)
+      let up_prev_bucket_with_overflow =
+        Uop.(v +: (sll (up_scalar.carry) (c_prev - 1)))
+      in
+      assert (width up_prev_bucket_with_overflow = c_prev + 1);
+      (* only a 1 bit overflow *)
+      let dn_prev_overflow, dn_prev_bucket_unsigned =
+        msb up_prev_bucket_with_overflow, lsbs up_prev_bucket_with_overflow
+      in
+      (* if x_{i-1} >= 2^{c-1}, then use (x_{i-1} - 2^c) instead 
+       * assume that carry is small compared to window, so we never have to both overflow and negate
+       *)
+      let dn_prev_negate = msb dn_prev_bucket_unsigned in
+      let dn_prev_signed_and_shifted =
+        let v = uresize dn_prev_bucket_unsigned (c_prev + 1) in
+        let shift_value = of_int (1 lsl c_prev) ~width:(c_prev + 1) in
+        let shifted = sel_bottom Sop.(v -: shift_value) c_prev in
+        shifted
+      in
+      let dn_scalar =
+        (* just handshake everything, then overwrite the relevant fields *)
+        let registered_up =
+          Scalar_compute_array.Scalar_compute.map up_scalar ~f:reg_with_handshake
+        in
+        let carry = reg_with_handshake (dn_prev_overflow |: dn_prev_negate) in
+        let windows = registered_up.windows in
+        windows.(stage - 1)
+          <- reg_with_handshake
+               (uresize
+                  (mux2 dn_prev_negate dn_prev_signed_and_shifted dn_prev_bucket_unsigned)
+                  max_window_size_bits);
+        { Scalar_compute_array.Scalar_compute.windows; carry }
+      in
+      dn_scalar
+    ;;
+
+    let name = "two_stage"
+  end*)
+
+
+
 
   module Minus_one_stage = Transform_stage (Minus_one_transform)
 
