@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>With_rams (zprize.Hardcaml_ntt.Single_core.With_rams)</title><link rel="stylesheet" href="../../../../odoc.css"/><meta charset="utf-8"/><meta name="generator" content="odoc 2.1.1"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><script src="../../../../highlight.pack.js"></script><script>hljs.initHighlightingOnLoad();</script></head><body class="odoc"><nav class="odoc-nav"><a href="../index.html">Up</a> – <a href="../../../index.html">zprize</a> &#x00BB; <a href="../../index.html">Hardcaml_ntt</a> &#x00BB; <a href="../index.html">Single_core</a> &#x00BB; With_rams</nav><header class="odoc-preamble"><h1>Module <code><span>Single_core.With_rams</span></code></h1></header><nav class="odoc-toc"><ul><li><a href="#parameters">Parameters</a></li><li><a href="#signature">Signature</a></li></ul></nav><div class="odoc-content"><h2 id="parameters"><a href="#parameters" class="anchor"></a>Parameters</h2><div class="odoc-spec"><div class="spec parameter" id="argument-1-Config" class="anchored"><a href="#argument-1-Config" class="anchor"></a><code><span><span class="keyword">module</span> </span><span><a href="argument-1-Config/index.html">Config</a></span><span> : <a href="../../Core_config/module-type-S/index.html">Core_config.S</a></span></code></div></div><h2 id="signature"><a href="#signature" class="anchor"></a>Signature</h2><div class="odoc-spec"><div class="spec module" id="module-Core" class="anchored"><a href="#module-Core" class="anchor"></a><code><span><span class="keyword">module</span> <a href="Core/index.html">Core</a></span><span> : <span class="keyword">sig</span> ... <span class="keyword">end</span></span></code></div></div><div class="odoc-spec"><div class="spec module" id="module-I" class="anchored"><a href="#module-I" class="anchor"></a><code><span><span class="keyword">module</span> <a href="I/index.html">I</a></span><span> : <span class="keyword">sig</span> ... <span class="keyword">end</span></span></code></div></div><div class="odoc-spec"><div class="spec module" id="module-O" class="anchored"><a href="#module-O" class="anchor"></a><code><span><span class="keyword">module</span> <a href="O/index.html">O</a></span><span> : <span class="keyword">sig</span> ... <span class="keyword">end</span></span></code></div></div><div class="odoc-spec"><div class="spec value" id="val-input_ram" class="anchored"><a href="#val-input_ram" class="anchor"></a><code><span><span class="keyword">val</span> input_ram : 
+  <span><span class="xref-unresolved">Hardcaml</span>.Scope.t <span class="arrow">&#45;&gt;</span></span>
+  <span><span class="xref-unresolved">Hardcaml</span>.Build_mode.t <span class="arrow">&#45;&gt;</span></span>
+  <span>clock:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>clear:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>flip:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>wr_addr:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>wr_d:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>wr_en:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>addr1_in:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>addr2_in:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>read_enable_in:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span class="xref-unresolved">Hardcaml</span>.Signal.t * <span class="xref-unresolved">Hardcaml</span>.Signal.t</span></code></div></div><div class="odoc-spec"><div class="spec value" id="val-transpose_ram" class="anchored"><a href="#val-transpose_ram" class="anchor"></a><code><span><span class="keyword">val</span> transpose_ram : 
+  <span><span class="xref-unresolved">Hardcaml</span>.Scope.t <span class="arrow">&#45;&gt;</span></span>
+  <span><span class="xref-unresolved">Hardcaml</span>.Build_mode.t <span class="arrow">&#45;&gt;</span></span>
+  <span>clock:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>clear:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>addr1_in:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>addr1_out:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>q1:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>addr2_in:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>addr2_out:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>q2:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>read_enable_in:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>write_enable_out:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>flip:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>last_stage:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span class="xref-unresolved">Hardcaml</span>.Signal.t * <span class="xref-unresolved">Hardcaml</span>.Signal.t</span></code></div></div><div class="odoc-spec"><div class="spec value" id="val-output_ram" class="anchored"><a href="#val-output_ram" class="anchor"></a><code><span><span class="keyword">val</span> output_ram : 
+  <span><span class="xref-unresolved">Hardcaml</span>.Scope.t <span class="arrow">&#45;&gt;</span></span>
+  <span><span class="xref-unresolved">Hardcaml</span>.Build_mode.t <span class="arrow">&#45;&gt;</span></span>
+  <span>clock:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>clear:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>flip:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>last_stage:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>twiddle_stage:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>rd_addr:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>rd_en:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>addr1_out:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>q1:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>addr2_out:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>q2:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span>write_enable_out:<span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="arrow">&#45;&gt;</span></span>
+  <span class="xref-unresolved">Hardcaml</span>.Signal.t</span></code></div></div><div class="odoc-spec"><div class="spec value" id="val-create" class="anchored"><a href="#val-create" class="anchor"></a><code><span><span class="keyword">val</span> create : 
+  <span>?row:<span class="xref-unresolved">Base</span>.int <span class="arrow">&#45;&gt;</span></span>
+  <span>build_mode:<span class="xref-unresolved">Hardcaml</span>.Build_mode.t <span class="arrow">&#45;&gt;</span></span>
+  <span><span class="xref-unresolved">Hardcaml</span>.Scope.t <span class="arrow">&#45;&gt;</span></span>
+  <span><span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="xref-unresolved">Hardcaml</span>.Interface.Create_fn(<span class="xref-unresolved">I</span>)(<span class="xref-unresolved">O</span>).t</span></span></code></div></div><div class="odoc-spec"><div class="spec value" id="val-hierarchy" class="anchored"><a href="#val-hierarchy" class="anchor"></a><code><span><span class="keyword">val</span> hierarchy : 
+  <span>?row:<span class="xref-unresolved">Base</span>.int <span class="arrow">&#45;&gt;</span></span>
+  <span>?instance:<span class="xref-unresolved">Base</span>.string <span class="arrow">&#45;&gt;</span></span>
+  <span>build_mode:<span class="xref-unresolved">Hardcaml</span>.Build_mode.t <span class="arrow">&#45;&gt;</span></span>
+  <span><span class="xref-unresolved">Hardcaml</span>.Scope.t <span class="arrow">&#45;&gt;</span></span>
+  <span><span class="xref-unresolved">Hardcaml</span>.Signal.t <span class="xref-unresolved">Hardcaml</span>.Interface.Create_fn(<span class="xref-unresolved">I</span>)(<span class="xref-unresolved">O</span>).t</span></span></code></div></div></div></body></html>
