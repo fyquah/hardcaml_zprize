@@ -62,8 +62,40 @@ let command_kernel =
         Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
 ;;
 
+let command_rtl_checksum =
+  Command.basic
+    ~summary:
+      "Generate a md5 rtl_checksum file for the Kernel_for_vitis BLS12-377 top level. \
+       Used to make sure Hardcaml changes do not make unexpected changes in the Verilog."
+    [%map_open.Command
+      let _ = return () in
+      fun () ->
+        let module Kernel_for_vitis = Kernel_for_vitis.Make (Config.Bls12_377) in
+        let module Circuit =
+          Circuit.With_interface (Kernel_for_vitis.I) (Kernel_for_vitis.O)
+        in
+        let scope =
+          Scope.create ~flatten_design:false ~auto_label_hierarchical_ports:true ()
+        in
+        let circ =
+          Circuit.create_exn
+            ~name:"krnl_msm_pippenger"
+            (Kernel_for_vitis.hierarchical ~build_mode:Synthesis scope)
+        in
+        let buffer = Buffer.create 2048 in
+        Rtl.output
+          ~output_mode:(To_buffer buffer)
+          ~database:(Scope.circuit_database scope)
+          Verilog
+          circ;
+        let digest = Md5.digest_bytes (Buffer.contents_bytes buffer) in
+        print_string (Md5.to_hex digest)]
+;;
+
 let commands =
-  Command.group ~summary:"Generate RTL" [ "top", command_top; "kernel", command_kernel ]
+  Command.group
+    ~summary:"Generate RTL"
+    [ "top", command_top; "kernel", command_kernel; "rtl-checksum", command_rtl_checksum ]
 ;;
 
 let () = Command_unix.run commands
