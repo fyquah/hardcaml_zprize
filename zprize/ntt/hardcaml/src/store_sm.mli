@@ -7,11 +7,12 @@
 
 open Hardcaml
 
-module Make (Config : Hardcaml_ntt.Core_config.S) : sig
+module Make (Config : Top_config.S) : sig
   module I : sig
     type 'a t =
       { clock : 'a
       ; clear : 'a
+      ; first_4step_pass : 'a (** Storing data for the first or second pass. *)
       ; tready : 'a (** Output AXI stream can accept data. *)
       ; start : 'a (** Start outputting a block of data. *)
       }
@@ -30,6 +31,9 @@ module Make (Config : Hardcaml_ntt.Core_config.S) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
+  val read_address_pipelining : int
+  val read_data_pipelining : int
+  val read_data_tree_mux_stages : int
   val create : Scope.t -> Hardcaml.Signal.t Hardcaml.Interface.Create_fn(I)(O).t
   val hierarchy : Scope.t -> Hardcaml.Signal.t Hardcaml.Interface.Create_fn(I)(O).t
 end

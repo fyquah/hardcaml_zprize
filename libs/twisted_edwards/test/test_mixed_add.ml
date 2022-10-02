@@ -32,7 +32,7 @@ module type Test_adder = sig
     -> config:Config.t
     -> sim:Sim.t
     -> montgomery:bool
-    -> (Z.t Xyzt.t * Z.t Xyt.t) list
+    -> (Z.t Xyzt.t * Z.t Xyt.t * bool) list
     -> unit
 end
 
@@ -63,9 +63,10 @@ module Make
   let transform_to_montgomery a = Z.(a * c_R mod p)
   let transform_from_montgomery a = Z.(a * c_R' mod p)
 
-  let compute_expected (p1 : Z.t Xyzt.t) (p2 : Z.t Xyt.t) =
+  let compute_expected (p1 : Z.t Xyzt.t) (p2 : Z.t Xyt.t) subtract =
     let p3 =
       Model.Twisted_edwards_curve.add_unified
+        ~subtract
         (Lazy.force Model.Bls12_377_params.twisted_edwards)
         { x = p1.x; y = p1.y; z = p1.z; t = p1.t }
         { x = p2.x; y = p2.y; t = p2.t }
@@ -133,7 +134,7 @@ module Make
         test_outputs := p3 :: !test_outputs;
         output_valid_cycles := !cycle_cnt :: !output_valid_cycles)
     in
-    List.iter test_inputs ~f:(fun ((p1 : Z.t Xyzt.t), (p2 : Z.t Xyt.t)) ->
+    List.iter test_inputs ~f:(fun ((p1 : Z.t Xyzt.t), (p2 : Z.t Xyt.t), subtract) ->
       let p1, p2 =
         if R.host_precompute
         then (
@@ -165,6 +166,7 @@ module Make
       inputs.valid_in := Bits.vdd;
       Xyzt.iter2 ~f:assign_z inputs.p1 p1;
       Xyt.iter2 ~f:assign_z inputs.p2 p2;
+      inputs.subtract := Bits.of_bool subtract;
       cycle ();
       if R.arbitrate
       then (
@@ -193,8 +195,8 @@ module Make
       assert (output_valid_cycle - input_valid_cycle = latency));
     List.map2_exn test_inputs test_outputs ~f:(fun test_input obtained ->
       let expected =
-        let a, b = test_input in
-        compute_expected a b
+        let a, b, subtract = test_input in
+        compute_expected a b subtract
       in
       if [%equal: Z.t Xyzt.t] obtained expected
       then Ok ()
@@ -202,7 +204,7 @@ module Make
         Or_error.error_s
           [%message
             ""
-              ~input:(test_input : Utils.z Xyzt.t * Utils.z Xyt.t)
+              ~input:(test_input : Utils.z Xyzt.t * Utils.z Xyt.t * bool)
               (obtained : Utils.z Xyzt.t)
               (expected : Utils.z Xyzt.t)])
     |> Or_error.combine_errors_unit

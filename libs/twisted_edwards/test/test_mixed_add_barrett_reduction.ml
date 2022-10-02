@@ -60,14 +60,14 @@ let random_test_cases =
       else (* Exercise x + O *)
         { Xyt.x = Z.zero; y = Z.one; t = Z.zero }
     in
-    p1, p2)
+    p1, p2, Random.bool ())
 ;;
 
 type test_type =
   | Mixed_add
   | Mixed_add_precompute of { arbitrate : bool }
 
-let test test_type (test_cases : (Z.t Xyzt.t * Z.t Xyt.t) list) =
+let test test_type (test_cases : (Z.t Xyzt.t * Z.t Xyt.t * bool) list) =
   match test_type with
   | Mixed_add_precompute { arbitrate } ->
     if arbitrate
@@ -77,9 +77,10 @@ let test test_type (test_cases : (Z.t Xyzt.t * Z.t Xyt.t) list) =
       let sim = create_sim config in
       let test_cases =
         List.map
-          ~f:(fun (p1, p2) ->
+          ~f:(fun (p1, p2, subtract) ->
             ( { Xyzt.x = p1.x; y = p1.y; z = p1.z; t = p1.t }
-            , { Xyt.x = p2.x; y = p2.y; t = p2.t } ))
+            , { Xyt.x = p2.x; y = p2.y; t = p2.t }
+            , subtract ))
           test_cases
       in
       test ~montgomery:false ~config ~sim test_cases)
@@ -89,9 +90,10 @@ let test test_type (test_cases : (Z.t Xyzt.t * Z.t Xyt.t) list) =
       let sim = create_sim config in
       let test_cases =
         List.map
-          ~f:(fun (p1, p2) ->
+          ~f:(fun (p1, p2, subtract) ->
             ( { Xyzt.x = p1.x; y = p1.y; z = p1.z; t = p1.t }
-            , { Xyt.x = p2.x; y = p2.y; t = p2.t } ))
+            , { Xyt.x = p2.x; y = p2.y; t = p2.t }
+            , subtract ))
           test_cases
       in
       test ~montgomery:false ~config ~sim test_cases)
@@ -103,6 +105,22 @@ let test test_type (test_cases : (Z.t Xyzt.t * Z.t Xyt.t) list) =
 ;;
 
 let test_random test_type = test test_type random_test_cases
+
+let%expect_test "Latency of half adder" =
+  Stdio.printf
+    "%d"
+    (Test_mixed_add.Adder.latency
+       (Lazy.force Config.For_bls12_377.with_barrett_reduction_arbitrated));
+  [%expect {| 238 |}]
+;;
+
+let%expect_test "Latency of full adder" =
+  Stdio.printf
+    "%d"
+    (Test_mixed_add.Adder.latency
+       (Lazy.force Config.For_bls12_377.with_barrett_reduction_full));
+  [%expect {| 238 |}]
+;;
 
 let%expect_test "Test on some test cases (without host precompute)" =
   test_random Mixed_add;
@@ -138,7 +156,8 @@ let%expect_test "possible regression" =
             ; t =
                 Z.of_string
                   "0x15e283ceaf5a24978133482e18dadbd18df020a469a1d0430e78f01f100023f49db5202cd8c6f2d6caedcd90dc33cb7"
-            } )
+            }
+          , false )
         ]);
   [%expect {|
     (Ok ())

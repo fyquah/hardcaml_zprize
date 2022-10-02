@@ -30,13 +30,13 @@ let command_kernel =
           ~doc:
             "Override the number of scalar bits used in the algorithm, to simulate a \
              smaller number of window RAMs"
-      and window_bits_arg =
+      and num_windows_arg =
         flag
-          "-window-bits"
+          "-num-windows"
           (optional int)
           ~doc:
-            "Override the number of window bits used in the algorithm, to simulate a \
-             smaller number of buckets"
+            "Override the number of windows used in the algorithm, to simulate a smaller \
+             number of buckets"
       in
       fun () ->
         let module Kernel_for_vitis =
@@ -44,7 +44,7 @@ let command_kernel =
             include Config.Bls12_377
 
             let scalar_bits = Option.value scalar_bits_arg ~default:scalar_bits
-            let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
+            let num_windows = Option.value num_windows_arg ~default:num_windows
           end)
         in
         let module Circuit =
@@ -62,8 +62,40 @@ let command_kernel =
         Rtl.print ~database:(Scope.circuit_database scope) Verilog circ]
 ;;
 
+let command_rtl_checksum =
+  Command.basic
+    ~summary:
+      "Generate a md5 rtl_checksum file for the Kernel_for_vitis BLS12-377 top level. \
+       Used to make sure Hardcaml changes do not make unexpected changes in the Verilog."
+    [%map_open.Command
+      let _ = return () in
+      fun () ->
+        let module Kernel_for_vitis = Kernel_for_vitis.Make (Config.Bls12_377) in
+        let module Circuit =
+          Circuit.With_interface (Kernel_for_vitis.I) (Kernel_for_vitis.O)
+        in
+        let scope =
+          Scope.create ~flatten_design:false ~auto_label_hierarchical_ports:true ()
+        in
+        let circ =
+          Circuit.create_exn
+            ~name:"krnl_msm_pippenger"
+            (Kernel_for_vitis.hierarchical ~build_mode:Synthesis scope)
+        in
+        let buffer = Buffer.create 2048 in
+        Rtl.output
+          ~output_mode:(To_buffer buffer)
+          ~database:(Scope.circuit_database scope)
+          Verilog
+          circ;
+        let digest = Md5.digest_bytes (Buffer.contents_bytes buffer) in
+        print_string (Md5.to_hex digest)]
+;;
+
 let commands =
-  Command.group ~summary:"Generate RTL" [ "top", command_top; "kernel", command_kernel ]
+  Command.group
+    ~summary:"Generate RTL"
+    [ "top", command_top; "kernel", command_kernel; "rtl-checksum", command_rtl_checksum ]
 ;;
 
 let () = Command_unix.run commands

@@ -19,9 +19,9 @@ let command_kernel_for_vitis =
           ~doc:
             " Override the number of scalar bits used in the algorithm, to simulate a \
              smaller number of window RAMs"
-      and window_bits_arg =
+      and num_windows_arg =
         flag
-          "-window-bits"
+          "-num-windows"
           (optional int)
           ~doc:
             " Override the number of window bits used in the algorithm, to simulate a \
@@ -37,7 +37,7 @@ let command_kernel_for_vitis =
           include Msm_pippenger.Config.Bls12_377
 
           let scalar_bits = Option.value scalar_bits_arg ~default:scalar_bits
-          let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
+          let num_windows = Option.value num_windows_arg ~default:num_windows
         end
         in
         let module Test_kernel = Msm_pippenger_test_top.Test_kernel_for_vitis.Make (Config)
@@ -67,6 +67,16 @@ let command_msm_result_to_host =
           (Msm_pippenger_test_components.Test_msm_result_to_host.waveform ())]
 ;;
 
+let command_scalar_transformation =
+  Command.basic
+    ~summary:"Simulate the scalar_transformation block"
+    [%map_open.Command
+      let verify = flag "-verify" no_arg ~doc:" Verify the result" in
+      fun () ->
+        Hardcaml_waveterm_interactive.run
+          (Msm_pippenger_test_components.Test_scalar_transformation.waveform ~verify ())]
+;;
+
 let command_top_small_test =
   Command.basic
     ~summary:"Simulate a smaller MSM at the top level"
@@ -77,7 +87,8 @@ let command_top_small_test =
           let field_bits = 377
           let scalar_bits = 12
           let controller_log_stall_fifo_depth = 2
-          let window_size_bits = 3
+          let num_windows = 4
+          let window_ram_partition_settings = None
         end
         in
         let module Test = Msm_pippenger_test_top.Test_top.Make (Config) in
@@ -91,6 +102,7 @@ let command_test_cases =
     [ "kernel-back-to-back", command_vitis_kernel_back_to_back
     ; "msm-result-to-host", command_msm_result_to_host
     ; "top-small-test", command_top_small_test
+    ; "scalar-transformation", command_scalar_transformation
     ]
 ;;
 
@@ -113,9 +125,9 @@ let command_top =
           ~doc:
             " Override the number of scalar bits used in the algorithm, to simulate a \
              smaller number of window RAMs"
-      and window_bits_arg =
+      and num_windows_arg =
         flag
-          "-window-bits"
+          "-num-windows"
           (optional int)
           ~doc:
             " Override the number of window bits used in the algorithm, to simulate a \
@@ -132,7 +144,7 @@ let command_top =
           include Msm_pippenger.Config.Bls12_377
 
           let scalar_bits = Option.value scalar_bits_arg ~default:scalar_bits
-          let window_size_bits = Option.value window_bits_arg ~default:window_size_bits
+          let num_windows = Option.value num_windows_arg ~default:num_windows
         end
         in
         let module Test_top = Msm_pippenger_test_top.Test_top.Make (Config) in

@@ -4,32 +4,29 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use ark_bls12_377::G1Affine;
 use ark_ff::BigInteger256;
-
-use std::str::FromStr;
 
 use blst_msm::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let bench_npow = std::env::var("BENCH_NPOW").unwrap_or("26".to_string());
-    let npoints_npow = i32::from_str(&bench_npow).unwrap();
-
-    let batches = 4;
-    let (points, scalars) =
-        util::generate_points_scalars::<G1Affine>(1usize << npoints_npow, batches);
+    let (batches, points, scalars, _arkworks_results) =
+        util::generate_or_load_test_data();
     let mut context = multi_scalar_mult_init(points.as_slice());
-
-    let mut group = c.benchmark_group("CUDA");
+    let npoints = points.len();
+    let mut group = c.benchmark_group("FPGA-MSM");
     group.sample_size(10);
 
-    let name = format!("2**{}x{}", npoints_npow, batches);
+    let name =
+        if npoints.is_power_of_two() {
+            format!("2**{}x{}", npoints.trailing_zeros(), batches)
+        } else {
+            format!("{}x{}", npoints, batches)
+        };
+
     group.bench_function(name, |b| {
         b.iter(|| {
-            let _ = multi_scalar_mult(&mut context, &points.as_slice(), unsafe {
-                std::mem::transmute::<&[_], &[BigInteger256]>(
-                    scalars.as_slice(),
-                )
+            let _msm_results = multi_scalar_mult(&mut context, points.as_slice(), unsafe {
+                std::mem::transmute::<&[_], &[BigInteger256]>(scalars.as_slice())
             });
         })
     });

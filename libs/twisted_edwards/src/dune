@@ -7,6 +7,7 @@
   hardcaml
   elliptic_curve_lib
   field_ops_lib
+  field_ops_model
   twisted_edwards_model_lib)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))

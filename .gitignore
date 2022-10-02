@@ -7,4 +7,6 @@ fpga/*/*.rpt
 *.tar.gz
 
 **.swp
+**.swo
 local
+**.swo

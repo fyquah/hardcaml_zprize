@@ -9,7 +9,9 @@
 
 open Hardcaml
 
-module Make (Config : Hardcaml_ntt.Core_config.S) : sig
+module Make (Config : Top_config.S) : sig
+  val write_pipelining : int
+
   module I : sig
     type 'a t =
       { clock : 'a

@@ -9,12 +9,15 @@ module Make (Config : sig
   val pipeline_depth : int
   val input_point_bits : int
 end) : sig
+  module Scalar_config : Pippenger.Scalar.Scalar_config.S
+  module Scalar : module type of Pippenger.Scalar.Make (Scalar_config)
+
   module I : sig
     type 'a t =
       { clock : 'a
       ; clear : 'a
       ; start : 'a
-      ; scalar : 'a array
+      ; scalar : 'a Scalar.t array
       ; scalar_valid : 'a
       ; last_scalar : 'a
       ; affine_point : 'a
@@ -27,7 +30,7 @@ end) : sig
       { done_ : 'a
       ; scalar_read : 'a
       ; window : 'a
-      ; bucket : 'a
+      ; bucket : 'a Scalar.t
       ; adder_affine_point : 'a
       ; bubble : 'a
       ; execute : 'a
@@ -35,5 +38,8 @@ end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val hierarchical : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchical
+    :  build_mode:Build_mode.t
+    -> Scope.t
+    -> Signal.t Interface.Create_fn(I)(O).t
 end
