@@ -22,10 +22,10 @@ curve.
 
 ## Block diagram
 
-![Block diagram](docc/block_diagram.png)
+![Block diagram](docs/block_diagram.png)
 
 ## Resource utilization
-
+```
 +----------------------------+--------+--------+--------+--------+--------+--------+
 |          Site Type         |  SLR0  |  SLR1  |  SLR2  | SLR0 % | SLR1 % | SLR2 % |
 +----------------------------+--------+--------+--------+--------+--------+--------+
@@ -57,6 +57,7 @@ curve.
 | DSPs                       |      0 |    859 |   2140 |   0.00 |  37.68 |  93.86 |
 | Unique Control Sets        |   4089 |   4425 |    119 |   4.15 |   4.49 |   0.12 |
 +----------------------------+--------+--------+--------+--------+--------+--------+
+```
 
 # Benchmarking 2<sup>26</sup> points
 
