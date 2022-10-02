@@ -39,25 +39,12 @@ module Make (Config : Config.S) = struct
   let adder_config = force Adder_config.For_bls12_377.with_barrett_reduction_full
   let adder_latency = Mixed_add.latency adder_config
 
-  (* for now, assert that there are 1 or 2 window sizes *)
-  (*let () = assert((max_window_size_bits = min_window_size_bits) || (max_window_size_bits = min_window_size_bits + 1))
-  let max_window_indices = Array.filter_mapi window_size_bits ~f:(fun i v -> if (v = max_window_size_bits) then Some i else None)
-  let is_max_window window = 
-    (List.map max_window_indices ~f:(fun ind -> window ==:. ind)) |> reduce ~f:(|:)*)
-  (*let max_ram_addresses = Array.init num_windows ~f:(fun i -> num_buckets i - 1)*)
   let num_buckets_mux v =
     mux
       v
       (List.init num_windows ~f:(fun i ->
          of_int (num_buckets i) ~width:max_window_size_bits))
   ;;
-
-  (*let max_ram_address window =
-    (* vivado should reduce this for our values? *)
-    mux
-      window
-      Array.(map max_ram_addresses ~f:(of_int ~width:max_window_size_bits) |> to_list)
-  ;;*)
 
   let num_windows = num_windows
   let num_result_points = List.(init num_windows ~f:num_buckets |> fold ~init:0 ~f:( + ))
