@@ -22,8 +22,41 @@ curve.
 
 ## Block diagram
 
-TODO
+![Block diagram](docc/block_diagram.png)
 
+## Resource utilization
+
++----------------------------+--------+--------+--------+--------+--------+--------+
+|          Site Type         |  SLR0  |  SLR1  |  SLR2  | SLR0 % | SLR1 % | SLR2 % |
++----------------------------+--------+--------+--------+--------+--------+--------+
+| CLB                        |  25089 |  39672 |  38105 |  50.93 |  80.54 |  77.35 |
+|   CLBL                     |  12592 |  19723 |  18557 |  51.19 |  80.17 |  75.43 |
+|   CLBM                     |  12497 |  19949 |  19548 |  50.68 |  80.90 |  79.27 |
+| CLB LUTs                   | 109566 | 133493 | 146117 |  27.80 |  33.87 |  37.08 |
+|   LUT as Logic             | 102296 | 118359 | 125869 |  25.96 |  30.03 |  31.94 |
+|     using O5 output only   |    962 |   1351 |     13 |   0.24 |   0.34 |  <0.01 |
+|     using O6 output only   |  80045 |  76731 |  79799 |  20.31 |  19.47 |  20.25 |
+|     using O5 and O6        |  21289 |  40277 |  46057 |   5.40 |  10.22 |  11.69 |
+|   LUT as Memory            |   7270 |  15134 |  20248 |   3.69 |   7.67 |  10.26 |
+|     LUT as Distributed RAM |   7002 |   4268 |      0 |   3.55 |   2.16 |   0.00 |
+|     LUT as Shift Register  |    268 |  10866 |  20248 |   0.14 |   5.51 |  10.26 |
+|       using O5 output only |      0 |      0 |      0 |   0.00 |   0.00 |   0.00 |
+|       using O6 output only |     96 |   4782 |   8248 |   0.05 |   2.42 |   4.18 |
+|       using O5 and O6      |    172 |   6084 |  12000 |   0.09 |   3.08 |   6.08 |
+| CLB Registers              | 159643 | 281789 | 294290 |  20.26 |  35.75 |  37.34 |
+| CARRY8                     |   1518 |   7589 |  18131 |   3.08 |  15.41 |  36.81 |
+| F7 Muxes                   |   4818 |   1251 |      0 |   2.45 |   0.63 |   0.00 |
+| F8 Muxes                   |    279 |    226 |      0 |   0.28 |   0.23 |   0.00 |
+| F9 Muxes                   |      0 |      0 |      0 |   0.00 |   0.00 |   0.00 |
+| Block RAM Tile             |  153.5 |    239 |     28 |  21.32 |  33.19 |   3.89 |
+|   RAMB36/FIFO              |    152 |    235 |     24 |  21.11 |  32.64 |   3.33 |
+|     RAMB36E2 only          |    128 |    235 |     24 |  17.78 |  32.64 |   3.33 |
+|   RAMB18                   |      3 |      8 |      8 |   0.21 |   0.56 |   0.56 |
+|     RAMB18E2 only          |      3 |      8 |      8 |   0.21 |   0.56 |   0.56 |
+| URAM                       |    210 |    127 |    126 |  65.63 |  39.69 |  39.38 |
+| DSPs                       |      0 |    859 |   2140 |   0.00 |  37.68 |  93.86 |
+| Unique Control Sets        |   4089 |   4425 |    119 |   4.15 |   4.49 |   0.12 |
++----------------------------+--------+--------+--------+--------+--------+--------+
 
 # Benchmarking 2<sup>26</sup> points
 
@@ -33,11 +66,12 @@ benchmarking our solution.
 ## AFI-ids and measured performance
 
 We have listed all the AFI-ids and their performance at certain points in the
-repo. Currently the highest performance one is:
+repo. Currently the highest performance afi is:
 
-afi-066aeb84a7663930a
+afi-066aeb84a7663930a (FPGA MSM kernel running at 250MHz)
 
 A single 2<sup>26</sup> MSM:
+
 ```
 [memcpy-ing scalars to special memory region] 0.254459s
 [transferring scalars to gmem] 0.269489s
@@ -49,6 +83,7 @@ A single 2<sup>26</sup> MSM:
 The total time for 4 back to back MSMs, repeated 10 times. This allows us to
 mask the overhead of transfering data to the FPGA and various host processing
 steps on the scalar inputs that can happen in parallel.
+
 ```
 FPGA-MSM/2**26x4        time:   [22.182 s 22.183 s 22.183 s]
 ```
@@ -57,12 +92,18 @@ We acheive a mean of 22.183s, which equates to **12.100** Mop/s
 ((4*2^26)/1000000)/22.183).
 
 AWS allows the average power to be measured during operation:
+
 ```
 Power consumption (Vccint):
    Last measured: 49 watts
    Average: 49 watts
    Max measured: 52 watts
 ```
+
+#### Note
+Because our solution offloads a non-trival amount of work to perform in parallel
+to the host, you will see the best performance after a fresh reboot, and without
+other CPU-intensive tasks running at the same time.
 
 ### All AFIs
 
