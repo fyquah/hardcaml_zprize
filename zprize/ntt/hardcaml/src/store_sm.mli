@@ -18,6 +18,7 @@ module Make (Config : Top_config.S) : sig
       ; tvalid : 'a
       ; rd_addr : 'a
       ; rd_en : 'a
+      ; rd_any : 'a
       ; block : 'a
       }
     [@@deriving sexp_of, hardcaml]
