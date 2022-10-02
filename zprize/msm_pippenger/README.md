@@ -1,3 +1,22 @@
+# FPGA Implementation of the MSM pippengers algorithm
+
+## Optimizations used
+
+* Twisted edwards curve and extended projective points for a lower latency point
+  multiplication algorithm
+* Allow points to be streamed in batches from the host
+* Multiplier optimizations aimed at the Barret reduction algorithm
+* Selecting a bucket size that allows for efficent usage of FPGA URAM, and
+  pblocking to avoid routing congestion
+* Scalars are converted into a +/- form so that bucket memory get a free bit per
+  window
+* Fully pipelined point adder
+* Offloading the final triangle sum to the host
+* Using BRAM to store coefficents that can be used to reduce modulo adder and
+  subtractor latency
+
+## Block diagrams
+
 # Building for AWS
 
 You need to clone the aws-fpga repo: https://github.com/aws/aws-fpga/
