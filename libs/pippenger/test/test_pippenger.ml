@@ -90,6 +90,7 @@ module Model (Config : Config) (Scalar_config : Scalar_config.S) = struct
     let dp = Pipe.O.Of_signal.wires () in
     let ctrl =
       Controller.hierarchy
+        ~build_mode:Simulation
         scope
         { Controller.I.clock = i.clock
         ; clear = i.clear
