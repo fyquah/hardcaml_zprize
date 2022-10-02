@@ -1,4 +1,4 @@
-The test harness currently only supports afi-071f40ea5e182fa8f
+The test harness currently only supports afi-0df5b1800bfbfdd54
 (msm-halve-window-sizes-2)
 
 # Running Tests
