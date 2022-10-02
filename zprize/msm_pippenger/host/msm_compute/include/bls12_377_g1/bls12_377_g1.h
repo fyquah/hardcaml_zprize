@@ -434,32 +434,36 @@ class Xyzt {
     z.set_mul(F, G);
   }
 
-  void weierstrassAddition(const Xyzt &other,
-                           GeneralUnifiedAddIntoTemps &temps) {
+  void weierstrassDoubleInPlace() {
+    GFq t1, t2, t3, t4;
+    // point doubling
+    t1.set_mul(three, x);
+    t1.set_mul(t1, x);
+    t1.set_add(t1, weierstrass_params.a);
+    t2.set_mul(two, y);
+    t3.set_div(t1, t2);  // (3 * x1^2 + a) / (2 * y1)
+
+    t2.set_add(x, x);
+    t2.set_add(t2, x);  // (2 * x1 + x1)
+    t2.set_mul(t2, t3);
+
+    t4.set_mul(t3, t3);
+    t1.set_sub(t4, x);
+    t1.set_sub(t4, x);  // x3
+
+    t3.set_mul(t3, t4);
+    t2.set_sub(t2, t3);
+    t2.set_sub(t2, y);
+
+    x.set(t1);
+    y.set(t2);
+  }
+
+  void weierstrassAddition(const Xyzt &other) {
     // https://hyperelliptic.org/EFD/g1p/auto-shortw.html
     GFq t1, t2, t3, t4;
     if (other == *this) {
-      // point doubling
-      t1.set_mul(three, x);
-      t1.set_mul(t1, x);
-      t1.set_add(t1, weierstrass_params.a);
-      t2.set_mul(two, y);
-      t3.set_div(t1, t2);  // (3 * x1^2 + a) / (2 * y1)
-
-      t2.set_add(x, x);
-      t2.set_add(t2, x);  // (2 * x1 + x1)
-      t2.set_mul(t2, t3);
-
-      t4.set_mul(t3, t3);
-      t1.set_sub(t4, x);
-      t1.set_sub(t4, x);  // x3
-
-      t3.set_mul(t3, t4);
-      t2.set_sub(t2, t3);
-      t2.set_sub(t2, y);
-
-      x.set(t1);
-      y.set(t2);
+      weierstrassDoubleInPlace();
     } else {
       // point addition
       // compute x
@@ -482,6 +486,21 @@ class Xyzt {
       x.set(t1);
       y.set(t2);
     }
+  }
+
+  void weierstrassMultiplication(const biginteger256_t &scalar) {
+    Xyzt temp = *this;
+    for (int i = 0; i < SCALAR_NUM_BITS; i++) {
+      if (scalar.getBit(i)) {
+        weierstrassAddition(temp);
+      }
+      temp.weierstrassDoubleInPlace();
+    }
+  }
+
+  void weierstrassMultiplyAndAdd(Xyzt point, const biginteger256_t &scalar) {
+    point.weierstrassMultiplication(scalar);
+    weierstrassAddition(point);
   }
 
   void generalUnifiedAddInto(const Xyzt &other) {

@@ -92,9 +92,10 @@ class Driver {
   aligned_vec32 source_kernel_output_a;
   aligned_vec32 source_kernel_output_b;
 
-  // host compute for non-convertable points
-  std::vector<uint64_t> non_convertable_indices;
-  std::vector<bls12_377_g1::Xyzt> non_convertable_points;
+  // host compute for non-convertible points
+  std::vector<uint64_t> non_convertible_indices;
+  std::vector<bls12_377_g1::Xyzt> non_convertible_points;
+  std::vector<bls12_377_g1::biginteger256_t> non_convertible_scalars[4];
 
   // OpenCL stuff
   cl::CommandQueue q;
@@ -142,8 +143,8 @@ class Driver {
     for (ssize_t i = 0; i < npoints; i++) {
       // std::cout << rust_points[i] << std::endl;
       point.copy_from_rust_type(rust_points[i]);
-      bool convertable = point.affineWeierstrassToExtendedTwistedEdwards();
-      if (convertable) {
+      bool convertible = point.affineWeierstrassToExtendedTwistedEdwards();
+      if (convertible) {
         point.preComputeFPGA(post_processing_values.temps);
         point.copy_to_fpga_buffer(ptr_point);
         // point.println();
@@ -151,8 +152,8 @@ class Driver {
         ptr_point += UINT32_PER_INPUT_POINT;
       } else {
         // add point to host compute buffer
-        non_convertable_points.push_back(point);
-        non_convertable_indices.push_back((uint64_t)i);
+        non_convertible_points.push_back(point);
+        non_convertible_indices.push_back((uint64_t)i);
       }
 
       // Print every 1M points so the user doesn't think we're deadlocked
@@ -280,7 +281,7 @@ class Driver {
     }
   }
 
-  void postProcess(const uint32_t *source_kernel_output) {
+  void postProcess(const uint32_t *source_kernel_output, int batch_num) {
     const uint64_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
 
     post_processing_values.final_result.setToIdentity();
@@ -323,6 +324,17 @@ class Driver {
 
     // final_result.println();
     post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
+
+    // add all the weierstrass points
+    if (__builtin_expect(!non_convertible_points.empty(), 0)) {
+      assert(non_convertible_points.size() ==
+             non_convertible_scalars[batch_num].size());
+      for (size_t i = 0; i < non_convertible_points.size(); i++) {
+        const auto &point = non_convertible_points[i];
+        const auto &scalar = non_convertible_scalars[batch_num];
+        post_processing_values.final_result.multiplyAndAdd(point, scalar);
+      }
+    }
   }
 
   inline uint32_t *get_input_scalars_pointer() {
@@ -334,7 +346,8 @@ class Driver {
   }
 
   void memcpy_in_scalars_chunk(biginteger256_t *scalars, uint64_t scalars_start,
-                               uint64_t scalars_size, uint64_t buffer_start) {
+                               uint64_t scalars_size, uint64_t buffer_start,
+                               int batch_num) {
     uint32_t *ptr_device_input_scalar =
         get_input_scalars_pointer() + (buffer_start * UINT32_PER_INPUT_SCALAR);
     uint64_t scalars_end = scalars_start + scalars_size;
@@ -343,23 +356,28 @@ class Driver {
     memcpy(ptr_device_input_scalar, (void *)(scalars + scalars_start),
            UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * scalars_size);
 
-    // remove the non-convertable points
-    for (const auto &idx : non_convertable_indices) {
+    // remove the non-convertible points and save them to buffer
+    for (const auto &idx : non_convertible_indices) {
       if ((scalars_start <= idx) && (idx < scalars_end)) {
         memset(ptr_device_input_scalar + UINT32_PER_INPUT_SCALAR * idx, 0,
                UINT32_PER_INPUT_SCALAR * sizeof(uint32_t));
       }
+
+      non_convertible_scalars[batch_num].push_back(scalars[idx]);
     }
   }
 
   void post_process_final_result_and_copy_to_rust_type(uint64_t b,
-                                                       g1_projective_t *out) {
+                                                       g1_projective_t *out,
+                                                       int batch_num) {
     postProcess(b % 2 == 0 ? source_kernel_output_a.data()
-                           : source_kernel_output_b.data());
+                           : source_kernel_output_b.data(),
+                batch_num);
     post_processing_values.final_result.copy_to_rust_type(*out);
   }
 
-  inline void run_single_batch(g1_projective_t *out, biginteger256_t *scalars) {
+  inline void run_single_batch(g1_projective_t *out, biginteger256_t *scalars,
+                               int batch_num) {
     bench("memcpy-ing scalars to special memory region", [&]() {
       // uint32_t *ptr_scalar = source_kernel_input_scalars.data();
 
@@ -436,7 +454,7 @@ class Driver {
     });
 
     bench("Doing on-host postprocessing", [&]() {
-      postProcess(source_kernel_output_a.data());
+      postProcess(source_kernel_output_a.data(), batch_num);
       post_processing_values.final_result.copy_to_rust_type(*out);
     });
   }
@@ -454,7 +472,8 @@ class Driver {
 
     auto do_postprocessing = [&]() {
       postProcess((processed_outputs % 2 == 0 ? source_kernel_output_a.data()
-                                              : source_kernel_output_b.data()));
+                                              : source_kernel_output_b.data()),
+                  processed_outputs);
       post_processing_values.final_result.copy_to_rust_type(*out);
       processed_outputs++;
       out++;
@@ -580,7 +599,7 @@ extern "C" void msm_mult(Driver *driver, g1_projective_t *out,
   } else {
     for (uint64_t i = 0; i < num_batches; i++) {
       driver->run_single_batch(out + i,
-                               ptr_scalars + (i * driver->total_num_points));
+                               ptr_scalars + (i * driver->total_num_points), i);
     }
   }
 }
