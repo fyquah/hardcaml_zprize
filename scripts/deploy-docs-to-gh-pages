@@ -1,0 +1,29 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [ $(readlink -f $PWD) != "$(git rev-parse --show-toplevel)" ]; then
+  echo "Must run deploy-docs-to-gh-pages" from the repo root!
+  exit 1
+fi
+
+if [ ! -z "$(git status --porcelain)" ]; then
+  echo "Repository must be clean before being able to deploy-docs-to-gh-pages"
+  exit 1
+fi
+
+set -x
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
+echo "Your current branch is $BRANCH, i will bring you back there when the deployment is done"
+
+dune build @doc
+git checkout gh-pages
+git rm -rf .
+cp -r _build/default/_doc/_html/ docs
+git add docs/
+git commit -m "Deploy gh-pages using deploy-docs-to-gh-pages-script" --allow-empty
+git push origin HEAD
+
+git checkout "$BRANCH"
