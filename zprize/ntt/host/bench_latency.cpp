@@ -119,6 +119,8 @@ static const char *flag_log_row_size    = "--log-row-size";
 static const char *flag_core_type       = "--core-type";
 static const char *flag_num_evaluations = "--num-evaluations";
 static const char *flag_what_to_measure = "--what-to-measure";
+static const char *flag_memory_layout   = "--memory-layout";
+static const char *flag_log_blocks      = "--log-blocks";
 
 static host_args_t
 parse_args(int argc, char **argv)
@@ -127,14 +129,17 @@ parse_args(int argc, char **argv)
   uint64_t log_row_size = 0;
   std::string error_message;
   char *core_type = nullptr;
+  char *memory_layout = nullptr;
   uint64_t num_evaluations = 1;
   WhatToMeasure what_to_measure = WhatToMeasure::PCIE_AND_FPGA_LATENCY;
+  uint64_t log_blocks = 0;
   
   auto print_usage = [=]() {
     std::cout
       << argv[0] << " "
       << flag_xcl_bin_file << " <FILENAME> " 
       << flag_core_type    << " <REVERSE|NTT> "
+      << flag_memory_layout    << " <NORMAL_LAYOUT|OPTIMIZED_LAYOUT> "
       << "[" << flag_log_row_size << " <LOG-ROW-SIZE>] "
       << "[" << flag_num_evaluations << " <NUM-ROUNDS>] "
       << "[" << flag_what_to_measure << " <memcpy-and-pcie-and-fpga-latency|pcie-and-fpga-latency|fpga-latency>] "
@@ -180,6 +185,11 @@ parse_args(int argc, char **argv)
       continue;
     }
 
+    if (strcmp(*argv, flag_log_blocks) == 0) {
+      log_blocks = std::stoull(capture_next_arg(flag_log_blocks));
+      continue;
+    }
+
     if (strcmp(*argv, flag_what_to_measure) == 0) {
       char *s = capture_next_arg(flag_core_type);
       if (strcmp(s, "memcpy-and-pcie-and-fpga-latency") == 0) {
@@ -200,6 +210,11 @@ parse_args(int argc, char **argv)
       continue;
     }
 
+    if (strcmp(*argv, flag_memory_layout) == 0) {
+      memory_layout = capture_next_arg(flag_memory_layout);
+      continue;
+    }
+
     print_usage();
     error_message
         .append("Unknown flag: ")
@@ -216,6 +231,9 @@ parse_args(int argc, char **argv)
   // resolve the right driver_arg
 
   NttFpgaDriverArg driver_arg([&]() {
+    MemoryLayout parsed_memory_layout = memory_layout_from_string(
+        std::string(memory_layout));
+
     auto throw_if_log_row_size_set = [&]() {
       if (log_row_size) {
         error_message.append(flag_log_row_size);
@@ -225,15 +243,15 @@ parse_args(int argc, char **argv)
     };
     if (strcmp(core_type, "NTT-2_12") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_12();
+      return NttFpgaDriverArg::create_ntt_2_12(parsed_memory_layout, log_blocks);
 
     } else if (strcmp(core_type, "NTT-2_18") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_18();
+      return NttFpgaDriverArg::create_ntt_2_18(parsed_memory_layout, log_blocks);
 
     } else if (strcmp(core_type, "NTT-2_24") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_24();
+      return NttFpgaDriverArg::create_ntt_2_24(parsed_memory_layout, log_blocks);
 
     } else if (strcmp(core_type, "REVERSE") == 0) {
       if (!log_row_size) {
@@ -242,7 +260,7 @@ parse_args(int argc, char **argv)
         error_message.append(" must be specified as a non-zero value when core_type is REVERSE");
         throw std::runtime_error(error_message);
       }
-      return NttFpgaDriverArg::create_reverse(log_row_size);
+      return NttFpgaDriverArg::create_reverse(parsed_memory_layout, log_row_size, log_blocks);
 
     }
 

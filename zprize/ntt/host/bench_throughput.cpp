@@ -230,6 +230,7 @@ parse_args(int argc, char **argv)
       << flag_xcl_bin_file << " <FILENAME> " 
       << flag_core_type    << " <REVERSE|NTT> "
       << flag_memory_layout    << " <NORMAL_LAYOUT|OPTIMIZED_LAYOUT> "
+      << "[" << flag_log_blocks << " <LOG-BLOCKS>] "
       << "[" << flag_log_row_size << " <LOG-ROW-SIZE>] "
       << "[" << flag_num_evaluations << " <NUM-ROUNDS>] "
       << "[" << flag_what_to_measure << " <memcpy-and-evaluate|evaluate-only>] "
