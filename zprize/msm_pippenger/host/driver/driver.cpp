@@ -95,7 +95,7 @@ class Driver {
   // host compute for non-convertible points
   std::vector<uint64_t> non_convertible_indices;
   std::vector<bls12_377_g1::Xyzt> non_convertible_points;
-  std::vector<bls12_377_g1::biginteger256_t> non_convertible_scalars[4];
+  std::vector<biginteger256_t> non_convertible_scalars[4];
 
   // OpenCL stuff
   cl::CommandQueue q;
