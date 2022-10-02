@@ -5,11 +5,7 @@ This repo has submissions to two of the ZPrize tracks, in the `zprize` folder.
 ## Accelerating MSM Operations on FPGA
 
 We have implemented a optimized version of pippengers algorithm for calculating
-MSM, see the README.md [here](zprize/msm_pippenger/README.md) for a detailed
-explanation of optimizations and block diagrams.
-
-See the README.md [here](zprize/msm_pippenger/test_fpga_harness/README.md) for
-instructions on benchmarking our solution.
+MSM, see the README.md [here](zprize/msm_pippenger/README.md) for more details.
 
 
 ## Accelerating NTT Operations on FPGA
