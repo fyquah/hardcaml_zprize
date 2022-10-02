@@ -10,7 +10,7 @@ struct biginteger256_t {
 
   inline uint64_t &operator[](uint64_t i) { return data[i]; }
 
-  inline uint64_t getBit(uint64_t i) {
+  inline uint64_t getBit(uint64_t i) const {
     std::cout << "getBit" << std::endl;
     return (data[i / 64] >> (i % 64)) & 1;
   }
