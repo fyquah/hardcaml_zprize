@@ -331,7 +331,7 @@ class Driver {
              non_convertible_scalars[batch_num].size());
       for (size_t i = 0; i < non_convertible_points.size(); i++) {
         const auto &point = non_convertible_points[i];
-        const auto &scalar = non_convertible_scalars[batch_num];
+        const auto &scalar = non_convertible_scalars[batch_num][i];
         post_processing_values.final_result.multiplyAndAdd(point, scalar);
       }
     }
