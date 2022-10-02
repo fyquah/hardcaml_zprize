@@ -210,6 +210,8 @@ class GFq {
 
   bool operator==(const GFq &other) const { return mpz_cmp(v, other.v) == 0; }
 
+  bool operator==(const int &other) const { return mpz_cmp_si(v, other) == 0; }
+
   bool operator!=(const GFq &other) const { return mpz_cmp(v, other.v) != 0; }
 };
 
