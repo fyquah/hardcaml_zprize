@@ -5,8 +5,6 @@ type slr =
 
 module type S = sig
   val field_bits : int
-
-  (* val scalar_bits : (int * slr) list *)
   val scalar_bits : int
   val controller_log_stall_fifo_depth : int
   val num_windows : int

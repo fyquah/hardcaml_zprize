@@ -1,5 +1,5 @@
-(** Wraps the actual controller to create one that can utilize a fully pipelined
-    adder. *)
+(** Wraps multiple individual pippenger controllers with helper logic and FIFOs
+    to create one that can utilize a fully pipelined adder. *)
 
 open Hardcaml
 

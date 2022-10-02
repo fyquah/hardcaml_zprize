@@ -1,3 +1,8 @@
+(** A pipeline that transforms scalars into the form that is expected on the
+    FPGA. The main transform used currently is converting scalars from the range
+    1, 2^c-1 into the range 2^{c-1}, -2^{c-1} which allows for mapping negative
+    points into positive point buckets. *)
+
 open Hardcaml
 
 module Make (Config : Config.S) (Num_bits : Twisted_edwards_lib.Num_bits.S) : sig
