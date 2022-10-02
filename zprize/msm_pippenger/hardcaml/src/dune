@@ -6,6 +6,7 @@
   field_ops_lib
   hardcaml
   hardcaml_axi
+  hardcaml_xilinx
   pippenger
   twisted_edwards_lib)
  (preprocess

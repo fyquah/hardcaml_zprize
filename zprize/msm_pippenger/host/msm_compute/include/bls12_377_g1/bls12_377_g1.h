@@ -429,12 +429,25 @@ class Xyzt {
   }
 
   void postComputeFPGA() {
-    x.divBy2();
-    y.divBy2();
+    // x1 = (y0 - x0) / 4
+    // y1 = (y0 + x0) / 4
+    // z1 = z0 / 4
+    // t1 = t0
+    GFq temp1;
+    GFq temp2;
+
+    temp1.set_sub(y, x);
+    temp1.divBy4();
+
+    temp2.set_add(y, x);
+    temp2.divBy4();
+
+    x.set(temp1);
+    y.set(temp2);
     z.divBy4();
   }
   void preComputeFPGA() {
-    // (x, y, z, t) -> ((y-x)/2,(y+x)/2,4d*t)
+    // (x, y, z, t) -> (2(y-x),2(y+x),4d*t)
     GFq temp;
     temp.set_sub(y, x);
     temp.set_div(temp, two);
