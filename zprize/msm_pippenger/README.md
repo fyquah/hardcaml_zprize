@@ -1,21 +1,26 @@
 # FPGA Implementation of the MSM pippengers algorithm
 
+We have implemented a FPGA design that runs on a AWS F1 instance and can compute
+the MSM of a large number of eliptic point and scalar pairs on the BLS12-377
+curve.
+
 ## Optimizations used
 
 * Twisted edwards curve and extended projective points for a lower latency point
-  multiplication algorithm
-* Allow points to be streamed in batches from the host
-* Multiplier optimizations aimed at the Barret reduction algorithm
+  addition algorithm, and a high performance fully-pipelined adder on the FPGA
+* Mask PCIe latency by allowing MSM operations to start while points are being
+  streamed in batches from the host
+* Multiplier optimizations aimed at the Barret reduction algorithm and how they
+  map to the FPGA
 * Selecting a bucket size that allows for efficent usage of FPGA URAM, and
   pblocking to avoid routing congestion
-* Scalars are converted into a +/- form so that bucket memory get a free bit per
-  window
-* Fully pipelined point adder
+* Scalars are converted into a signed form so that bucket memory gets a free bit
+  per window
 * Offloading the final triangle sum to the host
 * Using BRAM to store coefficents that can be used to reduce modulo adder and
   subtractor latency
 
-## Block diagrams
+## Block diagram
 
 TODO
 
