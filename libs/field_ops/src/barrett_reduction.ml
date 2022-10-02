@@ -42,6 +42,13 @@ module Config = struct
     else 0
   ;;
 
+  (* 6  -> 2996 DSP  <-- Used when there was 2 adders in SLR1
+     8  -> 2807 DSP
+     9  -> 2597 DSP
+     10 -> 2408 DSP
+  *)
+  let carefully_chosen_threshold_value = 10
+
   let approx_msb_mult_2222 =
     let open Approx_msb_multiplier.Config in
     match Which_config.t with
@@ -94,7 +101,7 @@ module Config = struct
       ; ground_multiplier =
           Mixed
             { latency = 2
-            ; lut_only_hamming_weight_threshold = Some 6
+            ; lut_only_hamming_weight_threshold = Some carefully_chosen_threshold_value
             ; hybrid_hamming_weight_threshold = None
             }
       }
@@ -144,7 +151,7 @@ module Config = struct
       ; ground_multiplier =
           Mixed
             { latency = 2
-            ; lut_only_hamming_weight_threshold = Some 6
+            ; lut_only_hamming_weight_threshold = Some carefully_chosen_threshold_value
             ; hybrid_hamming_weight_threshold = None
             }
       }
@@ -189,7 +196,7 @@ module Config = struct
     ; ground_multiplier =
         Mixed
           { latency = 2
-          ; lut_only_hamming_weight_threshold = Some 6
+          ; lut_only_hamming_weight_threshold = Some carefully_chosen_threshold_value
           ; hybrid_hamming_weight_threshold = None
           }
     }
@@ -224,7 +231,7 @@ module Config = struct
     ; ground_multiplier =
         Mixed
           { latency = 2
-          ; lut_only_hamming_weight_threshold = Some 6
+          ; lut_only_hamming_weight_threshold = Some carefully_chosen_threshold_value
           ; hybrid_hamming_weight_threshold = None
           }
     }
@@ -269,7 +276,7 @@ module Config = struct
       ; ground_multiplier =
           Mixed
             { latency = 2
-            ; lut_only_hamming_weight_threshold = Some 6
+            ; lut_only_hamming_weight_threshold = Some carefully_chosen_threshold_value
             ; hybrid_hamming_weight_threshold = None
             }
       }
@@ -309,7 +316,7 @@ module Config = struct
       ; ground_multiplier =
           Mixed
             { latency = 2
-            ; lut_only_hamming_weight_threshold = Some 6
+            ; lut_only_hamming_weight_threshold = Some carefully_chosen_threshold_value
             ; hybrid_hamming_weight_threshold = None
             }
       }
