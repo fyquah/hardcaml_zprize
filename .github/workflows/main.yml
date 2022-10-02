@@ -35,4 +35,7 @@ jobs:
 
       - run: opam exec -- dune build
 
+      # Check the repo is clean after building
+      - run: [[ -z $(git status -s) ]]
+
       - run: opam exec -- dune runtest
