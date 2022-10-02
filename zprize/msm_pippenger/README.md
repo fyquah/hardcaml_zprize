@@ -125,7 +125,7 @@ dune build @../../hardcaml/bin/default
 
 # Benchmarking 2^26 points
 
-See the README.md [here](test_fpga_hardness/README.md) for instructions on
+See the README.md [here](test_fpga_harness/README.md) for instructions on
 benchmarking our solution.
 
 ## AFI-ids and measured performance
