@@ -387,7 +387,7 @@ class Driver {
 
       //   ptr_scalar += UINT32_PER_INPUT_SCALAR;
       // }
-      memcpy_in_scalars_chunk(scalars, 0, total_num_points, 0);
+      memcpy_in_scalars_chunk(scalars, 0, total_num_points, 0, batch_num);
     });
 
     bench("transferring scalars to gmem", [&]() {
