@@ -1,3 +1,5 @@
+(** Top level for the NTT design. *)
+
 open! Base
 open Hardcaml
 
