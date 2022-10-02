@@ -49,8 +49,12 @@ struct
     [@@deriving sexp_of, hardcaml]
   end
 
+  (** [b_write_data] is a constant, so it doesn't need any registers around
+   * it.
+   *)
   let create ~build_mode ~b_write_data scope { I.clock; port_a; port_b } =
     let ( -- ) = Scope.naming scope in
+    let spec = Reg_spec.create ~clock () in
     let port_a_q, port_b_q =
       List.mapi window_size_bits ~f:(fun i window_size_bits ->
         if window_size_bits > address_bits
@@ -64,10 +68,10 @@ struct
           ~size:(1 lsl window_size_bits)
           ~port_a:
             (let port =
-               { Ram_port.write_enable = List.nth_exn port_a.write_enables i
-               ; read_enable = List.nth_exn port_a.read_enables i
-               ; data = port_a.data
-               ; address = sel_bottom port_a.address window_size_bits
+               { Ram_port.write_enable = reg spec (List.nth_exn port_a.write_enables i)
+               ; read_enable = reg spec (List.nth_exn port_a.read_enables i)
+               ; data = reg spec port_a.data
+               ; address = reg spec (sel_bottom port_a.address window_size_bits)
                }
              in
              Ram_port.(
@@ -76,10 +80,10 @@ struct
              port)
           ~port_b:
             (let port =
-               { Ram_port.write_enable = List.nth_exn port_b.write_enables i
-               ; read_enable = List.nth_exn port_b.read_enables i
+               { Ram_port.write_enable = reg spec (List.nth_exn port_b.write_enables i)
+               ; read_enable = reg spec (List.nth_exn port_b.read_enables i)
                ; data = b_write_data
-               ; address = sel_bottom port_b.address window_size_bits
+               ; address = reg spec (sel_bottom port_b.address window_size_bits)
                }
              in
              Ram_port.(
@@ -98,20 +102,14 @@ struct
          | [ hd ] -> hd
          | _ ->
            mux
-             (Signal.pipeline
-                (Reg_spec.create ~clock ())
-                ~n:ram_read_latency
-                port_a.read_window)
+             (Signal.pipeline spec ~n:(ram_read_latency + 1) port_a.read_window)
              port_a_q)
     ; port_b_q =
         (match port_b_q with
          | [ hd ] -> hd
          | _ ->
            mux
-             (Signal.pipeline
-                (Reg_spec.create ~clock ())
-                ~n:ram_read_latency
-                port_b.read_window)
+             (Signal.pipeline spec ~n:(ram_read_latency + 1) port_b.read_window)
              port_b_q)
     }
   ;;

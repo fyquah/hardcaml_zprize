@@ -123,24 +123,24 @@ struct
             ; port_a =
                 { read_enables =
                     sublist port_a.read_enables
-                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 3))
                     |> concat_lsb
                     |> named_register ~scope ~clock ~slr:centre_slr
                     |> named_register ~scope ~clock ~slr:partition.slr
                     |> bits_lsb
                 ; write_enables =
                     sublist port_a.write_enables
-                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 3))
                     |> concat_lsb
                     |> named_register ~scope ~clock ~slr:centre_slr
                     |> named_register ~scope ~clock ~slr:partition.slr
                     |> bits_lsb
                 ; address =
-                    pipeline spec ~n:(ram_lookup_latency - 2) port_a.address
+                    pipeline spec ~n:(ram_lookup_latency - 3) port_a.address
                     |> named_register ~scope ~clock ~slr:centre_slr
                     |> named_register ~scope ~clock ~slr:partition.slr
                 ; data =
-                    pipeline spec ~n:(ram_lookup_latency - 2) port_a.data
+                    pipeline spec ~n:(ram_lookup_latency - 3) port_a.data
                     |> named_register ~scope ~clock ~slr:centre_slr
                     |> named_register ~scope ~clock ~slr:partition.slr
                 ; read_window =
@@ -149,7 +149,7 @@ struct
                     else
                       pipeline
                         spec
-                        ~n:(ram_lookup_latency - 2)
+                        ~n:(ram_lookup_latency - 3)
                         (port_a.read_window -:. window_offset)
                       |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
                       |> named_register ~scope ~clock ~slr:centre_slr
@@ -158,24 +158,24 @@ struct
             ; port_b =
                 { read_enables =
                     sublist port_b.read_enables
-                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 3))
                     |> concat_lsb
                     |> named_register ~scope ~clock ~slr:centre_slr
                     |> named_register ~scope ~clock ~slr:partition.slr
                     |> bits_lsb
                 ; write_enables =
                     sublist port_b.write_enables
-                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 2))
+                    |> List.map ~f:(pipeline spec ~n:(ram_lookup_latency - 3))
                     |> concat_lsb
                     |> named_register ~scope ~clock ~slr:centre_slr
                     |> named_register ~scope ~clock ~slr:partition.slr
                     |> bits_lsb
                 ; address =
-                    pipeline spec ~n:(ram_lookup_latency - 2) port_b.address
+                    pipeline spec ~n:(ram_lookup_latency - 3) port_b.address
                     |> named_register ~scope ~clock ~slr:centre_slr
                     |> named_register ~scope ~clock ~slr:partition.slr
                 ; data =
-                    pipeline spec ~n:(ram_lookup_latency - 2) port_b.data
+                    pipeline spec ~n:(ram_lookup_latency - 3) port_b.data
                     |> named_register ~scope ~clock ~slr:centre_slr
                     |> named_register ~scope ~clock ~slr:partition.slr
                 ; read_window =
@@ -184,7 +184,7 @@ struct
                     else
                       port_b.read_window -:. window_offset
                       |> Fn.flip uresize (Int.ceil_log2 (Partition.num_windows partition))
-                      |> pipeline spec ~n:(ram_lookup_latency - 2)
+                      |> pipeline spec ~n:(ram_lookup_latency - 3)
                       |> named_register ~scope ~clock ~slr:centre_slr
                       |> named_register ~scope ~clock ~slr:partition.slr)
                 }
