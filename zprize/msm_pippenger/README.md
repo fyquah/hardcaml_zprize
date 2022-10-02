@@ -50,9 +50,11 @@ The total time for 4 back to back MSMs, repeated 10 times. This allows us to
 mask the overhead of transfering data to the FPGA and various host processing
 steps on the scalar inputs that can happen in parallel.
 ```
-FPGA-MSM/2**26x4        time:   [25.480 s 25.500 s 25.520 s]
+FPGA-MSM/2**26x4        time:   [22.182 s 22.183 s 22.183 s]
 ```
-We acheive a mean of 25.500s, which equates to 10.526M MSM op/s.
+
+We acheive a mean of 22.183s, which equates to **12.100** Mop/s
+((4*2^26)/1000000)/22.183).
 
 AWS allows the average power to be measured during operation:
 ```
