@@ -12,8 +12,11 @@
 
     This module will then wait for input points until [last_scalar] is high, and
     when the result is ready will be outputted on [result_point]. After the last
-    result point has been read the we will start to re-initialize buck RAMs to
+    result point has been read the we will start to re-initialize bucket RAMs to
     Identity, and wait for new input points to be streamed in.
+
+    Currently this top implements a fully pipelined adder, with two pippenger
+    controllers running over half the windows each.
 *)
 
 open Hardcaml

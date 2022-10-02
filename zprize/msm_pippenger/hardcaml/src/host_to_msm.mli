@@ -1,7 +1,6 @@
 (** Converts a 512 bit axi stream of scalars + points (scalar and point
-    coordinates are 64 bit aligned), compresses the stream to a 256 bit wide,
-    and double buffers the output. This can then be connected to the
-    controller. *)
+    coordinates are 64 bit aligned). This then drives the MSM pippenger top
+    level. *)
 
 open Hardcaml
 open Hardcaml_axi
