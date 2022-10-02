@@ -53,7 +53,7 @@ MemoryLayout memory_layout_from_string(std::string s)
   }
 
   if (s == "OPTIMIZED_LAYOUT") {
-    return MemoryLayout::NORMAL_LAYOUT;
+    return MemoryLayout::OPTIMIZED_LAYOUT;
   }
 
   std::string error_message;
