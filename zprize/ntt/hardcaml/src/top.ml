@@ -70,7 +70,6 @@ module Make (Config : Top_config.S) = struct
         ~n
         x
     in
-    let store_sm_rd_en_not_zero = store_sm.rd_en <>:. 0 in
     let cores =
       Four_step.hierarchy
         ~build_mode
@@ -93,14 +92,14 @@ module Make (Config : Top_config.S) = struct
               pipe_with_keep ~n:Load_sm.write_pipelining load_sm.wr_addr)
         ; rd_en =
             pipe_with_keep
-              ~enable:store_sm_rd_en_not_zero
+              ~enable:store_sm.rd_any
               ~n:Store_sm.read_address_pipelining
               store_sm.rd_en
-            &: repeat store_sm_rd_en_not_zero (width store_sm.rd_en)
+            &: repeat store_sm.rd_any (width store_sm.rd_en)
         ; rd_addr =
             Array.init blocks ~f:(fun _ ->
               pipe_with_keep
-                ~enable:(store_sm.rd_en <>:. 0)
+                ~enable:store_sm.rd_any
                 ~n:Store_sm.read_address_pipelining
                 store_sm.rd_addr)
         ; input_done = load_sm.done_
@@ -116,14 +115,14 @@ module Make (Config : Top_config.S) = struct
                 instantiate a pipelined mux. *)
             pipe
               ~n:Store_sm.read_data_tree_mux_stages
-              ~enable:store_sm_rd_en_not_zero
+              ~enable:store_sm.rd_any
               (let qs =
                  List.init blocks ~f:(fun index ->
                    cores.rd_q.(index)
                    |> Array.to_list
                    |> concat_lsb
                    |> pipe_with_keep
-                        ~enable:store_sm_rd_en_not_zero
+                        ~enable:store_sm.rd_any
                         ~n:Store_sm.read_data_pipelining)
                in
                if Config.logblocks = 0
@@ -135,7 +134,7 @@ module Make (Config : Top_config.S) = struct
                         (Hardcaml_ntt.Core_config.ram_latency
                         + Store_sm.read_address_pipelining
                         + Store_sm.read_data_pipelining)
-                      ~enable:store_sm_rd_en_not_zero
+                      ~enable:store_sm.rd_any
                       store_sm.block)
                    qs)
         ; tlast = gnd
