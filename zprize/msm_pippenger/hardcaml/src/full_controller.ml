@@ -25,7 +25,6 @@ struct
   open Config.Top_config
   open Config_utils.Make (Config.Top_config)
 
-  (* Integer divison so the last window might be slightly larger than the others. *)
   module Scalar_config = struct
     let window_size_bits = max_window_size_bits
   end
