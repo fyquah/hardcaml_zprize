@@ -67,7 +67,7 @@ module Make (Config : Config.S) = struct
   let ram_read_latency = 3
   let ram_lookup_latency = 3
   let ram_write_latency = 3
-  let ram_output_latency = 3
+  let ram_output_latency = 4
 
   module Full_controller = Full_controller.Make (struct
     module Top_config = Config
