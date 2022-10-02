@@ -431,6 +431,7 @@ module Make (Config : Config.S) = struct
       in
       let rd = result_point_ready -- "fifo_rd" in
       Hardcaml_xilinx.Fifo_sync.create
+        ~build_mode
         ~overflow_check:true
         ~showahead:true
         ~underflow_check:true
