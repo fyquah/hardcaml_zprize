@@ -132,7 +132,7 @@ public:
     for (ssize_t i = 0; i < npoints; i++) {
       // std::cout << rust_points[i] << std::endl;
       point.copy_from_rust_type(rust_points[i]);
-      point.preComputeFPGA();
+      point.preComputeFPGA(post_processing_values.temps);
       point.copy_to_fpga_buffer(ptr_point);
       // point.println();
 
@@ -275,7 +275,7 @@ public:
         // receive fpga point
         post_processing_values.bucket_sum.import_from_fpga_vector(
             source_kernel_output + (NUM_32B_WORDS_PER_OUTPUT * point_idx));
-        post_processing_values.bucket_sum.postComputeFPGA();
+        post_processing_values.bucket_sum.postComputeFPGA(post_processing_values.temps);
         ++point_idx;
 
         // do triangle sum update
