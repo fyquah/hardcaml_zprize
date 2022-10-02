@@ -142,6 +142,18 @@ afi-066aeb84a7663930a
 [Doing on-host postprocessing] 0.475065s
 ```
 
+When doing a run over 4 batches, which allows us to only pay for the scalar
+transfer time of the first batch, we get a total run time of 24.000s, or 11.18M
+op/s.
+
+AWS allows the average power to be measured during operation:
+```
+Power consumption (Vccint):
+   Last measured: 49 watts
+   Average: 49 watts
+   Max measured: 52 watts
+```
+
 ### All AFIs
 
 AFI-id | AFI-gid | Notes | 2^26 performance
