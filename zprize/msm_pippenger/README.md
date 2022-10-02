@@ -123,7 +123,7 @@ dune build @../../hardcaml/bin/default
   outputs-50000.txt
 ```
 
-# Benchmarking 2^26 points
+# Benchmarking 2^<sup>26</sup> points
 
 See the README.md [here](test_fpga_harness/README.md) for instructions on
 benchmarking our solution.
