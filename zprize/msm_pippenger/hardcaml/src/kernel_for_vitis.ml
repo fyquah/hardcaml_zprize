@@ -46,9 +46,6 @@ module Make (Config : Config.S) = struct
     scope
     { I.ap_clk; ap_rst_n; host_scalars_to_fpga; ddr_points_to_fpga; fpga_to_host_dest }
     =
-    let merge_axi_stream_to_host_to_msm_registers =
-      Axi512.Stream.Register.O.Of_signal.wires ()
-    in
     let clock = ap_clk in
     let clear = ~:ap_rst_n in
     (* transform the scalars off the wire *)
@@ -70,30 +67,16 @@ module Make (Config : Config.S) = struct
       =
       Merge_axi_streams.hierarchical
         scope
-        { clock
-        ; clear
-        ; host_scalars_to_fpga
-        ; ddr_points_to_fpga
-        ; host_to_fpga_dest = merge_axi_stream_to_host_to_msm_registers.up_dest
-        }
+        { clock; clear; host_scalars_to_fpga; ddr_points_to_fpga; host_to_fpga_dest }
     in
     Axi512.Stream.Dest.Of_signal.( <== )
       transformed_scalars_to_fpga_dest
       transformed_scalars_to_fpga_dest';
-    Axi512.Stream.Register.O.Of_signal.( <== )
-      merge_axi_stream_to_host_to_msm_registers
-      (Axi512.Stream.Register.hierarchical
-         scope
-         { clock; clear; up = host_to_fpga; dn_dest = host_to_fpga_dest });
     let scalar_and_input_point_ready = wire 1 in
     let host_to_msm =
       Host_to_msm_simple.hierarchical
         scope
-        { clock
-        ; clear
-        ; host_to_fpga = merge_axi_stream_to_host_to_msm_registers.dn
-        ; scalar_and_input_point_ready
-        }
+        { clock; clear; host_to_fpga; scalar_and_input_point_ready }
     in
     Axi512.Stream.Dest.Of_signal.( <== ) host_to_fpga_dest host_to_msm.host_to_fpga_dest;
     let result_point_ready = wire 1 in
