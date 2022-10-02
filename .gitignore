@@ -9,3 +9,4 @@ fpga/*/*.rpt
 **.swp
 **.swo
 local
+**.swo

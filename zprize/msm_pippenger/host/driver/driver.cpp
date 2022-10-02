@@ -31,7 +31,7 @@
 #define OUTPUT_SIZE_IN_BYTES (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS)
 #define OUTPUT_SIZE_IN_UINT32 (OUTPUT_SIZE_IN_BYTES / 4)
 
-static const bool mask_io = true;
+static const bool mask_io = false;
 static const bool debug = false;
 
 typedef std::vector<uint32_t, aligned_allocator<uint32_t> > aligned_vec32;

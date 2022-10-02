@@ -5,6 +5,7 @@ open! Bits
 
 module Barrett_reduction377 = Barrett_reduction.With_interface (struct
   let bits = 377
+  let output_bits = 377
 end)
 
 module Config = Barrett_reduction.Config
@@ -15,7 +16,7 @@ module Sim = Cyclesim.With_interface (I) (O)
 let create_sim ~p ~config =
   let scope = Scope.create ~flatten_design:true () in
   Sim.create
-    ~config:Cyclesim.Config.trace_all
+    ~config:{ Cyclesim.Config.trace_all with deduplicate_signals = false }
     (Barrett_reduction377.create ~config ~p scope)
 ;;
 
@@ -45,12 +46,12 @@ let test ~debug test_cases =
       if Bits.is_vdd !valid
       then
         List.filter internal_ports ~f:(fun (key, _) ->
-            String.is_prefix ~prefix key && not (String.equal valid_port_name key))
+          String.is_prefix ~prefix key && not (String.equal valid_port_name key))
         |> List.iter ~f:(fun (port_name, value) ->
-               Stdio.printf
-                 "%s: 0x%s\n"
-                 port_name
-                 (Z.format "x" (Bits.to_z ~signedness:Unsigned !value))))
+             Stdio.printf
+               "%s: 0x%s\n"
+               port_name
+               (Z.format "x" (Bits.to_z ~signedness:Unsigned !value))))
   in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
@@ -66,25 +67,25 @@ let test ~debug test_cases =
     dump_stage_if_valid "stage4"
   in
   List.iter test_cases ~f:(fun test_case ->
-      inputs.valid := vdd;
-      inputs.a := Bits.of_z ~width:754 test_case;
-      cycle ());
+    inputs.valid := vdd;
+    inputs.a := Bits.of_z ~width:754 test_case;
+    cycle ());
   inputs.valid := gnd;
   for _ = 1 to Config.latency config + 1 do
     cycle ()
   done;
   List.map2_exn test_cases (Queue.to_list queue) ~f:(fun a obtained ->
-      let expected = Z.(a mod p) in
-      let from_software_model = compute_software_model ~p ~a in
-      if Z.equal obtained expected
-      then Ok ()
-      else
-        Or_error.error_s
-          [%message
-            (a : Utils.z)
-              (obtained : Utils.z)
-              (expected : Utils.z)
-              (from_software_model : Utils.z)])
+    let expected = Z.(a mod p) in
+    let from_software_model = compute_software_model ~p ~a in
+    if Z.equal obtained expected
+    then Ok ()
+    else
+      Or_error.error_s
+        [%message
+          (a : Utils.z)
+            (obtained : Utils.z)
+            (expected : Utils.z)
+            (from_software_model : Utils.z)])
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]
   |> Stdio.print_s
@@ -115,11 +116,11 @@ let%expect_test "regression test case" =
     ];
   [%expect
     {|
-    stage1$q: 0x156275e4da06f626ede27db2023ab34cd9eeb0d02b5600ba8e6e7f4af2038e3248e9a25a29f0c32868684817ebf818e
-    stage1$a': 0x3e089bb711aa0ae8be84588f7d94c61b839ca85c9342b57d9995bca4d2bac7254be5efd39871d55ca4d6fa019a30013
-    stage2$qp: 0x53e7147cb5a217720d136c6bd6eee22baa20b2afe4f8467b89efc1fedf3650e6f97e1890e59f8cfa2104817ebf818e
-    stage2$a': 0x3e089bb711aa0ae8be84588f7d94c61b839ca85c9342b57d9995bca4d2bac7254be5efd39871d55ca4d6fa019a30013
-    stage3$a_minus_qp: 0x38ca2a6f464fe9719db321c8c025d7f8c8fa9d3194f33115e0f6c084e4c76216dc4e0e4a8a17dc8d02c6b1e9ae37e85
+    stage1$q: 0x156275e4da06f626ede27db2023ab34cd9eeb0d02b5600ba8e6e7f4af2038e3248e9a25a29f0c32868684817ebf818b
+    stage1$a': 0xbe089bb711aa0ae8be84588f7d94c61b839ca85c9342b57d9995bca4d2bac7254be5efd39871d55ca4d6fa019a30013
+    stage2$qp: 0x349384235666f571f5c022b25f31330dd4192d9ad05bd991eafc932d0c35e50a1d7664c00e59f8b6b06c4817ebf818b
+    stage2$a': 0xbe089bb711aa0ae8be84588f7d94c61b839ca85c9342b57d9995bca4d2bac7254be5efd39871d55ca4d6fa019a30013
+    stage3$a_minus_qp: 0x89751793bb431576c8c435dd1e63930daf837ac1c2e6dbebae992977c684e21b2e6f8b138a17dca5f46ab1e9ae37e88
     stage4$a_mod_p: 0x302e1ac4dadcc18d65269bb2bfcb095849f5ed17650bf32028a7a8da39e6213fae265c48a17dc7c61aeb1e9ae37e83
     (Ok ()) |}]
 ;;

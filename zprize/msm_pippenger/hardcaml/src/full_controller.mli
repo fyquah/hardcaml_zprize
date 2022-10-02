@@ -38,5 +38,8 @@ end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val hierarchical : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchical
+    :  build_mode:Build_mode.t
+    -> Scope.t
+    -> Signal.t Interface.Create_fn(I)(O).t
 end

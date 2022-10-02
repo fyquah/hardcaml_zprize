@@ -130,6 +130,20 @@ benchmarking our solution.
 
 ## AFI-ids and measured performance
 
+We have listed all the AFI-ids and their performance at certain points in the
+repo. Currently the highest performance one is:
+
+afi-066aeb84a7663930a
+```
+[memcpy-ing scalars to special memory region] 0.254459s
+[transferring scalars to gmem] 0.269489s
+[Doing FPGA Computation] 5.40025s
+[Copying results back from gmem] 0.00128308s
+[Doing on-host postprocessing] 0.475065s
+```
+
+### All AFIs
+
 AFI-id | AFI-gid | Notes | 2^26 performance
 ------- | ------- | ----- | -----
  afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned. | n/a
@@ -138,3 +152,5 @@ AFI-id | AFI-gid | Notes | 2^26 performance
  afi-005f604b2e786b217 | agfi-0a8eb87970600ea78 | msm-1x-full-precompute-adder | [Copying scalars and points to gmem] 1.78697s, [Doing actual work] 10.8767s
  afi-071f40ea5e182fa8f | agfi-074c9451b3f89d392 | msm-1x-full-precompute-merge-axi-streams | [transferring scalars to gmem] 0.204802s, [Doing FPGA Computation] 10.8336s
  afi-071f40ea5e182fa8f | agfi-0e2c85bf4591270d3 | msm-halve-window-sizes-2 | [transferring scalars to gmem] 0.277229s, [Doing FPGA Computation] 8.10432s
+ afi-0df5b1800bfbfdd54 | agfi-036994fb80202cb8d | mega-build-3-oct-1 | [transferring scalars to gmem] 0.182392s, [Doing FPGA Computation] 6.8731s
+ afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 

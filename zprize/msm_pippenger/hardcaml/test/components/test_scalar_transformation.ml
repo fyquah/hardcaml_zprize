@@ -1,21 +1,19 @@
 open Core
 open Hardcaml
 open Msm_pippenger
+open Bits
 (*module Config = Config.Bls12_377*)
+
+let simple = false
 
 module Config = struct
   include Config.Bls12_377
 
-  (*let scalar_bits = 24*)
+  let num_windows = if simple then 3 else num_windows
+  let scalar_bits = if simple then 24 else scalar_bits
 end
 
-module Scalar_transformation =
-  Scalar_transformation.Make
-    (Config)
-    (struct
-      let num_bits = Config.field_bits
-    end)
-
+module Scalar_transformation = Scalar_transformation.Make (Config)
 open Config_utils.Make (Config)
 
 module Z = struct
@@ -84,26 +82,28 @@ let test ?(verify = true) () =
     then (
       (* timed out or received all the outputs *)
       print_s [%message "Timed out!" (!num_inputs : int) (List.length outputs : int)];
-      List.rev outputs)
-    else if List.length outputs = !num_inputs
+      outputs)
+    else if List.length outputs
+            = Int.round_up
+                !num_inputs
+                ~to_multiple_of:Scalar_transformation.num_scalars_per_ddr_word
     then (
       print_s [%message "Completed!"];
-      List.rev outputs)
+      List.take outputs !num_inputs)
     else (
       (* deal with downstream *)
       let tready = Bits.random ~width:1 in
-      i.scalar_and_input_point_ready := tready;
+      i.transformed_scalars_to_fpga_dest.tready := tready;
       (* deal with upstream *)
       match inputs with
       | [] ->
-        i.scalar_valid := Bits.gnd;
+        i.host_scalars_to_fpga.tvalid := Bits.gnd;
         cycle cycle_cnt Bits.gnd [] outputs
       | hd :: tl ->
         let tvalid = Bits.(tvalid_prev |: random ~width:1) in
-        let tlast = Bits.of_bool (List.length tl = 0) in
-        i.scalar := hd;
-        i.scalar_valid := tvalid;
-        i.last_scalar := tlast;
+        let _tlast = Bits.of_bool (List.length tl = 0) in
+        i.host_scalars_to_fpga.tdata := hd;
+        i.host_scalars_to_fpga.tvalid := tvalid;
         cycle cycle_cnt tvalid inputs outputs)
   and cycle cycle_cnt tvalid inputs outputs =
     (*if cycle_cnt < 80
@@ -120,17 +120,31 @@ let test ?(verify = true) () =
     Cyclesim.cycle sim;
     let cycle_cnt = cycle_cnt + 1 in
     let outputs =
-      if Bits.(is_vdd (!(o.scalar_valid) &: !(i.scalar_and_input_point_ready)))
+      if Bits.(
+           is_vdd
+             (!(o.transformed_scalars_to_fpga.tvalid)
+             &: !(i.transformed_scalars_to_fpga_dest.tready)))
       then (
         (* we need to save the output *)
-        let out =
-          Array.map2_exn o.scalar o.scalar_negatives ~f:(fun s n ->
-            { Reduced_scalar.scalar = !s; negative = Bits.is_vdd !n })
+        let out_reduced_scalars =
+          List.init Scalar_transformation.num_scalars_per_ddr_word ~f:(fun i ->
+            let offset = i * 64 * Scalar_transformation.num_scalar_64b_words in
+            let scalar =
+              !(o.transformed_scalars_to_fpga.tdata).:+[offset, Some Config.scalar_bits]
+            in
+            let scalar, scalar_negatives =
+              Scalar_transformation.unpack_to_windows_and_negatives (module Bits) scalar
+            in
+            Array.map2_exn scalar scalar_negatives ~f:(fun s n ->
+              { Reduced_scalar.scalar = s; negative = Bits.is_vdd n }))
         in
-        out :: outputs)
+        if simple
+        then print_s [%message (out_reduced_scalars : Reduced_scalar.t array list)];
+        outputs @ out_reduced_scalars)
       else outputs
     in
-    if Bits.(is_vdd (!(o.scalar_and_input_point_ready) &: !(i.scalar_valid)))
+    if Bits.(
+         is_vdd (!(o.host_scalars_to_fpga_dest.tready) &: !(i.host_scalars_to_fpga.tvalid)))
     then (
       let tl = List.tl_exn inputs in
       (*let hd = List.hd_exn inputs in*)
@@ -140,14 +154,44 @@ let test ?(verify = true) () =
   in
   (*let slice l start len = List.drop (List.take l (start + len)) start in
   let inputs = slice test_scalars (100 * 2049) 20 in*)
-  let inputs = List.filter test_scalars ~f:(fun _ -> Float.(Random.float 1. < 0.01)) in
-  num_inputs := List.length inputs;
+  let unpacked_inputs =
+    if simple
+    then List.take test_scalars 8
+    else List.filter test_scalars ~f:(fun _ -> Float.(Random.float 1. < 0.02))
+  in
+  if simple
+  then print_s [%message (List.map unpacked_inputs ~f:Bits.to_int : Int.Hex.t list)];
+  num_inputs := List.length unpacked_inputs;
+  let inputs =
+    let num_packed_inputs =
+      Int.round_up
+        (List.length unpacked_inputs)
+        ~to_multiple_of:Scalar_transformation.num_scalars_per_ddr_word
+      / Scalar_transformation.num_scalars_per_ddr_word
+    in
+    (* pack to axi *)
+    List.init num_packed_inputs ~f:(fun i ->
+      let inputs =
+        List.init Scalar_transformation.num_scalars_per_ddr_word ~f:(fun j ->
+          let unpacked_idx = (i * Scalar_transformation.num_scalars_per_ddr_word) + j in
+          (if unpacked_idx < List.length unpacked_inputs
+          then List.nth_exn unpacked_inputs unpacked_idx
+          else gnd)
+          |> Fn.flip Bits.uresize (64 * Scalar_transformation.num_scalar_64b_words))
+      in
+      Bits.concat_lsb inputs)
+  in
   let outputs = run 1 Bits.gnd inputs [] in
   (*print_s [%message (outputs : Reduced_scalar.t array list)];*)
   if verify
   then (
-    List.iteri (List.zip_exn inputs outputs) ~f:(fun _idx (i, o) -> model_check i o);
+    List.iteri (List.zip_exn unpacked_inputs outputs) ~f:(fun _idx (i, o) ->
+      model_check i o);
     print_s [%message "Checked" (!num_inputs : int)]);
+  (* for waveforms to have a tail *)
+  for _ = 1 to 50 do
+    Cyclesim.cycle sim
+  done;
   waves
 ;;
 
@@ -157,5 +201,5 @@ let%expect_test "Drive inputs through transform" =
   let _waves = test () in
   [%expect {|
     Completed!
-    (Checked (!num_inputs 8103)) |}]
+    (Checked (!num_inputs 16206)) |}]
 ;;

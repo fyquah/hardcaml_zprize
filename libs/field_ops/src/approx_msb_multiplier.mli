@@ -2,7 +2,12 @@ open Base
 open Hardcaml
 
 module Config : sig
-  module Level = Karatsuba_ofman_mult.Config.Level
+  module Level : sig
+    type t =
+      { k : int -> int
+      ; for_karatsuba : Karatsuba_ofman_mult.Config.Level.t
+      }
+  end
 
   type t =
     { levels : Level.t list
