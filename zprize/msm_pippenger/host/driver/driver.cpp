@@ -32,7 +32,7 @@
 #define OUTPUT_SIZE_IN_UINT32 (OUTPUT_SIZE_IN_BYTES / 4)
 
 static const bool mask_io = true;
-static const bool debug = false;
+static const bool debug = true;
 
 typedef std::vector<uint32_t, aligned_allocator<uint32_t> > aligned_vec32;
 
