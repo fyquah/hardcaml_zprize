@@ -22,7 +22,7 @@ z3 should be installed to run tests.
 # Compiling OCaml and Hardcaml code
 
 The RTL (Verilog) used by various flows in this repo is written using the
-(Hardcaml)[https://github.com/janestreet/hardcaml] library, which needs OCaml
+[Hardcaml](https://github.com/janestreet/hardcaml) library, which needs OCaml
 installed to generate.
 
 1. Follow the instructions in https://opam.ocaml.org/doc/Install.html to install
