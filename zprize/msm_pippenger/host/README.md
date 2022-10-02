@@ -8,3 +8,8 @@ cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j
 ```
+
+### clang-format
+```
+find driver naive_driver msm_compute -iname *.h -o -iname *.cpp | xargs clang-format --style=Google -i
+```

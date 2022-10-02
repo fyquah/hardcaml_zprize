@@ -489,6 +489,7 @@ class Driver {
       has_output_to_process = has_output_to_transfer;
     };
 
+    uint64_t scalars_start = 0;
     for (uint64_t b = 0; b < num_batches; b++) {
       /* Enqueue fpga->host transfer for this batch. */
       for (uint64_t chunk_index = 0; chunk_index < num_input_chunks();
