@@ -1,6 +1,8 @@
 open! Core
 open Hardcaml
 open Hardcaml_waveterm
+module Scalar = Pippenger.Scalar
+module Scalar_config = Scalar.Scalar_config
 
 module type Config = sig
   include Pippenger.Config.S
@@ -8,8 +10,9 @@ module type Config = sig
   val datapath_depth : int
 end
 
-module Model (Config : Config) = struct
+module Model (Config : Config) (Scalar_config : Scalar_config.S) = struct
   include Config
+  include Scalar_config
   open! Signal
 
   let () = Caller_id.set_mode Full_trace
@@ -40,7 +43,8 @@ module Model (Config : Config) = struct
     [@@deriving sexp_of, hardcaml ~rtlprefix:"o$"]
   end
 
-  module Controller = Pippenger.Controller.Make (Config)
+  module Controller = Pippenger.Controller.Make (Config) (Scalar_config)
+  module Scalar = Controller.Scalar
 
   module Pipe = struct
     module I = struct
@@ -90,7 +94,7 @@ module Model (Config : Config) = struct
         { Controller.I.clock = i.clock
         ; clear = i.clear
         ; start = i.start
-        ; scalar = i.scalar
+        ; scalar = Array.map i.scalar ~f:(fun scalar -> { Scalar.scalar; negative = gnd })
         ; scalar_valid = i.scalar_valid
         ; last_scalar = i.last_scalar
         ; affine_point = i.affine_point
@@ -103,7 +107,10 @@ module Model (Config : Config) = struct
             ~collision_mode:Write_before_read
             ~size:(1 lsl window_size_bits)
             ~read_ports:
-              [| { read_clock = i.clock; read_address = ctrl.bucket; read_enable = vdd }
+              [| { read_clock = i.clock
+                 ; read_address = ctrl.bucket.scalar
+                 ; read_enable = vdd
+                 }
                ; { read_clock = i.clock
                  ; read_address = i.bucket_address
                  ; read_enable = i.bucket_read_enable
@@ -130,7 +137,7 @@ module Model (Config : Config) = struct
          { Pipe.I.clock = i.clock
          ; adder_a = mux2 ctrl.bubble (ones affine_point_bits) ctrl.adder_affine_point
          ; adder_b = mux ctrl.window bucket0
-         ; bucket = ctrl.bucket
+         ; bucket = ctrl.bucket.scalar
          ; window = ctrl.window
          ; valid = ctrl.execute &: ~:(ctrl.bubble)
          });
@@ -149,8 +156,8 @@ module Msm_input = struct
   [@@deriving sexp_of, hardcaml]
 end
 
-module Test (Config : Config) = struct
-  module Model = Model (Config)
+module Test (Config : Config) (Scalar_config : Scalar_config.S) = struct
+  module Model = Model (Config) (Scalar_config)
   module Sim = Cyclesim.With_interface (Model.I) (Model.O)
 
   let ( <-. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
@@ -161,6 +168,15 @@ module Test (Config : Config) = struct
           Array.init Model.num_windows ~f:(fun _ ->
             Bits.random ~width:Model.window_size_bits)
       ; affine_point = Bits.random ~width:Model.affine_point_bits
+      })
+  ;;
+
+  let debug_inputs num_scalars =
+    Array.init num_scalars ~f:(fun idx ->
+      { Msm_input.scalar =
+          Array.init Model.num_windows ~f:(fun _ ->
+            Bits.random ~width:Model.window_size_bits)
+      ; affine_point = Bits.of_int ~width:Model.affine_point_bits (idx + 1)
       })
   ;;
 
@@ -196,14 +212,34 @@ module Test (Config : Config) = struct
   let sum_window (i : Bits.t list array) = Array.map i ~f:(reduce0 ~f:Bits.( +: ))
   let sum_all_windows = Array.map ~f:sum_window
 
-  let print_results (i : Bits.t Msm_input.t array) =
+  let compare_hw_and_sw_buckets hw sw =
+    for window = 0 to Array.length sw - 1 do
+      for bucket = 0 to Array.length sw.(0) - 1 do
+        let hw = hw.(window).(bucket) in
+        let sw = sw.(window).(bucket) in
+        if hw <> sw
+        then
+          print_s
+            [%message
+              "mismatched bucket"
+                (window : int)
+                (bucket : int)
+                (hw : Int.Hex.t)
+                (sw : Int.Hex.t)]
+      done
+    done
+  ;;
+
+  let print_results (i : Bits.t Msm_input.t array) hw_results =
     let buckets = sort_into_buckets i in
     let sums = sum_all_windows buckets in
     let buckets = Array.map buckets ~f:(Array.map ~f:(List.map ~f:Bits.to_int)) in
     let sums = Array.map sums ~f:(Array.map ~f:Bits.to_int) in
+    Array.iter sums ~f:(fun s -> s.(0) <- 0);
     print_s
       [%message
-        "REFERENCE" (buckets : Int.Hex.t list array array) (sums : Int.Hex.t array array)]
+        "REFERENCE" (sums : Int.Hex.t array array) (buckets : Int.Hex.t list array array)];
+    compare_hw_and_sw_buckets hw_results sums
   ;;
 
   let poll ~timeout ~f cycle =
@@ -227,7 +263,7 @@ module Test (Config : Config) = struct
       print_s [%message (inputs : Int.Hex.t Msm_input.t array)]);
     let sim =
       Sim.create
-        ~config:Cyclesim.Config.trace_all
+        ~config:{ Cyclesim.Config.trace_all with deduplicate_signals = false }
         (Model.create
            (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports ()))
     in
@@ -289,7 +325,7 @@ module Test (Config : Config) = struct
     inputs.scalar_valid <-. 0;
     poll ~timeout:1_000 ~f:(fun () -> Bits.to_bool !(outputs.done_)) cycle;
     (* run to flush pipeline, plus a few cycles *)
-    for _ = 0 to Model.datapath_depth + 10 do
+    for _ = 0 to (Model.datapath_depth * 2) + 10 do
       cycle ()
     done;
     (* Read back windows *)
@@ -324,8 +360,10 @@ module Test (Config : Config) = struct
     in
     if verbose
     then (
-      print_results coefs;
-      print_s [%message "RESULTS" (final_sum : Int.Hex.t) (expected_sum : Int.Hex.t)]);
+      print_results coefs results;
+      print_s
+        [%message
+          "RESULTS" (final_sum : Int.Hex.t) (expected_sum : Int.Hex.t) (!cycle_num : int)]);
     if final_sum <> expected_sum
     then (
       let m = [%message "TEST FAILED :("] in
@@ -335,15 +373,18 @@ module Test (Config : Config) = struct
 end
 
 module Config = struct
-  let window_size_bits = 4
   let num_windows = 2
   let affine_point_bits = 16
   let datapath_depth = 8
-  let pipeline_depth = 1 + ((datapath_depth + 1) / 2)
+  let pipeline_depth = (datapath_depth + 1) / 2
   let log_stall_fifo_depth = 2
 end
 
-module Simple_model = Test (Config)
+module Scalar_config_ = struct
+  let window_size_bits = 4
+end
+
+module Simple_model = Test (Config) (Scalar_config_)
 
 let test_with_stalls =
   Simple_model.of_scalars [| 0x12; 0x21; 0x32; 0xb4; 0x16; 0xac; 0xff; 0x41 |]
@@ -361,6 +402,7 @@ let test_fully_stall_window0 =
   Simple_model.of_scalars [| 0x13; 0x23; 0x33; 0x43; 0x53; 0x63; 0x73; 0x83 |]
 ;;
 
+let test_with_twenty_ones = Simple_model.of_scalars [| 0x21; 0x21 |]
 let test = Simple_model.test
 
 let runtest ?(can_stall = false) ?(waves = false) example =
@@ -381,26 +423,26 @@ let%expect_test "no stalls" =
   runtest test_no_stalls;
   [%expect
     {|
-                  (inputs
-                   (((scalar (0x2 0x1)) (affine_point 0x1))
-                    ((scalar (0x4 0x3)) (affine_point 0x2))
-                    ((scalar (0x6 0x5)) (affine_point 0x3))
-                    ((scalar (0x8 0x7)) (affine_point 0x4))
-                    ((scalar (0xa 0x9)) (affine_point 0x5))
-                    ((scalar (0xc 0xb)) (affine_point 0x6))
-                    ((scalar (0xe 0xd)) (affine_point 0x7))
-                    ((scalar (0x0 0xf)) (affine_point 0x8))))
-                  (HW-RESULTS
-                   ((0x0 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)
-                    (0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8)))
-                  (REFERENCE
-                   (buckets
-                    (((0x8) () (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) ())
-                     (() (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) () (0x8))))
-                   (sums
-                    ((0x8 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)
-                     (0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8))))
-                  (RESULTS (final_sum 0x1858) (expected_sum 0x1858)) |}]
+    (inputs
+     (((scalar (0x2 0x1)) (affine_point 0x1))
+      ((scalar (0x4 0x3)) (affine_point 0x2))
+      ((scalar (0x6 0x5)) (affine_point 0x3))
+      ((scalar (0x8 0x7)) (affine_point 0x4))
+      ((scalar (0xa 0x9)) (affine_point 0x5))
+      ((scalar (0xc 0xb)) (affine_point 0x6))
+      ((scalar (0xe 0xd)) (affine_point 0x7))
+      ((scalar (0x0 0xf)) (affine_point 0x8))))
+    (HW-RESULTS
+     ((0x0 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)
+      (0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8)))
+    (REFERENCE
+     (sums
+      ((0x0 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)
+       (0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8)))
+     (buckets
+      (((0x8) () (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) ())
+       (() (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) () (0x8)))))
+    (RESULTS (final_sum 0x1858) (expected_sum 0x1858) (!cycle_num 95)) |}]
 ;;
 
 let%expect_test "1 stalls" =
@@ -420,13 +462,13 @@ let%expect_test "1 stalls" =
      ((0x0 0x4 0x0 0x2 0x0 0x0 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8)
       (0x0 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)))
     (REFERENCE
-     (buckets
-      ((() (0x3 0x1) () (0x2) () () () (0x4) () (0x5) () (0x6) () (0x7) () (0x8))
-       ((0x8) () (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) ())))
      (sums
       ((0x0 0x4 0x0 0x2 0x0 0x0 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0 0x8)
-       (0x8 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0))))
-    (RESULTS (final_sum 0x12e8) (expected_sum 0x12e8)) |}]
+       (0x0 0x0 0x1 0x0 0x2 0x0 0x3 0x0 0x4 0x0 0x5 0x0 0x6 0x0 0x7 0x0)))
+     (buckets
+      ((() (0x3 0x1) () (0x2) () () () (0x4) () (0x5) () (0x6) () (0x7) () (0x8))
+       ((0x8) () (0x1) () (0x2) () (0x3) () (0x4) () (0x5) () (0x6) () (0x7) ()))))
+    (RESULTS (final_sum 0x12e8) (expected_sum 0x12e8) (!cycle_num 99)) |}]
 ;;
 
 let%expect_test "has stalls" =
@@ -446,14 +488,14 @@ let%expect_test "has stalls" =
      ((0x0 0xa 0x4 0x0 0x4 0x0 0x5 0x0 0x0 0x0 0x0 0x0 0x6 0x0 0x0 0x7)
       (0x0 0x6 0x2 0x3 0x8 0x0 0x0 0x0 0x0 0x0 0x6 0x4 0x0 0x0 0x0 0x7)))
     (REFERENCE
+     (sums
+      ((0x0 0xa 0x4 0x0 0x4 0x0 0x5 0x0 0x0 0x0 0x0 0x0 0x6 0x0 0x0 0x7)
+       (0x0 0x6 0x2 0x3 0x8 0x0 0x0 0x0 0x0 0x0 0x6 0x4 0x0 0x0 0x0 0x7)))
      (buckets
       ((() (0x8 0x2) (0x3 0x1) () (0x4) () (0x5) () () () () () (0x6) () ()
         (0x7))
-       (() (0x5 0x1) (0x2) (0x3) (0x8) () () () () () (0x6) (0x4) () () () (0x7))))
-     (sums
-      ((0x0 0xa 0x4 0x0 0x4 0x0 0x5 0x0 0x0 0x0 0x0 0x0 0x6 0x0 0x0 0x7)
-       (0x0 0x6 0x2 0x3 0x8 0x0 0x0 0x0 0x0 0x0 0x6 0x4 0x0 0x0 0x0 0x7))))
-    (RESULTS (final_sum 0x1131) (expected_sum 0x1131)) |}]
+       (() (0x5 0x1) (0x2) (0x3) (0x8) () () () () () (0x6) (0x4) () () () (0x7)))))
+    (RESULTS (final_sum 0x1131) (expected_sum 0x1131) (!cycle_num 99)) |}]
 ;;
 
 let%expect_test "fully stall window 0" =
@@ -473,12 +515,12 @@ let%expect_test "fully stall window 0" =
      ((0x0 0x0 0x0 0x24 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0)
       (0x0 0x1 0x2 0x3 0x4 0x5 0x6 0x7 0x8 0x0 0x0 0x0 0x0 0x0 0x0 0x0)))
     (REFERENCE
+     (sums
+      ((0x0 0x0 0x0 0x24 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0)
+       (0x0 0x1 0x2 0x3 0x4 0x5 0x6 0x7 0x8 0x0 0x0 0x0 0x0 0x0 0x0 0x0)))
      (buckets
       ((() () () (0x8 0x7 0x6 0x5 0x4 0x3 0x2 0x1) () () () () () () () () () ()
         () ())
-       (() (0x1) (0x2) (0x3) (0x4) (0x5) (0x6) (0x7) (0x8) () () () () () () ())))
-     (sums
-      ((0x0 0x0 0x0 0x24 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0 0x0)
-       (0x0 0x1 0x2 0x3 0x4 0x5 0x6 0x7 0x8 0x0 0x0 0x0 0x0 0x0 0x0 0x0))))
-    (RESULTS (final_sum 0xd2c) (expected_sum 0xd2c)) |}]
+       (() (0x1) (0x2) (0x3) (0x4) (0x5) (0x6) (0x7) (0x8) () () () () () () ()))))
+    (RESULTS (final_sum 0xd2c) (expected_sum 0xd2c) (!cycle_num 151)) |}]
 ;;

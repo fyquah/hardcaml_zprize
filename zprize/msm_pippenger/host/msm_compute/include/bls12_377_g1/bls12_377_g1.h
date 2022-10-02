@@ -13,6 +13,7 @@
 
 namespace bls12_377_g1 {
 
+const int SCALAR_NUM_BITS = 253;
 const int NUM_BITS = 377;
 const int NUM_64B_WORDS = (NUM_BITS + 63) / 64;
 const int NUM_32B_WORDS = (NUM_BITS + 31) / 32;
@@ -118,8 +119,7 @@ class GFq {
     mpz_set(v, other.v);
   }
 
-  ~GFq() { /*mpz_clear(v);*/
-  }
+  ~GFq() { mpz_clear(v); }
 
   // arithmetic
   void divBy2() {
@@ -262,6 +262,19 @@ void print_params() {
   gmp_printf("Other: {\n\tk = %#Zx, \n\ttwisted_scale = %#Zx\n}\n", k.v, twisted_scale.v);
 }
 
+struct GeneralUnifiedAddIntoTemps {
+  GFq A;
+  GFq B;
+  GFq C;
+  GFq D;
+  GFq E;
+  GFq F;
+  GFq G;
+  GFq H;
+  GFq temp1;
+  GFq temp2;
+};
+
 class Xyzt {
  public:
   GFq x, y, z, t;
@@ -359,11 +372,19 @@ class Xyzt {
     z.set(COFACTOR);
   }
 
-  void generalUnifiedAddInto(const Xyzt &other) {
+  void generalUnifiedAddInto(const Xyzt &other, GeneralUnifiedAddIntoTemps &temps) {
     // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-    GFq A, B, C, D, E, F, G, H;
+    auto &A     = temps.A;
+    auto &B     = temps.B;
+    auto &C     = temps.C;
+    auto &D     = temps.D;
+    auto &E     = temps.E;
+    auto &F     = temps.F;
+    auto &G     = temps.G;
+    auto &H     = temps.H;
+    auto &temp1 = temps.temp1;
+    auto &temp2 = temps.temp2;
 
-    GFq temp1, temp2;
     // A
     temp1.set_sub(y, x);
     temp2.set_sub(other.y, other.x);
@@ -393,16 +414,48 @@ class Xyzt {
     z.set_mul(F, G);
   }
 
-  void doubleInPlace() { generalUnifiedAddInto(*this); }
+  void generalUnifiedAddInto(const Xyzt &other) {
+    GeneralUnifiedAddIntoTemps temps;
+    generalUnifiedAddInto(other, temps);
+  }
 
-  void postComputeFPGA() {
-    x.divBy2();
-    y.divBy2();
+  void doubleInPlace(GeneralUnifiedAddIntoTemps &temps) {
+    generalUnifiedAddInto(*this, temps);
+  }
+
+  void doubleInPlace() {
+    GeneralUnifiedAddIntoTemps temps;
+    generalUnifiedAddInto(*this, temps);
+  }
+
+  void postComputeFPGA(GeneralUnifiedAddIntoTemps &temps) {
+    // x1 = (y0 - x0) / 4
+    // y1 = (y0 + x0) / 4
+    // z1 = z0 / 4
+    // t1 = t0
+    GFq &temp1 = temps.temp1;
+    GFq &temp2 = temps.temp2;
+
+    temp1.set_sub(y, x);
+    temp1.divBy4();
+
+    temp2.set_add(y, x);
+    temp2.divBy4();
+
+    x.set(temp1);
+    y.set(temp2);
     z.divBy4();
   }
-  void preComputeFPGA() {
-    // (x, y, z, t) -> ((y-x)/2,(y+x)/2,4d*t)
-    GFq temp;
+
+  void postComputeFPGA() {
+    GeneralUnifiedAddIntoTemps temps;
+    postComputeFPGA(temps);
+  }
+
+  void preComputeFPGA(GeneralUnifiedAddIntoTemps &temps) {
+    // (x, y, z, t) -> (2(y-x),2(y+x),4d*t)
+    GFq &temp = temps.temp1;
+
     temp.set_sub(y, x);
     temp.set_div(temp, two);
     y.set_add(y, x);
@@ -411,6 +464,11 @@ class Xyzt {
 
     temp.set_mul(twisted_edwards_params.d, four);
     t.set_mul(t, temp);
+  }
+
+  void preComputeFPGA() {
+    GeneralUnifiedAddIntoTemps temps;
+    preComputeFPGA(temps);
   }
 
   void print() { gmp_printf("(X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)", x.v, y.v, z.v, t.v); }
@@ -429,6 +487,15 @@ class Xyzt {
   }
 
   void copy_from_rust_type(const g1_affine_t &affine) {
+    if (affine.infinity) {
+      // Special representation for infinity in the twisted edwards curve
+      x.set(ZERO_WORDS);
+      y.set(ONE_WORDS);
+      t.set(ZERO_WORDS);
+      z.set(ONE_WORDS);
+      return;
+    }
+
     // TODO(fyquah): Handle infinities
     x.set((uint64_t *)affine.x.data);
     x.set_div(x, COFACTOR);
@@ -450,19 +517,19 @@ class Xyzt {
   }
 
   void copy_to_rust_type(g1_projective_t &projective) {
-    printf("FINAL RESULT, COPYING TO RUST\n");
-    println();
-    println_hex();
-    dump();
+    // printf("FINAL RESULT, COPYING TO RUST\n");
+    // println();
+    // println_hex();
+    // dump();
 
-    printf("\n\n normalized point\n\n");
+    // printf("\n\n normalized point\n\n");
     Xyzt temp;
     temp.x.set_div(x, z);
     temp.y.set_div(y, z);
     temp.z.set(ONE_WORDS);
     temp.t.set(ZERO_WORDS);
-    temp.println_hex();
-    temp.dump();
+    // temp.println_hex();
+    // temp.dump();
     // printf("\nPARAMS\n");
     // print_params();
     x.copy_to_rust_type(projective.x);

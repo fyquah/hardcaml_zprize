@@ -1,5 +1,5 @@
 (executables
- (names simulate model)
+ (names simulate model generate)
  (libraries
    core
    core_unix

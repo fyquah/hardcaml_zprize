@@ -1,4 +1,0 @@
-(rule
- (mode promote)
- (action
-  (copy ../../common/krnl_controller.cpp krnl_controller.cpp)))

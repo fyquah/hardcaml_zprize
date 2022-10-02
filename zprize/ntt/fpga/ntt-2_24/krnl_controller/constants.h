@@ -1,2 +1,0 @@
-#define LOGBLOCKS 3
-

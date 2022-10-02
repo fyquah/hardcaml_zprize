@@ -6,6 +6,7 @@ open Signal
 include struct
   open Pippenger
   module Controller = Controller
+  module Scalar = Scalar
 end
 
 include struct
@@ -22,18 +23,26 @@ module Make (Config : sig
 end) =
 struct
   open Config.Top_config
+  open Config_utils.Make (Config.Top_config)
 
   (* Integer divison so the last window might be slightly larger than the others. *)
-  let num_windows = scalar_bits / window_size_bits
-  let last_window_size_bits = scalar_bits - (window_size_bits * (num_windows - 1))
+  module Scalar_config = struct
+    let window_size_bits = max_window_size_bits
+  end
 
-  module Main_Controller = Controller.Make (struct
-    let window_size_bits = last_window_size_bits
-    let num_windows = num_windows
-    let affine_point_bits = Config.input_point_bits
-    let pipeline_depth = Config.pipeline_depth
-    let log_stall_fifo_depth = controller_log_stall_fifo_depth
-  end)
+  module Main_Controller =
+    Controller.Make
+      (struct
+        let num_windows = num_windows
+        let affine_point_bits = Config.input_point_bits
+        let pipeline_depth = Config.pipeline_depth
+        let log_stall_fifo_depth = controller_log_stall_fifo_depth
+      end)
+      (Scalar_config)
+
+  module Scalar = Main_Controller.Scalar
+
+  let scalar_sum_of_port_widths = Scalar.(fold ~init:0 port_widths ~f:( + ))
 
   module I = Main_Controller.I
   module O = Main_Controller.O
@@ -41,35 +50,47 @@ struct
   let ctrl0_windows = num_windows / 2
   let ctrl1_windows = num_windows - ctrl0_windows
 
-  module Controller0 = Controller.Make (struct
-    let window_size_bits = last_window_size_bits
-    let num_windows = ctrl0_windows
-    let pipeline_depth = Config.pipeline_depth
-    let log_stall_fifo_depth = controller_log_stall_fifo_depth
-    let affine_point_bits = Config.input_point_bits
-  end)
+  module Controller0 =
+    Controller.Make
+      (struct
+        let num_windows = ctrl0_windows
+        let pipeline_depth = Config.pipeline_depth
+        let log_stall_fifo_depth = controller_log_stall_fifo_depth
+        let affine_point_bits = Config.input_point_bits
+      end)
+      (Scalar_config)
 
-  module Controller1 = Controller.Make (struct
-    let window_size_bits = last_window_size_bits
-    let num_windows = ctrl1_windows
-    let pipeline_depth = Config.pipeline_depth
-    let log_stall_fifo_depth = controller_log_stall_fifo_depth
-    let affine_point_bits = Config.input_point_bits
-  end)
+  module Controller1 =
+    Controller.Make
+      (struct
+        let num_windows = ctrl1_windows
+        let pipeline_depth = Config.pipeline_depth
+        let log_stall_fifo_depth = controller_log_stall_fifo_depth
+        let affine_point_bits = Config.input_point_bits
+      end)
+      (Scalar_config)
 
-  let fifo_capacity = 16
+  let fifo_capacity = (* Native BRAM depth*) 512
 
-  let create scope (i : _ I.t) : _ O.t =
+  let create ~build_mode scope (i : _ I.t) : _ O.t =
     let ctrl0_scalar = Array.slice i.scalar 0 ctrl0_windows in
     let ctrl1_scalar =
       Array.slice i.scalar ctrl0_windows (ctrl0_windows + ctrl1_windows)
+    in
+    let packed_scalar0 =
+      Array.map ctrl0_scalar ~f:Scalar.Of_signal.pack |> Signal.of_array
+    in
+    let packed_scalar1 =
+      Array.map ctrl1_scalar ~f:Scalar.Of_signal.pack |> Signal.of_array
     in
     let spec = Reg_spec.create ~clock:i.clock () in
     let fifo_ready = wire 1 in
     let fifo0_rd = wire 1 in
     let fifo1_rd = wire 1 in
     let fifo0 =
-      Fifo.create_showahead_with_extra_reg
+      Hardcaml_xilinx.Fifo_sync.create
+        ~build_mode
+        ~showahead:true
         ~overflow_check:true
         ~underflow_check:true
         ~scope
@@ -77,12 +98,14 @@ struct
         ~clock:i.clock
         ~clear:i.clear
         ~wr:(i.scalar_valid &: fifo_ready)
-        ~d:(i.last_scalar @: i.affine_point @: Signal.of_array ctrl0_scalar)
+        ~d:(i.last_scalar @: i.affine_point @: packed_scalar0)
         ~rd:fifo0_rd
         ()
     in
     let fifo1 =
-      Fifo.create_showahead_with_extra_reg
+      Hardcaml_xilinx.Fifo_sync.create
+        ~build_mode
+        ~showahead:true
         ~overflow_check:true
         ~underflow_check:true
         ~scope
@@ -90,13 +113,13 @@ struct
         ~clock:i.clock
         ~clear:i.clear
         ~wr:(i.scalar_valid &: fifo_ready)
-        ~d:(i.last_scalar @: i.affine_point @: Signal.of_array ctrl1_scalar)
+        ~d:(i.last_scalar @: i.affine_point @: packed_scalar1)
         ~rd:fifo1_rd
         ()
     in
     fifo_ready <== (~:(fifo0.full) &: ~:(fifo1.full));
     let ctrl0 =
-      let scalar_width = width (Signal.of_array ctrl0_scalar) in
+      let scalar_width = width packed_scalar0 in
       Controller0.hierarchy
         scope
         { Controller0.I.clock = i.clock
@@ -104,7 +127,8 @@ struct
         ; start = i.start
         ; scalar =
             sel_bottom fifo0.q scalar_width
-            |> Signal.split_lsb ~part_width:last_window_size_bits
+            |> Signal.split_lsb ~part_width:scalar_sum_of_port_widths
+            |> List.map ~f:Scalar.Of_signal.unpack
             |> List.to_array
         ; scalar_valid = ~:(fifo0.empty)
         ; last_scalar = msb fifo0.q
@@ -114,7 +138,7 @@ struct
     in
     fifo0_rd <== ctrl0.scalar_read;
     let ctrl1 =
-      let scalar_width = width (Signal.of_array ctrl1_scalar) in
+      let scalar_width = width packed_scalar1 in
       Controller1.hierarchy
         scope
         { Controller1.I.clock = i.clock
@@ -122,7 +146,8 @@ struct
         ; start = reg spec i.start
         ; scalar =
             sel_bottom fifo1.q scalar_width
-            |> Signal.split_lsb ~part_width:last_window_size_bits
+            |> Signal.split_lsb ~part_width:scalar_sum_of_port_widths
+            |> List.map ~f:Scalar.Of_signal.unpack
             |> List.to_array
         ; scalar_valid = ~:(fifo1.empty)
         ; last_scalar = msb fifo1.q
@@ -143,14 +168,14 @@ struct
            switch
            (uresize ctrl0.window window_bits)
            (uresize ctrl1.window window_bits +:. Array.length ctrl0_scalar))
-    ; bucket = mux2 switch ctrl0.bucket ctrl1.bucket
+    ; bucket = Scalar.Of_signal.mux2 switch ctrl0.bucket ctrl1.bucket
     ; adder_affine_point = mux2 switch ctrl0.adder_affine_point ctrl1.adder_affine_point
     ; bubble = mux2 switch ctrl0.bubble ctrl1.bubble
     }
   ;;
 
-  let hierarchical scope =
+  let hierarchical ~build_mode scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ~name:"full_controller" ~scope create
+    H.hierarchical ~name:"full_controller" ~scope (create ~build_mode)
   ;;
 end

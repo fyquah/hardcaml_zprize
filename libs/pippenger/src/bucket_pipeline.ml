@@ -1,9 +1,10 @@
 open! Base
 open! Hardcaml
 
-module Core (Config : Config.S) = struct
+module Core (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struct
   open Signal
   open Config
+  open Scalar_config
 
   let pipeline_depth_per_window = (pipeline_depth + num_windows - 1) / num_windows
 
@@ -45,9 +46,10 @@ module Core (Config : Config.S) = struct
   ;;
 end
 
-module Make (Config : Config.S) = struct
+module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struct
   open Signal
   open Config
+  open Scalar_config
 
   let log_num_windows = Int.ceil_log2 num_windows
 
@@ -71,7 +73,7 @@ module Make (Config : Config.S) = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  module Core = Core (Config)
+  module Core = Core (Config) (Scalar_config)
 
   let create scope (i : _ I.t) =
     let c =

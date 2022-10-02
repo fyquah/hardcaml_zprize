@@ -2,8 +2,9 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Config.S) = struct
+module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struct
   open Config
+  module Scalar = Scalar.Make (Scalar_config)
 
   let log_num_windows = Int.ceil_log2 num_windows
   let stall_fifo_depth = 1 lsl log_stall_fifo_depth
@@ -13,7 +14,7 @@ module Make (Config : Config.S) = struct
       { clock : 'a
       ; clear : 'a
       ; push : 'a
-      ; scalar : 'a [@bits window_size_bits] [@rtlprefix "i_"]
+      ; scalar : 'a Scalar.t [@rtlprefix "i_"]
       ; window : 'a [@bits log_num_windows]
       ; affine_point : 'a [@bits affine_point_bits]
       ; pop : 'a
@@ -28,8 +29,10 @@ module Make (Config : Config.S) = struct
       ; all_windows_are_empty : 'a
       ; current_window_has_stall : 'a
       ; affine_point_out : 'a [@bits affine_point_bits]
-      ; scalar_out : 'a [@bits window_size_bits]
+      ; scalar_out : 'a Scalar.t
       ; scalar_out_valid : 'a
+      ; scalars_out : 'a Scalar.t array [@length num_windows]
+      ; scalars_out_valid : 'a array [@length num_windows]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -41,7 +44,7 @@ module Make (Config : Config.S) = struct
       ; full : 'a
       ; read_address : 'a [@bits log_stall_fifo_depth]
       ; write_address : 'a [@bits log_stall_fifo_depth]
-      ; scalar : 'a [@bits window_size_bits]
+      ; scalar : 'a Scalar.t
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -61,14 +64,14 @@ module Make (Config : Config.S) = struct
     let empty = Var.reg (Reg_spec.override spec ~clear_to:vdd) ~width:1 in
     let push = i.push &: enable in
     let pop = i.pop &: enable in
-    let scalar =
+    let ram =
       memory
         stall_fifo_depth
         ~write_port:
           { write_clock = i.clock
           ; write_address = write_address.value
           ; write_enable = push
-          ; write_data = i.scalar
+          ; write_data = Scalar.Of_signal.pack i.scalar
           }
         ~read_address:read_address.value
     in
@@ -95,7 +98,7 @@ module Make (Config : Config.S) = struct
     ; full = full.value
     ; read_address = read_address.value
     ; write_address = write_address.value
-    ; scalar
+    ; scalar = Scalar.Of_signal.unpack ram
     }
   ;;
 
@@ -143,6 +146,9 @@ module Make (Config : Config.S) = struct
     ; affine_point_out
     ; scalar_out = current_stalled_window.scalar
     ; scalar_out_valid = current_stalled_window.not_empty
+    ; scalars_out = List.map stalled_windows ~f:(fun w -> w.scalar) |> List.to_array
+    ; scalars_out_valid =
+        List.map stalled_windows ~f:(fun w -> w.not_empty) |> List.to_array
     }
   ;;
 

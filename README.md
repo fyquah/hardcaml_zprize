@@ -110,13 +110,31 @@ Now you can run the host.exe test program:
 ./host.exe  msm_pippenger.link.awsxclbin input.points output.points
 ```
 
-## AFI-ids
-A place to record AFI image ids and keep track of what point in the code they were made.
-AFI-id | AFI-gid | Notes
-------- | ------- | -----
- afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned.
- afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering afi-064af6a9ebb4349d9 | agfi-0275df76295dbc8c1 | same as above, but with tlast set via C++
- afi-0f7f92989890bc645 | agfi-0638bf665749f0833 |msm-1x-full-precompute-adder-final - e4f84c4111580900a25312c9f01193ec1cb31f68 
+## AFI-ids and performance
+
+We have listed all the AFI-ids and their performance at certain points in the repo. Currently the highest performance one is:
+
+afi-066aeb84a7663930a
+```
+[memcpy-ing scalars to special memory region] 0.254459s
+[transferring scalars to gmem] 0.269489s
+[Doing FPGA Computation] 5.40025s
+[Copying results back from gmem] 0.00128308s
+[Doing on-host postprocessing] 0.475065s
+```
+
+### All AFIs
+
+AFI-id | AFI-gid | Notes | 2^26 performance
+------- | ------- | ----- | -----
+ afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned. | n/a
+ afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering | n/a
+ afi-064af6a9ebb4349d9 | agfi-0275df76295dbc8c1 | same as above, but with tlast set via C++ | n/a
+ afi-005f604b2e786b217 | agfi-0a8eb87970600ea78 | msm-1x-full-precompute-adder | [Copying scalars and points to gmem] 1.78697s, [Doing actual work] 10.8767s
+ afi-071f40ea5e182fa8f | agfi-074c9451b3f89d392 | msm-1x-full-precompute-merge-axi-streams | [transferring scalars to gmem] 0.204802s, [Doing FPGA Computation] 10.8336s
+ afi-071f40ea5e182fa8f | agfi-0e2c85bf4591270d3 | msm-halve-window-sizes-2 | [transferring scalars to gmem] 0.277229s, [Doing FPGA Computation] 8.10432s
+ afi-0df5b1800bfbfdd54 | agfi-036994fb80202cb8d | mega-build-3-oct-1 | [transferring scalars to gmem] 0.182392s, [Doing FPGA Computation] 6.8731s
+ afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 
 
 # Running `host_buckets.exe`
 

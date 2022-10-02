@@ -2,11 +2,20 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Top_config.S) = struct
   open Config
 
   let blocks = 1 lsl Config.logblocks
-  let logsync = 2
+  let read_address_pipelining = 3
+  let read_data_pipelining = 3
+  let read_data_tree_mux_stages = 2
+
+  let sync_cycles =
+    Hardcaml_ntt.Core_config.ram_latency
+    + read_data_pipelining
+    + read_address_pipelining
+    + read_data_tree_mux_stages
+  ;;
 
   module State = struct
     type t =
@@ -20,6 +29,7 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
+      ; first_4step_pass : 'a
       ; tready : 'a
       ; start : 'a
       }
@@ -44,19 +54,21 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
     let sm = Always.State_machine.create (module State) spec in
     let addr = Var.reg spec ~width:(logn + logblocks + 1) in
     let addr_next = addr.value +:. 1 in
-    let sync = Var.reg spec ~width:logsync in
+    let sync = Var.reg spec ~width:(Int.ceil_log2 sync_cycles) in
     let rd_en = Var.wire ~default:gnd in
     let tvalid = Var.reg spec ~width:1 in
     let tready = i.tready in
     Always.(
       compile
         [ sm.switch
-            [ Start, [ addr <--. 0; when_ i.start [ sm.set_next Preroll ] ]
+            [ Start, [ addr <--. 0; sync <--. 0; when_ i.start [ sm.set_next Preroll ] ]
             ; ( Preroll
               , [ rd_en <-- vdd
                 ; addr <-- addr_next
                 ; sync <-- sync.value +:. 1
-                ; when_ (sync.value ==:. -1) [ tvalid <-- vdd; sm.set_next Stream ]
+                ; when_
+                    (sync.value ==:. sync_cycles - 1)
+                    [ tvalid <-- vdd; sm.set_next Stream ]
                 ] )
             ; ( Stream
               , [ when_
@@ -64,17 +76,36 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                     [ addr <-- addr_next
                     ; rd_en <-- vdd
                     ; when_
-                        (addr.value ==:. (1 lsl (logn + logblocks)) + (1 lsl logsync) - 1)
+                        (addr.value ==:. (1 lsl (logn + logblocks)) + (sync_cycles - 1))
                         [ tvalid <-- gnd; addr <--. 0; sm.set_next Start ]
                     ]
                 ] )
             ]
         ]);
     let addr = lsbs addr.value in
-    (* let block = if logblocks = 0 then gnd else drop_bottom addr logn in *)
-    (* let addr = sel_bottom addr logn in *)
-    let block = if logblocks = 0 then gnd else sel_bottom addr logblocks in
-    let addr = drop_bottom addr logblocks in
+    let block =
+      if logblocks = 0
+      then gnd
+      else (
+        match memory_layout with
+        | Normal_layout_single_port | Optimised_layout_single_port ->
+          mux2
+            i.first_4step_pass
+            (sel_bottom (drop_bottom addr logcores) logblocks)
+            (sel_bottom addr logblocks)
+        | Normal_layout_multi_port -> raise_s [%message "not implemented"])
+    in
+    let addr =
+      match memory_layout with
+      | Normal_layout_single_port | Optimised_layout_single_port ->
+        mux2
+          i.first_4step_pass
+          (if logcores = 0
+          then drop_bottom addr logblocks
+          else drop_bottom addr (logblocks + logcores) @: sel_bottom addr logcores)
+          (drop_bottom addr logblocks)
+      | Normal_layout_multi_port -> raise_s [%message "not implemented"]
+    in
     let block1h = binary_to_onehot block in
     let mask_by_block x =
       if Config.logblocks = 0 then x else repeat x blocks &: block1h

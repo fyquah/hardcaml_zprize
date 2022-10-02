@@ -48,7 +48,14 @@ module Make (Config : Msm_pippenger.Config.S) : sig
   [@@deriving sexp_of]
 
   val bls12_377_twisted_edwards_params : Twisted_edwards.params
-  val random_inputs : ?precompute:bool -> ?seed:int -> int -> Bits.t Msm_input.t array
+
+  val random_inputs
+    :  ?precompute:bool
+    -> ?seed:int
+    -> top_window_size:int
+    -> int
+    -> Bits.t Msm_input.t array
+
   val calculate_result_from_fpga : window_bucket_point list -> Ark_bls12_377_g1.affine
   val expected : Bits.t Msm_input.t array -> Ark_bls12_377_g1.affine
 
@@ -57,4 +64,16 @@ module Make (Config : Msm_pippenger.Config.S) : sig
     -> ?has_t:bool
     -> Twisted_edwards.extended
     -> Weierstrass.affine option
+
+  module Reduced_scalar : sig
+    type t =
+      { scalar : Bits.t
+      ; negative : bool
+      }
+    [@@deriving sexp_of]
+  end
+
+  val perform_scalar_reduction : Bits.t -> Reduced_scalar.t array
+  val check_scalar_reduction : Bits.t -> Reduced_scalar.t array -> unit
+  val convert_scalar : Bits.t -> Bits.t
 end

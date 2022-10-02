@@ -192,7 +192,7 @@ let command_point_add =
          { latency; impl }
        in
        let circuit =
-         M.create ~config:{ multiply; square; reduce; p } scope
+         M.create ~config:{ multiply; square; reduce; coarse_reduce = reduce; p } scope
          |> C.create_exn ~name:"point_add"
        in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)

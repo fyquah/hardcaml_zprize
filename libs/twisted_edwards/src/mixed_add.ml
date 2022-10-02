@@ -30,6 +30,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ; valid_in : 'a
       ; p1 : 'a Xyzt.t [@rtlprefix "p1$"]
       ; p2 : 'a Xyt.t [@rtlprefix "p2$"]
+      ; subtract : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -72,7 +73,7 @@ module Make (Num_bits : Num_bits.S) = struct
              ~enable
              ~n:
                (latency_without_arbitration config
-               - Config.multiply_latency ~reduce:true config))
+               - Config.multiply_latency ~reduce:Fine config))
   ;;
 
   let add_pipe ~scope ~latency ~(config : Config.t) ~clock a b =
@@ -118,6 +119,7 @@ module Make (Num_bits : Num_bits.S) = struct
     type 'a t =
       { p1 : 'a Xyzt.t
       ; p2 : 'a Xyt.t
+      ; subtract : 'a
       ; valid : 'a
       }
   end
@@ -130,6 +132,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ; y1_minus_x1 : 'a
       ; y2_plus_x2 : 'a
       ; y2_minus_x2 : 'a
+      ; subtract : 'a
       ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -137,7 +140,7 @@ module Make (Num_bits : Num_bits.S) = struct
     let latency_without_arbitration (config : Config.t) = config.adder_stages
     let latency (config : Config.t) = latency_without_arbitration config
 
-    let create ~config ~scope ~clock { Datapath_input.p1; p2; valid } =
+    let create ~config ~scope ~clock { Datapath_input.p1; p2; subtract; valid } =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       let y1_plus_x1 =
@@ -146,12 +149,15 @@ module Make (Num_bits : Num_bits.S) = struct
       let y1_minus_x1 =
         sub_pipe ~scope ~latency:(Fn.const config.adder_stages) ~config ~clock p1.y p1.x
       in
-      let y2_plus_x2 =
+      let y2_plus_orig_x2 =
         add_pipe ~scope ~latency:(Fn.const config.adder_stages) ~config ~clock p2.y p2.x
       in
-      let y2_minus_x2 =
+      let y2_minus_orig_x2 =
         sub_pipe ~scope ~latency:(Fn.const config.adder_stages) ~config ~clock p2.y p2.x
       in
+      let subtract = pipe subtract in
+      let y2_plus_x2 = mux2 subtract y2_minus_orig_x2 y2_plus_orig_x2 in
+      let y2_minus_x2 = mux2 subtract y2_plus_orig_x2 y2_minus_orig_x2 in
       let scope = Scope.sub_scope scope "stage0" in
       { y1_plus_x1
       ; y1_minus_x1
@@ -159,6 +165,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ; y2_minus_x2
       ; p1 = Xyzt.map ~f:pipe p1
       ; p2 = Xyt.map ~f:pipe p2
+      ; subtract
       ; valid = pipe valid
       }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
@@ -172,12 +179,13 @@ module Make (Num_bits : Num_bits.S) = struct
       ; c_D : 'a [@bits num_bits]
       ; y1_plus_x1 : 'a [@bits num_bits]
       ; y2_plus_x2 : 'a [@bits num_bits]
+      ; subtract : 'a
       ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
@@ -186,7 +194,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ~config
       ~scope
       ~clock
-      { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; y2_plus_x2; y2_minus_x2; valid }
+      { Stage0.p1; p2; y1_plus_x1; y1_minus_x1; y2_plus_x2; y2_minus_x2; subtract; valid }
       =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
@@ -207,6 +215,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ; c_D
       ; y1_plus_x1 = pipe y1_plus_x1
       ; y2_plus_x2 = pipe y2_plus_x2
+      ; subtract = pipe subtract
       ; valid = pipe valid
       }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
@@ -219,12 +228,13 @@ module Make (Num_bits : Num_bits.S) = struct
       ; c_B : 'a [@bits num_bits]
       ; c_C : 'a [@bits num_bits]
       ; c_D : 'a [@bits num_bits]
+      ; subtract : 'a
       ; valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
@@ -233,7 +243,7 @@ module Make (Num_bits : Num_bits.S) = struct
       ~config
       ~scope
       ~clock
-      { Stage1.t1_times_t2; c_A; y1_plus_x1; y2_plus_x2; c_D; valid }
+      { Stage1.t1_times_t2; c_A; y1_plus_x1; y2_plus_x2; c_D; subtract; valid }
       =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
@@ -249,7 +259,13 @@ module Make (Num_bits : Num_bits.S) = struct
           (y1_plus_x1, y2_plus_x2)
       in
       let scope = Scope.sub_scope scope "stage2" in
-      { c_A = pipe c_A; c_B; c_C; c_D = pipe c_D; valid = pipe valid }
+      { c_A = pipe c_A
+      ; c_B
+      ; c_C
+      ; c_D = pipe c_D
+      ; subtract = pipe subtract
+      ; valid = pipe valid
+      }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
     ;;
   end
@@ -267,14 +283,18 @@ module Make (Num_bits : Num_bits.S) = struct
     let latency_without_arbitration (config : Config.t) = config.adder_stages
     let latency (config : Config.t) = latency_without_arbitration config
 
-    let create ~config ~scope ~clock { Stage2.c_A; c_B; c_C; c_D; valid } =
+    let create ~config ~scope ~clock { Stage2.c_A; c_B; c_C; c_D; subtract; valid } =
       let spec = Reg_spec.create ~clock () in
       let pipe = pipeline spec ~n:(latency config) in
       (* Consider arb-ing here? *)
       let c_E = sub_pipe ~scope ~latency ~config ~clock c_B c_A in
-      let c_F = sub_pipe ~scope ~latency ~config ~clock c_D c_C in
-      let c_G = add_pipe ~scope ~latency ~config ~clock c_D c_C in
+      let c_D_minus_c_C = sub_pipe ~scope ~latency ~config ~clock c_D c_C in
+      let c_D_plus_c_C = add_pipe ~scope ~latency ~config ~clock c_D c_C in
       let c_H = add_pipe ~scope ~latency ~config ~clock c_B c_A in
+      (* assign based on the sign of t2 *)
+      let subtract = pipe subtract in
+      let c_F = mux2 subtract c_D_plus_c_C c_D_minus_c_C in
+      let c_G = mux2 subtract c_D_minus_c_C c_D_plus_c_C in
       let scope = Scope.sub_scope scope "stage3" in
       { c_E; c_F; c_G; c_H; valid = pipe valid }
       |> map2 port_names ~f:(fun name x -> Scope.naming scope x name)
@@ -292,7 +312,7 @@ module Make (Num_bits : Num_bits.S) = struct
     [@@deriving sexp_of, hardcaml]
 
     let latency_without_arbitration (config : Config.t) =
-      Config.multiply_latency ~reduce:true config
+      Config.multiply_latency ~reduce:Fine config
     ;;
 
     let latency (config : Config.t) = latency_without_arbitration config + 1
@@ -362,11 +382,16 @@ module Make (Num_bits : Num_bits.S) = struct
     + Stage5.latency config
   ;;
 
-  let create ~(config : Config.t) scope { I.clock; valid_in; p1; p2 } =
+  let create
+    ?build_mode:_
+    ~(config : Config.t)
+    scope
+    { I.clock; valid_in; p1; p2; subtract }
+    =
     if not config.arbitrated_multiplier
     then failwith "Mixed add only supports arbitrated mode";
     let { Stage5.x3; y3; z3; t3; valid = valid_out } =
-      { p1; p2; valid = valid_in }
+      { p1; p2; subtract; valid = valid_in }
       |> Stage0.create ~config ~scope ~clock
       |> Stage1.create ~config ~scope ~clock
       |> Stage2.create ~config ~scope ~clock
@@ -377,8 +402,8 @@ module Make (Num_bits : Num_bits.S) = struct
     { O.valid_out; p3 = { x = x3; y = y3; z = z3; t = t3 } }
   ;;
 
-  let hierarchical ?instance ~config scope =
+  let hierarchical ?build_mode ?instance ~config scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ?instance ~name:"mixed_add" ~scope (create ~config)
+    H.hierarchical ?instance ~name:"mixed_add" ~scope (create ?build_mode ~config)
   ;;
 end

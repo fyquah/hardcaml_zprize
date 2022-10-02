@@ -2,7 +2,7 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Hardcaml_ntt.Core_config.S) = struct
+module Make (Config : Top_config.S) = struct
   include Config
   module Four_step = Hardcaml_ntt.Four_step.Make (Config)
   module Axi_stream = Four_step.Axi_stream
@@ -56,13 +56,22 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         scope
         { Store_sm.I.clock = i.clock
         ; clear = i.clear
+        ; first_4step_pass = i.first_4step_pass
         ; tready = i.data_out_dest.tready
         ; start = start_output
         }
     in
     let pipe = pipeline (Reg_spec.create ~clock:i.clock ()) in
+    let pipe_with_keep ?enable ~n x =
+      Signal.pipeline
+        ?enable
+        ~attributes:[ Rtl_attribute.Vivado.keep true ]
+        (Reg_spec.create ~clock:i.clock ())
+        ~n
+        x
+    in
     let cores =
-      Four_step.create
+      Four_step.hierarchy
         ~build_mode
         scope
         { Four_step.I.clock = i.clock
@@ -77,10 +86,14 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
                |> Array.of_list
              in
              Array.init blocks ~f:(Fn.const d))
-        ; wr_en = pipe ~n:2 load_sm.wr_en
-        ; wr_addr = Array.init blocks ~f:(Fn.const (pipe ~n:2 load_sm.wr_addr))
-        ; rd_en = store_sm.rd_en
-        ; rd_addr = Array.init blocks ~f:(Fn.const store_sm.rd_addr)
+        ; wr_en = pipe_with_keep ~n:Load_sm.write_pipelining load_sm.wr_en
+        ; wr_addr =
+            Array.init blocks ~f:(fun _ ->
+              pipe_with_keep ~n:Load_sm.write_pipelining load_sm.wr_addr)
+        ; rd_en = pipe_with_keep ~n:Store_sm.read_address_pipelining store_sm.rd_en
+        ; rd_addr =
+            Array.init blocks ~f:(fun _ ->
+              pipe_with_keep ~n:Store_sm.read_address_pipelining store_sm.rd_addr)
         ; input_done = load_sm.done_
         ; output_done = store_sm.done_
         }
@@ -92,17 +105,29 @@ module Make (Config : Hardcaml_ntt.Core_config.S) = struct
         ; tdata =
             (let rd_en = store_sm.rd_en <>:. 0 in
              (* We're assuming vivado will do some rejigging here.  We could/should
-               instantiate a pipelined mux. *)
+                instantiate a pipelined mux. *)
              pipe
-               ~n:3
+               ~n:Store_sm.read_data_tree_mux_stages
                ~enable:rd_en
                (let qs =
                   List.init blocks ~f:(fun index ->
-                    cores.rd_q.(index) |> Array.to_list |> concat_lsb)
+                    cores.rd_q.(index)
+                    |> Array.to_list
+                    |> concat_lsb
+                    |> pipe_with_keep ~enable:rd_en ~n:Store_sm.read_data_pipelining)
                 in
                 if Config.logblocks = 0
                 then List.nth_exn qs 0
-                else mux (pipe ~n:1 ~enable:rd_en store_sm.block) qs))
+                else
+                  mux
+                    (pipe
+                       ~n:
+                         (Hardcaml_ntt.Core_config.ram_latency
+                         + Store_sm.read_address_pipelining
+                         + Store_sm.read_data_pipelining)
+                       ~enable:rd_en
+                       store_sm.block)
+                    qs))
         ; tlast = gnd
         ; tkeep = ones (num_cores * Gf.num_bits / 8)
         ; tstrb = ones (num_cores * Gf.num_bits / 8)
