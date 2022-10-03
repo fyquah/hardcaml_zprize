@@ -1,7 +1,7 @@
 (library
  (name twisted_edwards_model_lib)
  (public_name zprize.twisted_edwards_model_lib)
- (libraries ark_bls12_377_g1 base bignum hardcaml field_ops_lib zarith)
+ (libraries ark_bls12_377_g1 base bignum hardcaml expect_test_helpers_core field_ops_lib zarith)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))
