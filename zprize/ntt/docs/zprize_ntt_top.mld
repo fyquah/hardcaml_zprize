@@ -198,4 +198,6 @@ our target 200 Mhz.
 </table>
 %}
 
+{2 Build and Testing Instructions}
 
+Please refer {{!page:zprize_ntt_build_instructions} Build Instructions}
