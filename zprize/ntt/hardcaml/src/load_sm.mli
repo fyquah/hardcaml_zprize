@@ -1,11 +1,7 @@
 (** Sequence the loading of coefficients from DRAM into the parallel MTT cores.
 
-    Input data into all parallel NTT cores.
-
-    Runs multiple times during a pass.
-
-    The ordering of data differs depending on the pass.
-*)
+    Inputs data into all parallel NTT cores. Runs multiple times during a pass.
+   The ordering of data differs depending on the pass. *)
 
 open Hardcaml
 

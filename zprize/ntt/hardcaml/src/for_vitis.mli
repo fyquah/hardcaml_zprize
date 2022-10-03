@@ -1,6 +1,8 @@
 (** Top-level wrapper with port naming to suit the Vivido Vitis infrastructure.
 
     Directly used as a Vitis RTL kernel.
+
+    Instantiates the top level NTT design, plus the transposer unit used in the 2nd pass.
 *)
 
 open! Base

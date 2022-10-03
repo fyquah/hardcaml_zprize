@@ -3,3 +3,5 @@
  (public_name zprize.zprize_ntt)
  (libraries core hardcaml hardcaml_axi hardcaml_xilinx hardcaml_ntt)
  (preprocess (pps ppx_jane ppx_deriving_hardcaml)))
+
+(documentation)

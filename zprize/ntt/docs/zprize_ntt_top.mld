@@ -1,0 +1,26 @@
+{1 Zprize_ntt}
+
+{{!Zprize_ntt}This library} provides a design which performs a single transform size configured at
+build time. For the Zprize competition we target a transform of size 2{^24}.
+
+{2 Algorithm}
+
+The design is based around the 4-step algorithm which decomoses the full 2{^24}
+NTT into multiple 2{^12} NTTs across columns and rows of a 2{^12} x 2{^12}
+matrix.
+
+Overall complexity (in terms of butterly operations performed) is roughly
+equivalent, though and extra twiddle factor correction pass is required between
+the column and row phases.
+
+{2 Code structure}
+
+The Xilins XRT Vitis framework is used to provides PCIe and HBM interfaces. As
+such the design is provided as Vitis kernels which are put together to provide
+the final architecture.
+
+There are 2 kernels involved:
+
+- {{!page:zprize_ntt_hardcaml_kernel}Hardcaml RTL kernel} implementing the core NTT algorithm
+- {{!page:zprize_ntt_cpp_kernel}C++ HLS kernel} which sequences PCIe and HBM memory accesses
+

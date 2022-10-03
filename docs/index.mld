@@ -15,7 +15,7 @@ Multiplying millions of BLS12-377 affine points by 253 bit scalars.
 Performs the inverse number theoretic transform on quite large inputs.
 
 - {{!page:ntt}Hardcaml_ntt} implements the core components of for the NTT transform.
-- {{!page:zprize_ntt}Zprize_ntt} implements the top level design.
+- {{!page:zprize_ntt_top}Zprize_ntt} implements the top level design.
 
 {2 Support libraries}
 
