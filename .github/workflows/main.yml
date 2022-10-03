@@ -38,4 +38,4 @@ jobs:
       - run: opam exec -- dune runtest
       
       - name: Check repo is clean
-        run: | git status -s 
+        run: git status -s 
