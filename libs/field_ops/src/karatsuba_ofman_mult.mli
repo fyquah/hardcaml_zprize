@@ -1,14 +1,13 @@
 (** Multiplier using the karatsuba-ofman algorithm.
 
-    See https://en.wikipedia.org/wiki/Karatsuba_algorithm for more details for
-    the 2-part splitting algorithm (we call this Radix_2 in our code). We also
-    support a Radix_3 mode, which does a 3-part splitting. See the following
-    for more information about k-part splitting
+    See {{: https://en.wikipedia.org/wiki/Karatsuba_algorithm} this wikipedia
+    entry} for more details for the 2-part splitting algorithm (we call this
+    Radix_2 in our code). We also support a Radix_3 mode, which does a 3-part
+    splitting, but utilizes similar ideas.
 
-    Montgomery, Peter L. "Five, six, and seven-term Karatsuba-like formulae." IEEE Transactions on Computers 54.3 (2005): 362-369.
-
-    The implementation here is largely based on
-    https://github.com/ZcashFoundation/zcash-fpga/blob/c4c0ad918898084c73528ca231d025e36740d40c/ip_cores/util/src/rtl/karatsuba_ofman_mult.sv
+    The implementation here is largely based on the
+    {{:https://github.com/ZcashFoundation/zcash-fpga/blob/c4c0ad918898084c73528ca231d025e36740d40c/ip_cores/util/src/rtl/karatsuba_ofman_mult.sv}
+    zcash-fpga implementation of the same algorithm}
 *)
 
 open Hardcaml

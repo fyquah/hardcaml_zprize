@@ -1,5 +1,6 @@
-(** Computes [z' = x' * y' mod p], where p is a prime, where x', y' and z'
-    are x, y and z in montgomery space.
+(** Computes [z' = x' * y' mod p], where p is a prime, where x', y' and z' are x, y and z in montgomery space.
+
+    This module is not presently maintained.
 *)
 
 open! Hardcaml
