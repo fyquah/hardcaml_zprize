@@ -54,12 +54,15 @@ pub fn generate_points_scalars<G: AffineCurve>(
 }
 
 pub fn create_g1_affine_from_string(x: &[u8], y: &[u8]) -> G1Affine {
+    let x_biguint = BigUint::parse_bytes(x, 16).unwrap();
+    let y_biguint = BigUint::parse_bytes(y, 16).unwrap();
+
     G1Affine::new(
-        <G1Affine as AffineCurve>::BaseField::from_repr(BigInteger384::try_from(
-                BigUint::parse_bytes(x, 16).unwrap()).unwrap()
+        <G1Affine as AffineCurve>::BaseField::from_repr(
+            BigInteger384::try_from(x_biguint).unwrap()
         ).unwrap(),
-        <G1Affine as AffineCurve>::BaseField::from_repr(BigInteger384::try_from(
-                BigUint::parse_bytes(y, 16).unwrap()).unwrap()
+        <G1Affine as AffineCurve>::BaseField::from_repr(
+            BigInteger384::try_from(y_biguint).unwrap()
         ).unwrap(),
         false
     )
