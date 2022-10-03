@@ -1,9 +1,13 @@
+<<<<<<< HEAD
 (** Top-level wrapper with port naming to suit the Vivido Vitis infrastructure.
 
     Directly used as a Vitis RTL kernel.
 
     Instantiates the top level NTT design, plus the transposer unit used in the 2nd pass.
 *)
+=======
+(** The interface between the NTT core and Vitis infrastructure. *)
+>>>>>>> 0cef46fb (_)
 
 open! Base
 open Hardcaml

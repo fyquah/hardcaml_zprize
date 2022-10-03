@@ -40,51 +40,18 @@ opam exec -- dune build
 opam exec -- dune runtest
 ```
 
-# Building for AWS
+# ZPrize submissions
 
-You need to clone the aws-fpga repo: https://github.com/aws/aws-fpga/
+This repo has submissions to two of the ZPrize tracks, in the `zprize` folder.
 
-```
-source ~/aws-fpga/vitis_setup.sh
-source ~/aws-fpga/vitis_runtime_setup.sh
-```
+## Accelerating MSM Operations on FPGA
 
-If you want the Vivado GUI over the ssh to AWS, you need to install:
+We have implemented a optimized version of pippengers algorithm for calculating
+MSM, see the README.md [here](zprize/msm_pippenger/README/md) for a detailed
+explanation of optimizations and block diagrams.
 
-```
-yum install libXtst.x86_64
-```
-
-Building from scratch:
-
-```
-cd zprize/msm_pippenger/fpga
-dune build
-./compile_hw.sh or ./compile_hw_emu.sh
-```
-
-Testing:
-
-Modify xrt.template.ini if you want to disable GUI.
-```
-cd zprize/msm_pippenger/test
-./run_hw_emu.sh
-```
-
-Creating the AWS AFI:
-
-```
-cd zprize/msm_pippenger/fpga
-./compile_afi.sh
-```
-
-After running the compile\_afi.sh script, there should be a folder 'afi/'. Get
-the afi id from the file afi/\...\_afi_id.txt this to get the afi id and run:
-
-```
-aws ec2 describe-fpga-images --fpga-image-ids afi-06740c40be3315e44
-```
-Which will show up as "available" when the image is ready to use.
+See the README.md [here](zprize/msm_pippenger/test_fpga_harness/README.md) for
+instructions on benchmarking our solution.
 
 
 # Running on AWS
@@ -170,3 +137,5 @@ dune build @../../hardcaml/bin/default
   inputs-50000.txt \
   outputs-50000.txt
 ```
+
+## Accelerating NTT Operations on FPGA
