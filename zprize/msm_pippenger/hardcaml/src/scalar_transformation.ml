@@ -19,7 +19,7 @@ module Make (Config : Config.S) = struct
   let num_scalar_64b_words = num_64b_words Config.scalar_bits
   let num_ddr_64b_words = 512 / 64
   let num_scalars_per_ddr_word = num_ddr_64b_words / num_scalar_64b_words
-  (*let log2_num_scalars_per_ddr_word = Int.ceil_log2 num_scalars_per_ddr_word*)
+  let log2_num_scalars_per_ddr_word = Int.ceil_log2 num_scalars_per_ddr_word
 
   module I = struct
     type 'a t =
@@ -243,8 +243,6 @@ module Make (Config : Config.S) = struct
     type t =
       | Register
       | Minus_1 of int
-
-    let _ = Register
   end
 
   let rec construct_pipeline
@@ -292,9 +290,14 @@ module Make (Config : Config.S) = struct
     up_ready
   ;;
 
-  (*
-  (* Purposefully does no registering; you can add register in the downstream pipeline or skid buffers upstream if you want *)
+  (* A set of modules for streaming to and from an Axi512 interface. This is useful if you want to
+   * use a narrow transformation pipeline and only pass through one scalar at a time. We instead
+   * scale out multiple transformation pipelines in parallel and transform all the scalars in one
+   * word in parallel *)
+
   module Axi_to_pipeline = struct
+    (* Purposefully does no registering; you can add [Register] in the downstream pipeline or skid 
+     * buffers upstream if you want *)
     module I = struct
       type 'a t =
         { clock : 'a
@@ -307,7 +310,8 @@ module Make (Config : Config.S) = struct
 
     module O = struct
       type 'a t =
-        { dn_scalar : 'a Scalar_compute.With_valid.t [@rtlprefix "o_dn_scalar$"]
+        { dn_scalar : 'a Scalar_compute_array.Scalar_compute.With_valid.t
+             [@rtlprefix "o_dn_scalar$"]
         ; host_scalars_to_fpga_dest : 'a Axi512.Stream.Dest.t
         }
       [@@deriving sexp_of, hardcaml]
@@ -329,7 +333,7 @@ module Make (Config : Config.S) = struct
       in
       let dn_scalar =
         { With_valid.valid = dn_valid
-        ; value = Scalar_compute.unpack_from_axi_scalar cur_scalar
+        ; value = Scalar_compute_array.Scalar_compute.unpack_from_axi_scalar cur_scalar
         }
       in
       let tready = i.dn_ready &: (scalar_num ==:. max) in
@@ -342,7 +346,7 @@ module Make (Config : Config.S) = struct
       { dn_scalar; host_scalars_to_fpga_dest = { tready } }
     ;;
 
-    let hierarchical ?instance scope =
+    let _hierarchical ?instance scope =
       let module H = Hierarchy.In_scope (I) (O) in
       H.hierarchical ?instance ~name:"axi_to_pipeline" ~scope create
     ;;
@@ -353,7 +357,8 @@ module Make (Config : Config.S) = struct
       type 'a t =
         { clock : 'a
         ; clear : 'a
-        ; up_scalar : 'a Scalar_compute.With_valid.t [@rtlprefix "i_up_scalar$"]
+        ; up_scalar : 'a Scalar_compute_array.Scalar_compute.With_valid.t
+             [@rtlprefix "i_up_scalar$"]
         ; transformed_scalars_to_fpga_dest : 'a Axi512.Stream.Dest.t
         }
       [@@deriving sexp_of, hardcaml]
@@ -384,7 +389,9 @@ module Make (Config : Config.S) = struct
       (* shift scalars in - transform and shift 
        *  - shift in from the left to match the scalar stream ordering - lsb comes first
        *)
-      let next_scalar_in = Scalar_compute.pack_to_axi_scalar i.up_scalar.value in
+      let next_scalar_in =
+        Scalar_compute_array.Scalar_compute.pack_to_axi_scalar i.up_scalar.value
+      in
       ignore (next_scalar_in -- "next_scalar_in" : Signal.t);
       let shift_in_data =
         reg_fb
@@ -418,11 +425,11 @@ module Make (Config : Config.S) = struct
       { O.transformed_scalars_to_fpga; up_ready }
     ;;
 
-    let hierarchical ?instance scope =
+    let _hierarchical ?instance scope =
       let module H = Hierarchy.In_scope (I) (O) in
       H.hierarchical ?instance ~name:"pipeline_to_axi" ~scope create
     ;;
-  end*)
+  end
 
   (* extract bits from scalar off the wire *)
   let unpack_to_windows_and_negatives

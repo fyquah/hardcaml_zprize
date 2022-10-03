@@ -1,7 +1,7 @@
 (** A pipeline that transforms scalars into the form that is expected on the
     FPGA. The main transform used currently is converting scalars from the range
-    1, 2^c-1 into the range 2^{c-1}, -2^{c-1} which allows for mapping negative
-    points into positive point buckets. *)
+    [1, 2^{c}-1] into the range [-2^{c-1}, 2^{c-1}-1] which allows for mapping point 
+    addition in negative buckets to point subtraction in positive buckets *)
 
 open Hardcaml
 module Axi512 = Hardcaml_axi.Axi512
