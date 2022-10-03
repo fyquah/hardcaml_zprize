@@ -50,12 +50,25 @@ static uint32_t round_up_to_multiple_of_16(uint32_t x) {
 }
 
 static uint32_t calc_log_max_num_points_per_chunk(uint64_t npoints) {
-  /* MSM 10s, divide that by 4 - 2.5s, plenty of time to mask away the
-   * post-processing work. */
+  /* [max_allowed_num_chunks] should be chosen such that
+     [TIME_MSM / max_allowed_num_chunks] is strictly greater than
+     [time_post_processing + time_memcpy_one_chunk + overhead] to ensure that we always
+     keep the FPGA busy.
+
+     We also don't want too many chunks! As it will use up a lot of memory.
+   */
   const uint64_t max_allowed_num_chunks = 4;
 
-  /* Pessimistic minimum number of points per chunk to ensure we wre alligned */
-  uint64_t log_max_num_points_per_chunk = 18;
+  /* [minimum_log_max_num_points_per_chunk] is chosen such that
+     [source_kernel_input_points.data() +  (x << minimum_log_max_num_points_per_chunk)]
+     and [source_kernel_input_scalars.data() +  (x << minimum_log_max_num_points_per_chunk)]
+     will be a 8192-byte aligned address forall x.
+
+     Every scalar 256bits = 32bytes => 32 * 1024 % 8192 == 0
+  */
+  const uint64_t minimum_log_max_num_points_per_chunk = 10;
+
+  uint64_t log_max_num_points_per_chunk = minimum_log_max_num_points_per_chunk;
 
   while (max_allowed_num_chunks * (1ull << log_max_num_points_per_chunk) <
          npoints) {
