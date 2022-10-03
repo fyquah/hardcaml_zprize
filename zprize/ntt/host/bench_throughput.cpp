@@ -117,7 +117,7 @@ run_ntt_bench_throughput_memcpy_evaluate_and_check(NttFpgaDriver &driver,
   auto test_inputs = generate_input_vectors(driver, 16);
   auto expected_outputs = generate_expected_outputs(test_inputs, host_args.driver_arg);
   std::vector<uint64_t> test_vector_indices(num_user_buffers, 0);
-  std::vector<uint64_t> obtained_output(test_vector_indices.size());
+  std::vector<uint64_t> obtained_output(driver.input_vector_size());
   std::cout << "Done!" << std::endl;
 
   int failed = 0;
