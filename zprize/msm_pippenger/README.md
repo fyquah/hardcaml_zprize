@@ -130,6 +130,32 @@ benchmarking our solution.
 
 ## AFI-ids and measured performance
 
+We have listed all the AFI-ids and their performance at certain points in the
+repo. Currently the highest performance one is:
+
+afi-066aeb84a7663930a
+```
+[memcpy-ing scalars to special memory region] 0.254459s
+[transferring scalars to gmem] 0.269489s
+[Doing FPGA Computation] 5.40025s
+[Copying results back from gmem] 0.00128308s
+[Doing on-host postprocessing] 0.475065s
+```
+
+When doing a run over 4 batches, which allows us to only pay for the scalar
+transfer time of the first batch, we get a total run time of 24.000s, or 11.18M
+op/s.
+
+AWS allows the average power to be measured during operation:
+```
+Power consumption (Vccint):
+   Last measured: 49 watts
+   Average: 49 watts
+   Max measured: 52 watts
+```
+
+### All AFIs
+
 AFI-id | AFI-gid | Notes | 2^26 performance
 ------- | ------- | ----- | -----
  afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned. | n/a
