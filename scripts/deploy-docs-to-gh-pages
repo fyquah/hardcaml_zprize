@@ -20,7 +20,9 @@ echo "Your current branch is $BRANCH, i will bring you back there when the deplo
 
 dune build @doc
 git checkout gh-pages
-git rm -rf .
+git fetch
+git merge origin/gh-pages
+git rm -rf . --ignore-unmatch
 cp -r _build/default/_doc/_html/ docs
 git add docs/
 git commit -m "Deploy gh-pages using deploy-docs-to-gh-pages-script" --allow-empty
