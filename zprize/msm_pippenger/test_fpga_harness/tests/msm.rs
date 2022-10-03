@@ -46,6 +46,54 @@ fn msm_correctness() {
 }
 
 #[test]
+fn msm_with_non_twisted_edwards_points() {
+    let batches = 1;
+    let num_points = 4;
+    let mut points = Vec::new();
+    let mut scalars = Vec::new();
+    let mut arkworks_results = Vec::new();
+
+    for _ in 0..num_points {
+        points.push(
+            util::create_g1_affine_from_string(
+                b"32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc000",
+                b"6e4b66bb23ef4bef715f597162d6662d8161cd062d6212d39392e17232444a0760b5dc479db98123ab3887aa3cb34e"
+            )
+        );
+    }
+
+    for _i in 0..(batches * num_points) {
+        scalars.push(Fp256::<FrParameters>::new(BigInteger256::from(1)));
+    }
+
+    for b in 0..batches {
+        let start = b * points.len();
+        let end = (b + 1) * points.len();
+        arkworks_results.push(
+                VariableBaseMSM::multi_scalar_mul(points.as_slice(), unsafe {
+                    std::mem::transmute::<&[_], &[BigInteger256]>(&scalars[start..end])
+                    }).into_affine());
+    }
+
+    let mut context = multi_scalar_mult_init(points.as_slice());
+    let msm_results = multi_scalar_mult(&mut context, points.as_slice(), unsafe {
+        std::mem::transmute::<&[_], &[BigInteger256]>(scalars.as_slice())
+    });
+
+    for b in 0..batches {
+        let arkworks_result = arkworks_results[b];
+        let our_result = msm_results[b].into_affine();
+        println!("Our result = {:?}", our_result);
+        println!("Arkworks result = {:?}", arkworks_result);
+
+        assert_eq!(
+            our_result,
+            arkworks_result,
+            "msm_with_non_twisted_edwards_points failed!");
+    }
+}
+
+#[test]
 fn msm_with_identity_result() {
     let batches = 4;
     let num_points = 1 << 8;
