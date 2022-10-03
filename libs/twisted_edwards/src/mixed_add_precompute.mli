@@ -31,7 +31,7 @@
 
     Note that this means that the identity element in this coordinate system
     is no longer just (0, 1, 1, 0), but rather (2, 2, 4, 0). Also note that
-    [x/z * y/z != t/z] no longer holds in the new coordinate system.
+    [x/z * y/z != t/z] in the new coordinate system.
 
     The relative static point has a completely different representation:
 

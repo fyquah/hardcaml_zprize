@@ -1,3 +1,5 @@
+(* Test the core NTT transformation and controller. *)
+
 open! Base
 open Hardcaml
 open Hardcaml_waveterm

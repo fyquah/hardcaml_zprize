@@ -1,3 +1,5 @@
+(* Test the block transposer component. *)
+
 open Core
 open Hardcaml
 module Waveform = Hardcaml_waveterm.Waveform

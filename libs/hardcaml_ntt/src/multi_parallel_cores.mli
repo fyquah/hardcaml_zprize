@@ -1,3 +1,8 @@
+(** Instantiate [2^Config.logblocks] parallel cores.
+
+    Gives a total of [2^(Config.logblocks + Config.logcores)] ntt cores.
+*)
+
 open! Base
 open! Hardcaml
 

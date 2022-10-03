@@ -1,3 +1,5 @@
+(** Twiddle factor update interface. *)
+
 open! Base
 
 val sync_cycles : int
