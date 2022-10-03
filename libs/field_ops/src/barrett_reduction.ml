@@ -1,21 +1,5 @@
 (* Calculates [a mod p] using barret reduction, where [p] is a compile-time
    known constant.
-
-   Based on implementation in 
-   https://github.com/ZcashFoundation/zcash-fpga/blob/c4c0ad918898084c73528ca231d025e36740d40c/ip_cores/util/src/rtl/barret_mod_pipe.sv
-
-   Computes the following in separate pipeline stages, where
-   k = Int.ceillog(p)
-
-   {[
-     let reduce ~p ~k a =
-       let q = (a * m) >> k in
-       let qp = q * p in
-       let a_minus_qp = a - qp in
-       mux2 (a_minus_qp >= p)
-         (a_minus_qp - p)
-         a_minus_qp
-   ]}
 *)
 
 open Base
