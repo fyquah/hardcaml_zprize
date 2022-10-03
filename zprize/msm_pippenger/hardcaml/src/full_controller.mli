@@ -1,5 +1,5 @@
-(** Wraps the actual controller to create one that can utilize a fully pipelined
-    adder. *)
+(** Wraps multiple individual pippenger controllers with helper logic and FIFOs
+    to create one that can utilize a fully pipelined adder. *)
 
 open Hardcaml
 
@@ -38,5 +38,8 @@ end) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val hierarchical : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val hierarchical
+    :  build_mode:Build_mode.t
+    -> Scope.t
+    -> Signal.t Interface.Create_fn(I)(O).t
 end

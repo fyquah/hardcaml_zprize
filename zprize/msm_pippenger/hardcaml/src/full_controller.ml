@@ -25,7 +25,6 @@ struct
   open Config.Top_config
   open Config_utils.Make (Config.Top_config)
 
-  (* Integer divison so the last window might be slightly larger than the others. *)
   module Scalar_config = struct
     let window_size_bits = max_window_size_bits
   end
@@ -70,9 +69,9 @@ struct
       end)
       (Scalar_config)
 
-  let fifo_capacity = 16
+  let fifo_capacity = (* Native BRAM depth*) 512
 
-  let create scope (i : _ I.t) : _ O.t =
+  let create ~build_mode scope (i : _ I.t) : _ O.t =
     let ctrl0_scalar = Array.slice i.scalar 0 ctrl0_windows in
     let ctrl1_scalar =
       Array.slice i.scalar ctrl0_windows (ctrl0_windows + ctrl1_windows)
@@ -88,7 +87,9 @@ struct
     let fifo0_rd = wire 1 in
     let fifo1_rd = wire 1 in
     let fifo0 =
-      Fifo.create_showahead_with_extra_reg
+      Hardcaml_xilinx.Fifo_sync.create
+        ~build_mode
+        ~showahead:true
         ~overflow_check:true
         ~underflow_check:true
         ~scope
@@ -101,7 +102,9 @@ struct
         ()
     in
     let fifo1 =
-      Fifo.create_showahead_with_extra_reg
+      Hardcaml_xilinx.Fifo_sync.create
+        ~build_mode
+        ~showahead:true
         ~overflow_check:true
         ~underflow_check:true
         ~scope
@@ -170,8 +173,8 @@ struct
     }
   ;;
 
-  let hierarchical scope =
+  let hierarchical ~build_mode scope =
     let module H = Hierarchy.In_scope (I) (O) in
-    H.hierarchical ~name:"full_controller" ~scope create
+    H.hierarchical ~name:"full_controller" ~scope (create ~build_mode)
   ;;
 end

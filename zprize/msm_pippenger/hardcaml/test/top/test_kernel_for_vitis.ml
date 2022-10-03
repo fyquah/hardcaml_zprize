@@ -71,7 +71,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
   let axi_bits = 512
   let aligned_to = 64
   let aligned_field_bits = Int.round_up Config.field_bits ~to_multiple_of:aligned_to
-  let _aligned_scalar_bits = Int.round_up Config.scalar_bits ~to_multiple_of:aligned_to
+  let aligned_scalar_bits = Int.round_up Config.scalar_bits ~to_multiple_of:aligned_to
   let drop_t = false
 
   let num_clocks_per_output =
@@ -93,8 +93,6 @@ module Make (Config : Msm_pippenger.Config.S) = struct
     |> Int.round_up ~to_multiple_of:axi_bits
   ;;
 
-  let aligned_scalar_bits = Config.scalar_bits |> Int.round_up ~to_multiple_of:aligned_to
-
   let run ?sim ?(waves = true) ~seed ~timeout ~verilator num_inputs () =
     let cycle_cnt = ref 0 in
     let sim_and_waves = Option.value sim ~default:(create ~verilator ~waves) in
@@ -104,8 +102,8 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       Utils.random_inputs
         ~precompute
         ~seed
-        num_inputs
         ~top_window_size:Config_utils.top_window_size
+        num_inputs
     in
     print_s [%message "Expecting" (Top.num_result_points : int)];
     Cyclesim.cycle sim;
@@ -302,6 +300,7 @@ let%expect_test "Test over small input size" =
     let scalar_bits = 12
     let controller_log_stall_fifo_depth = 2
     let num_windows = 4
+    let window_ram_partition_settings = None
   end
   in
   let module Test = Make (Config) in
@@ -318,6 +317,7 @@ let test_back_to_back () =
     let field_bits = 377
     let scalar_bits = 13
     let controller_log_stall_fifo_depth = 2
+    let window_ram_partition_settings = None
     let num_windows = 4
   end
   in

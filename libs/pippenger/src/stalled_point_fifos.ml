@@ -31,6 +31,8 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
       ; affine_point_out : 'a [@bits affine_point_bits]
       ; scalar_out : 'a Scalar.t
       ; scalar_out_valid : 'a
+      ; scalars_out : 'a Scalar.t array [@length num_windows]
+      ; scalars_out_valid : 'a array [@length num_windows]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -144,6 +146,9 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
     ; affine_point_out
     ; scalar_out = current_stalled_window.scalar
     ; scalar_out_valid = current_stalled_window.not_empty
+    ; scalars_out = List.map stalled_windows ~f:(fun w -> w.scalar) |> List.to_array
+    ; scalars_out_valid =
+        List.map stalled_windows ~f:(fun w -> w.not_empty) |> List.to_array
     }
   ;;
 

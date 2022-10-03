@@ -16,6 +16,7 @@ end)
 
 module Barrett_reduction377 = Barrett_reduction.With_interface (struct
   let bits = 377
+  let output_bits = 377
 end)
 
 module X = Adder_subtractor_pipe

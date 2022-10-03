@@ -31,7 +31,14 @@
 #define OUTPUT_SIZE_IN_BYTES (BYTES_PER_OUTPUT * NUM_OUTPUT_POINTS)
 #define OUTPUT_SIZE_IN_UINT32 (OUTPUT_SIZE_IN_BYTES / 4)
 
+/* Setting [mask_io] to false will give a detailed breakdown, but it will have worse performance
+ * because we block for IO. It will however display useful runtime breakdowns.
+ */
 static const bool mask_io = true;
+
+/* Setting [debug] will add some print statements. They don't affect runtime much, but might be
+ * noise to the user.
+ */
 static const bool debug = false;
 
 typedef std::vector<uint32_t, aligned_allocator<uint32_t> > aligned_vec32;
@@ -118,19 +125,20 @@ public:
     // memset(source_kernel_input_scalars.data(), 0, sizeof(uint32_t) * source_kernel_input_scalars.size());
     // memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
 
-    std::cout << "Converting affine points into internal format ..." << std::endl;
+    std::cout << "Converting affine points into internal format (This takes awhile...) ..." << std::endl;
     bls12_377_g1::Xyzt point;
     uint32_t *ptr_point = source_kernel_input_points.data();
 
     for (ssize_t i = 0; i < npoints; i++) {
       // std::cout << rust_points[i] << std::endl;
       point.copy_from_rust_type(rust_points[i]);
-      point.preComputeFPGA();
+      point.preComputeFPGA(post_processing_values.temps);
       point.copy_to_fpga_buffer(ptr_point);
       // point.println();
 
       ptr_point += UINT32_PER_INPUT_POINT;
 
+      // Print every 1M points so the user doesn't think we're deadlocked
       if ((i + 1) % (1 << 20) == 0) {
         std::cout << "Converted " << (i + 1) << " points ..." << std::endl;
       }
@@ -267,7 +275,7 @@ public:
         // receive fpga point
         post_processing_values.bucket_sum.import_from_fpga_vector(
             source_kernel_output + (NUM_32B_WORDS_PER_OUTPUT * point_idx));
-        post_processing_values.bucket_sum.postComputeFPGA();
+        post_processing_values.bucket_sum.postComputeFPGA(post_processing_values.temps);
         ++point_idx;
 
         // do triangle sum update
@@ -416,8 +424,12 @@ public:
         transferred_outputs++;
       }
 
-      /* Dispatch all the work that has been enqueued, while we potentially do post processing */
-      q.flush();
+      /* We used to call q.flush() here to dispatch all work to the FPGA. But experimentally, it made
+         the XRT runtime will behave like q.finish(), which will block until the queue is empty..
+
+         Fortunately, when we enqueue a task, it basically gets to the FPGA ~immediately. So we don't
+         need to flush anything.
+       */
 
       if (has_output_to_process) {
         if (debug) {
@@ -500,7 +512,9 @@ extern "C" void msm_mult(Driver *driver,
                          uint64_t num_batches,
                          biginteger256_t *ptr_scalars) {
   printf("Running MSM of [%lu] input points (%lu batches)\n", driver->total_num_points, num_batches);
-  printf("Streaming input scalars across %lu chunks per batch (asynchronous = %b)\n", driver->num_input_chunks(), mask_io);
+  printf("Streaming input scalars across %lu chunks per batch (%s)\n",
+         driver->num_input_chunks(),
+         mask_io ? "Mask IO and Post Processing" : "Synchronous");
 
   if (mask_io) {
     driver->run_asynchronous(out, ptr_scalars, num_batches);

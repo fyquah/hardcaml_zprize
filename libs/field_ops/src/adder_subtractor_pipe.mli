@@ -1,31 +1,26 @@
-(** Multistage pipelined ripple-carry-adder (or subtractor).
- *
- * This module computs [a `op1` b `op2` c `op3` d...], where each of the ops
- * are either (+) or (-) (they don't have to be the same). The output of the
- * module will contain all the results and carries of the following:
- *
- * - a `op1` b
- * - a `op1` b `op2` c
- * - a `op1` b `op2` c `op3` d
- * - ...
- *
- * The generated architecture for a single pipeline stage for summing 3 numbers
- * looks something like the following:
- *
- * > LUT > CARRY8 > LUT > CARRY8
- *           ^              ^
- * > LUT > CARRY8 > LUT > CARRY8
- *           ^              ^
- * > LUT > CARRY8 > LUT > CARRY8
- *           ^              ^
- * > LUT > CARRY8 > LUT > CARRY8
- *
- * This architecture have a different CARRY8 output for every add operation.
- * This ensures that the carry-chain have a carry-in input can be used
- * appropriately across multiple pipeline stages
+(** Multistage fully-pipelined ripple-carry-adder (or subtractor).
+  
+    This module computs [a OP b OP c OP d...] in fully-piipelined using
+    the ripple-carry-add algorithm. Each of the OP are either (+) or (-)
+    (they don't have to be the same)
+
+    The fully-pipelined adder breaks the adder down to [stages] chunks, 
+    each to be added separately every clock cycles. Registers are placed
+    at the inputs and outputs to align them to the same clock cycles.
+
+    Note that [stages = 0] or [stages = 1] is allowed, resulting in a
+    non-hierarchical combinational adder and a single-stage adder respectively.
+    For adding values of [stages], this module will instantiate a
+    a hierarchical module.
+
+    If any but the first of the operands are constants, the module will
+    generate a specialized module that doesn't pipeline the constant throughout
+    the adder/subtractor.
 *)
 
 open Hardcaml
+
+val latency : stages:int -> int
 
 module Term_and_op : sig
   type 'a t =
@@ -33,7 +28,15 @@ module Term_and_op : sig
     | Sub of 'a
 end
 
-(** Output from performing a single [a `op1` b] step. *)
+(** Output of the adder/subtractor with carry/borrow bits.
+ 
+    When instantiating a pure adder, the [carry] will be the carry bits with
+    width = [Int.ceil_log2 num_operands]. For a subtractor, it will the
+    [borrow] bits.
+
+    For a mixed adder/subtractor implementation, you can treat
+    [carry @: result] as your signed final result.
+*)
 module O : sig
   type 'a t =
     { result : 'a
@@ -54,6 +57,7 @@ val mixed
   -> Signal.t Term_and_op.t list
   -> Signal.t O.t
 
+(** Similar to [mixed], but only with additions. *)
 val add
   :  ?name:string
   -> ?instance:string
@@ -64,7 +68,7 @@ val add
   -> Signal.t list
   -> Signal.t O.t
 
-(** [sub ~stages ... xs] computes [xs[0] - xs[1] - xs[2] ...] *)
+(** Similar to [mixed], but only with subtractions. *)
 val sub
   :  ?name:string
   -> ?instance:string
@@ -75,15 +79,11 @@ val sub
   -> Signal.t list
   -> Signal.t O.t
 
-(* {2 no_carry functions}.
- *
- * These are similar to the [mixed], [add] and [sub] functions, except they
- * don't return the carry. For [stages] > 1, these essentially calls the
- * version with carries and omits it. For [stages] = 1, this returns the
- * actual operation without instantiation (for the synthesizers to spot
- * patterns more easily)
- *)
-
+(** {2 no_carry functions}.
+  
+    These are similar to the [mixed], [add] and [sub] functions, but without
+    the carry/borrow bits.
+*)
 val mixed_no_carry
   :  ?name:string
   -> ?instance:string

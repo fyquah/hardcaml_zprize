@@ -1,3 +1,5 @@
+(** The interface between the NTT core and Vitis infrastructure. *)
+
 open! Base
 open Hardcaml
 

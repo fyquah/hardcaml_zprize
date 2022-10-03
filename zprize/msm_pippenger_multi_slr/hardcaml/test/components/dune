@@ -1,5 +1,0 @@
-(library
- (name msm_pippenger_multi_slr_test_components)
- (libraries core hardcaml msm_pippenger_multi_slr)
- (inline_tests)
- (preprocess (pps ppx_jane)))

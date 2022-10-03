@@ -1,49 +1,3 @@
-(** Implementation of the karatsuba multiplication algorithm. Highly based on
-    https://github.com/ZcashFoundation/zcash-fpga/blob/c4c0ad918898084c73528ca231d025e36740d40c/ip_cores/util/src/rtl/adder_pipe.sv
-
-    See https://en.wikipedia.org/wiki/Karatsuba_algorithm for more details for
-    the algorithm.
-
-    The algorithm expresses the two numbers to be multiplied as:
-
-    x = 2^(w/2) * x0 + x1
-    y = 2^(w/2) * y0 + y1
-
-    In every recursive step, B=2, and w = width of the inputs. It is required
-    that width a = width b, and is an even number.
-
-    Naively expanding the terms above yields the following:
-
-    x * y = z0 * 2^(w)
-            + z1 * 2^(w/2)
-            + z2 
-
-    where
-
-    z0 = x0*y0
-    z1 = x0*y1 + x1*y0
-    z2 = x1*y1
-
-    We can express z1 as follows: (Note that this is a slightly different
-    formulation from those available in wikipedia)
-
-    z1 = (x0 - x1)(y1 - y0) + x0*y0 + x1*y1
-       = (x0 - x1)(y1 - y0) + z0 + z2
-
-    These intermediate multiplication results will be refered to m{0,1,2}:
-
-    m0 = z0
-    m1 = (x0 - x1)(y1 - y0)
-    m2 = z2
-
-    The result of [x * y] can be computed by summing out the [m0, m1 and m2]
-    terms as follows:
-
-    m0 * 2^w
-    + (m0 + m2 + m1) * 2^(w/2)
-    + m2
-*)
-
 open Base
 open Hardcaml
 open Signal
@@ -77,9 +31,9 @@ module Config = struct
       karatsubsa_ofman_stage_latency karatsubsa_ofman_stage
 
   and karatsubsa_ofman_stage_latency
-      { level = { pre_adder_stages; post_adder_stages; radix = _; middle_adder_stages }
-      ; child_config
-      }
+    { level = { pre_adder_stages; post_adder_stages; radix = _; middle_adder_stages }
+    ; child_config
+    }
     =
     pre_adder_stages + latency child_config + post_adder_stages + middle_adder_stages
   ;;
@@ -170,8 +124,8 @@ let rec create_recursive ~scope ~clock ~enable ~config a b =
         "karatsuba_ofman_stage_%d_%s"
         wa
         (match config.level.radix with
-        | Radix_2 -> "radix_2"
-        | Radix_3 -> "radix_3")
+         | Radix_2 -> "radix_2"
+         | Radix_3 -> "radix_3")
     in
     H.hierarchical
       ~name
@@ -191,24 +145,24 @@ let rec create_recursive ~scope ~clock ~enable ~config a b =
   | Ground_multiplier config -> Ground_multiplier.create ~clock ~enable ~config a b
 
 and create_karatsuba_ofman_stage
-    ~scope
-    ~clock
-    ~enable
-    ~(config : Config.karatsubsa_ofman_stage)
-    x
-    y
+  ~scope
+  ~clock
+  ~enable
+  ~(config : Config.karatsubsa_ofman_stage)
+  x
+  y
   =
   match config.level.radix with
   | Radix_2 -> create_karatsuba_ofman_stage_radix_2 ~scope ~clock ~enable ~config x y
   | Radix_3 -> create_karatsuba_ofman_stage_radix_3 ~scope ~clock ~enable ~config x y
 
 and create_karatsuba_ofman_stage_radix_2
-    ~scope
-    ~clock
-    ~enable
-    ~config
-    (a : Signal.t)
-    (b : Signal.t)
+  ~scope
+  ~clock
+  ~enable
+  ~config
+  (a : Signal.t)
+  (b : Signal.t)
   =
   let ( -- ) = Scope.naming scope in
   let { Config.child_config
@@ -297,15 +251,15 @@ and create_karatsuba_ofman_stage_radix_2
   o -- "out"
 
 and create_karatsuba_ofman_stage_radix_3
-    ~scope
-    ~clock
-    ~enable
-    ~config:
-      { Config.child_config
-      ; level = { radix = _; pre_adder_stages; middle_adder_stages; post_adder_stages }
-      }
-    (x : Signal.t)
-    (y : Signal.t)
+  ~scope
+  ~clock
+  ~enable
+  ~config:
+    { Config.child_config
+    ; level = { radix = _; pre_adder_stages; middle_adder_stages; post_adder_stages }
+    }
+  (x : Signal.t)
+  (y : Signal.t)
   =
   let ( -- ) = Scope.naming scope in
   let wx = Signal.width x in
