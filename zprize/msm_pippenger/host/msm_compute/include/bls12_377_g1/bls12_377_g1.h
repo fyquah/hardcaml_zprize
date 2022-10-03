@@ -428,13 +428,13 @@ class Xyzt {
     generalUnifiedAddInto(*this, temps);
   }
 
-  void postComputeFPGA() {
+  void postComputeFPGA(GeneralUnifiedAddIntoTemps &temps) {
     // x1 = (y0 - x0) / 4
     // y1 = (y0 + x0) / 4
     // z1 = z0 / 4
     // t1 = t0
-    GFq temp1;
-    GFq temp2;
+    GFq &temp1 = temps.temp1;
+    GFq &temp2 = temps.temp2;
 
     temp1.set_sub(y, x);
     temp1.divBy4();
@@ -446,9 +446,16 @@ class Xyzt {
     y.set(temp2);
     z.divBy4();
   }
-  void preComputeFPGA() {
+
+  void postComputeFPGA() {
+    GeneralUnifiedAddIntoTemps temps;
+    postComputeFPGA(temps);
+  }
+
+  void preComputeFPGA(GeneralUnifiedAddIntoTemps &temps) {
     // (x, y, z, t) -> (2(y-x),2(y+x),4d*t)
-    GFq temp;
+    GFq &temp = temps.temp1;
+
     temp.set_sub(y, x);
     temp.set_div(temp, two);
     y.set_add(y, x);
@@ -457,6 +464,11 @@ class Xyzt {
 
     temp.set_mul(twisted_edwards_params.d, four);
     t.set_mul(t, temp);
+  }
+
+  void preComputeFPGA() {
+    GeneralUnifiedAddIntoTemps temps;
+    preComputeFPGA(temps);
   }
 
   void print() { gmp_printf("(X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)", x.v, y.v, z.v, t.v); }
