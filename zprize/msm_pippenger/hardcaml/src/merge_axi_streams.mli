@@ -1,3 +1,7 @@
+(** Merges multiple AXI streams into one. This is used so that points can be
+    pre-loaded into DDR and only scalars need to be streamed over PCIe at
+    runtime. *)
+
 open Hardcaml
 open Hardcaml_axi
 
