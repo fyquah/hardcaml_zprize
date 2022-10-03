@@ -25,7 +25,7 @@ let%expect_test "" =
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
-      (Controller.create (Scope.create ~flatten_design:true ()))
+      (Controller.create ~build_mode:Simulation (Scope.create ~flatten_design:true ()))
   in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
