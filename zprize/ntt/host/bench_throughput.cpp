@@ -68,7 +68,7 @@ run_ntt_bench_throughput_evaluate_only(NttFpgaDriver &driver,
   auto test_inputs = generate_input_vectors(driver, num_user_buffers);
   auto expected_outputs = generate_expected_outputs(test_inputs, host_args.driver_arg);
   for (uint64_t t = 0; t < num_user_buffers; t++) {
-    memcpy(user_buffers[t]->input_data(), test_inputs[t].data(), driver.input_vector_size() * sizeof(uint64_t));
+    driver.transfer_input_vector_to_user_buffer(user_buffers[t], test_inputs[t].data());
   }
   std::cout << "Done!" << std::endl;
 
@@ -86,12 +86,13 @@ run_ntt_bench_throughput_evaluate_only(NttFpgaDriver &driver,
   std::chrono::time_point<std::chrono::steady_clock> t_end(std::chrono::steady_clock::now());
 
   int failed = 0;
+  auto obtained_output = std::vector<uint64_t>(test_inputs.size());
   for (uint64_t t = 0; t < user_buffers.size(); t++) {
     auto *user_buffer = user_buffers[t];
     auto *expected_output = expected_outputs[t].data();
-    auto *output_data = user_buffer->output_data();
+    driver.transfer_user_buffer_to_output_vector(user_buffer, obtained_output.data());
 
-    if (memcmp(expected_output, output_data, driver.input_vector_size() * sizeof(uint64_t)) != 0) {
+    if (memcmp(expected_output, obtained_output.data(), driver.input_vector_size() * sizeof(uint64_t)) != 0) {
       std::cout << "Incorrect result in buffer " << t << std::endl;
       failed = 1;
     }
@@ -116,17 +117,18 @@ run_ntt_bench_throughput_memcpy_evaluate_and_check(NttFpgaDriver &driver,
   auto test_inputs = generate_input_vectors(driver, 16);
   auto expected_outputs = generate_expected_outputs(test_inputs, host_args.driver_arg);
   std::vector<uint64_t> test_vector_indices(num_user_buffers, 0);
+  std::vector<uint64_t> obtained_output(driver.input_vector_size());
   std::cout << "Done!" << std::endl;
 
   int failed = 0;
   auto poll_and_validate = [&](uint64_t t) {
     auto *user_buffer = user_buffers[t];
     auto *expected_output = expected_outputs[test_vector_indices[t]].data();
-    auto *output_data = user_buffer->output_data();
+    driver.transfer_user_buffer_to_output_vector(user_buffer, obtained_output.data());
 
     driver.wait_for_result(user_buffer);
 
-    if (memcmp(expected_output, output_data, driver.input_vector_size() * sizeof(uint64_t)) != 0) {
+    if (memcmp(expected_output, obtained_output.data(), driver.input_vector_size() * sizeof(uint64_t)) != 0) {
       std::cout << "Incorrect result in buffer " << t << std::endl;
       failed = 1;
     }
@@ -140,10 +142,9 @@ run_ntt_bench_throughput_memcpy_evaluate_and_check(NttFpgaDriver &driver,
       if (i >= num_user_buffers) {
         poll_and_validate(t);
       }
-      memcpy(
-          user_buffers[t]->input_data(),
-          test_inputs[test_vector_indices[t]].data(),
-          driver.input_vector_size() * sizeof(uint64_t));
+      driver.transfer_input_vector_to_user_buffer(
+          user_buffers[t],
+          test_inputs[test_vector_indices[t]].data());
       driver.enqueue_evaluation_async(user_buffers[t]);
       t = (t + 1) % num_user_buffers;
     }
@@ -209,6 +210,8 @@ static const char *flag_log_row_size    = "--log-row-size";
 static const char *flag_core_type       = "--core-type";
 static const char *flag_num_evaluations = "--num-evaluations";
 static const char *flag_what_to_measure = "--what-to-measure";
+static const char *flag_memory_layout   = "--memory-layout";
+static const char *flag_log_blocks      = "--log-blocks";
 
 static host_args_t
 parse_args(int argc, char **argv)
@@ -217,14 +220,18 @@ parse_args(int argc, char **argv)
   uint64_t log_row_size = 0;
   std::string error_message;
   char *core_type = nullptr;
+  char *memory_layout = nullptr;
   uint64_t num_evaluations = 1;
   WhatToMeasure what_to_measure = WhatToMeasure::MEMCPY_AND_EVALUATE_AND_CHECK;
+  uint64_t log_blocks = 0;
   
   auto print_usage = [=]() {
     std::cout
       << argv[0] << " "
       << flag_xcl_bin_file << " <FILENAME> " 
       << flag_core_type    << " <REVERSE|NTT> "
+      << flag_memory_layout    << " <NORMAL_LAYOUT|OPTIMIZED_LAYOUT> "
+      << "[" << flag_log_blocks << " <LOG-BLOCKS>] "
       << "[" << flag_log_row_size << " <LOG-ROW-SIZE>] "
       << "[" << flag_num_evaluations << " <NUM-ROUNDS>] "
       << "[" << flag_what_to_measure << " <memcpy-and-evaluate|evaluate-only>] "
@@ -270,6 +277,11 @@ parse_args(int argc, char **argv)
       continue;
     }
 
+    if (strcmp(*argv, flag_log_blocks) == 0) {
+      log_blocks = std::stoull(capture_next_arg(flag_log_blocks));
+      continue;
+    }
+
     if (strcmp(*argv, flag_what_to_measure) == 0) {
       char *s = capture_next_arg(flag_what_to_measure);
       if (strcmp(s, "memcpy-and-evaluate-and-check") == 0) {
@@ -284,6 +296,11 @@ parse_args(int argc, char **argv)
         throw std::runtime_error(error_message);
 
       }
+      continue;
+    }
+
+    if (strcmp(*argv, flag_memory_layout) == 0) {
+      memory_layout = capture_next_arg(flag_memory_layout);
       continue;
     }
 
@@ -303,6 +320,9 @@ parse_args(int argc, char **argv)
   // resolve the right driver_arg
 
   NttFpgaDriverArg driver_arg([&]() {
+    MemoryLayout parsed_memory_layout = memory_layout_from_string(
+        std::string(memory_layout));
+
     auto throw_if_log_row_size_set = [&]() {
       if (log_row_size) {
         error_message.append(flag_log_row_size);
@@ -312,15 +332,15 @@ parse_args(int argc, char **argv)
     };
     if (strcmp(core_type, "NTT-2_12") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_12();
+      return NttFpgaDriverArg::create_ntt_2_12(parsed_memory_layout, log_blocks);
 
     } else if (strcmp(core_type, "NTT-2_18") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_18();
+      return NttFpgaDriverArg::create_ntt_2_18(parsed_memory_layout, log_blocks);
 
     } else if (strcmp(core_type, "NTT-2_24") == 0) {
       throw_if_log_row_size_set();
-      return NttFpgaDriverArg::create_ntt_2_24();
+      return NttFpgaDriverArg::create_ntt_2_24(parsed_memory_layout, log_blocks);
 
     } else if (strcmp(core_type, "REVERSE") == 0) {
       if (!log_row_size) {
@@ -329,7 +349,7 @@ parse_args(int argc, char **argv)
         error_message.append(" must be specified as a non-zero value when core_type is REVERSE");
         throw std::runtime_error(error_message);
       }
-      return NttFpgaDriverArg::create_reverse(log_row_size);
+      return NttFpgaDriverArg::create_reverse(parsed_memory_layout, log_row_size, log_blocks);
 
     }
 

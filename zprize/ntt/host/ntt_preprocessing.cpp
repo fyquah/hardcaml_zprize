@@ -11,49 +11,23 @@ namespace prefetch {
   const uint64_t WRITE = 1;
 };
 
-#define MEMCPY_64BYTES(dst, in, r, c) \
-     memcpy( \
-         dst + ((c) * row_size * 8) + ((r) * 8), \
-         in + ((c) * 8) + ((r) * row_size), \
-         sizeof(uint64_t) * 8 \
-         ); 
+#define MEMCPY_64BYTES(dst, src) \
+     memcpy(dst, src, sizeof(uint64_t) * 8); 
 
 #define LOGCORES 3
 #define NUM_CORES (1 << LOGCORES)
 
 static void inline __attribute__ ((always_inline))
-ntt_preprocessing_impl(uint64_t *arg_dst, const uint64_t *arg_in, uint64_t row_size){
-  uint64_t *dst = (uint64_t*) __builtin_assume_aligned((void*) arg_dst, 64);
-  uint64_t *in  = (uint64_t*) __builtin_assume_aligned((void*) arg_in, 64);
+ntt_preprocessing_impl(uint64_t *dst, const uint64_t *in, uint64_t row_size){
+  // [dst] is a 8192-byte align addresss by design, since it points to the special
+  // memory region used by XRT for buffers
+  dst = (uint64_t*) __builtin_assume_aligned((void*) dst, 64);
 
-  for (uint64_t block_col = 0; block_col < row_size >> LOGCORES; block_col ++) {
-    for (uint64_t row = 0; row < row_size; row += 1) {
-      for (uint64_t i = 0; i < NUM_CORES; i++) {
-        *(dst++) = in[row * row_size + (block_col * NUM_CORES) + i];
-      }
-      // MEMCPY_64BYTES(dst, in, r, c + 0);
-      // MEMCPY_64BYTES(dst, in, r, c + 1);
-      // MEMCPY_64BYTES(dst, in, r, c + 2);
-      // MEMCPY_64BYTES(dst, in, r, c + 3);
-      // MEMCPY_64BYTES(dst, in, r, c + 4);
-      // MEMCPY_64BYTES(dst, in, r, c + 5);
-      // MEMCPY_64BYTES(dst, in, r, c + 6);
-      // MEMCPY_64BYTES(dst, in, r, c + 7);
+  for (uint64_t r = 0; r < row_size; r += 1) {
+    for (uint64_t c = 0; c < row_size >> LOGCORES; c++) {
+      MEMCPY_64BYTES(&dst[(c * row_size * NUM_CORES) + (r * NUM_CORES)], &in[r * row_size + (c * NUM_CORES)]);
     }
   }
-
-  // for (uint64_t r = 0; r < row_size; r += 1) {
-  //   for (uint64_t c = 0; c < row_size / 8; c+=8) {
-  //     MEMCPY_64BYTES(dst, in, r, c + 0);
-  //     MEMCPY_64BYTES(dst, in, r, c + 1);
-  //     MEMCPY_64BYTES(dst, in, r, c + 2);
-  //     MEMCPY_64BYTES(dst, in, r, c + 3);
-  //     MEMCPY_64BYTES(dst, in, r, c + 4);
-  //     MEMCPY_64BYTES(dst, in, r, c + 5);
-  //     MEMCPY_64BYTES(dst, in, r, c + 6);
-  //     MEMCPY_64BYTES(dst, in, r, c + 7);
-  //   }
-  // }
 }
 
 template<uint64_t row_size>
