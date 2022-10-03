@@ -1,3 +1,5 @@
+(** Internal module to represent constants in {{: https://en.wikipedia.org/wiki/Non-adjacent_form} Non Adjacent Form} *)
+
 open Hardcaml
 
 module Bit : sig

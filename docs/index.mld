@@ -21,6 +21,6 @@ Perform 2{^24} inverse number theoretic transform over a 64 bit finite field.
 
 - {!Hardcaml_axi}
 - {!Ark_bls12_377_g1}
-- {!Twisted_edwards_model_lib}
+- {!Twisted_edwards_lib}
 - {!Field_ops_lib} - Library for operations in a Galois fields (eg:
   large-bit-width multiplication)
