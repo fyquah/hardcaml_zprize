@@ -117,17 +117,18 @@ run_ntt_bench_throughput_memcpy_evaluate_and_check(NttFpgaDriver &driver,
   auto test_inputs = generate_input_vectors(driver, 16);
   auto expected_outputs = generate_expected_outputs(test_inputs, host_args.driver_arg);
   std::vector<uint64_t> test_vector_indices(num_user_buffers, 0);
+  std::vector<uint64_t> obtained_output(test_vector_indices.size());
   std::cout << "Done!" << std::endl;
 
   int failed = 0;
   auto poll_and_validate = [&](uint64_t t) {
     auto *user_buffer = user_buffers[t];
     auto *expected_output = expected_outputs[test_vector_indices[t]].data();
-    auto *output_data = user_buffer->output_data();
+    driver.transfer_user_buffer_to_output_vector(user_buffer, obtained_output.data());
 
     driver.wait_for_result(user_buffer);
 
-    if (memcmp(expected_output, output_data, driver.input_vector_size() * sizeof(uint64_t)) != 0) {
+    if (memcmp(expected_output, obtained_output.data(), driver.input_vector_size() * sizeof(uint64_t)) != 0) {
       std::cout << "Incorrect result in buffer " << t << std::endl;
       failed = 1;
     }
@@ -141,10 +142,9 @@ run_ntt_bench_throughput_memcpy_evaluate_and_check(NttFpgaDriver &driver,
       if (i >= num_user_buffers) {
         poll_and_validate(t);
       }
-      memcpy(
-          user_buffers[t]->input_data(),
-          test_inputs[test_vector_indices[t]].data(),
-          driver.input_vector_size() * sizeof(uint64_t));
+      driver.transfer_input_vector_to_user_buffer(
+          user_buffers[t],
+          test_inputs[test_vector_indices[t]].data());
       driver.enqueue_evaluation_async(user_buffers[t]);
       t = (t + 1) % num_user_buffers;
     }
