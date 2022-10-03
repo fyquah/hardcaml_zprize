@@ -68,7 +68,7 @@ run_ntt_bench_throughput_evaluate_only(NttFpgaDriver &driver,
   auto test_inputs = generate_input_vectors(driver, num_user_buffers);
   auto expected_outputs = generate_expected_outputs(test_inputs, host_args.driver_arg);
   for (uint64_t t = 0; t < num_user_buffers; t++) {
-    memcpy(user_buffers[t]->input_data(), test_inputs[t].data(), driver.input_vector_size() * sizeof(uint64_t));
+    driver.transfer_input_vector_to_user_buffer(user_buffers[t], test_inputs[t].data());
   }
   std::cout << "Done!" << std::endl;
 
@@ -86,12 +86,13 @@ run_ntt_bench_throughput_evaluate_only(NttFpgaDriver &driver,
   std::chrono::time_point<std::chrono::steady_clock> t_end(std::chrono::steady_clock::now());
 
   int failed = 0;
+  auto obtained_output = std::vector<uint64_t>(test_inputs.size());
   for (uint64_t t = 0; t < user_buffers.size(); t++) {
     auto *user_buffer = user_buffers[t];
     auto *expected_output = expected_outputs[t].data();
-    auto *output_data = user_buffer->output_data();
+    driver.transfer_user_buffer_to_output_vector(user_buffer, obtained_output.data());
 
-    if (memcmp(expected_output, output_data, driver.input_vector_size() * sizeof(uint64_t)) != 0) {
+    if (memcmp(expected_output, obtained_output.data(), driver.input_vector_size() * sizeof(uint64_t)) != 0) {
       std::cout << "Incorrect result in buffer " << t << std::endl;
       failed = 1;
     }

@@ -249,6 +249,33 @@ void NttFpgaDriver::wait_for_result(NttFpgaBuffer *buffer)
   OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
 }
 
+void NttFpgaDriver::transfer_input_vector_to_user_buffer(NttFpgaBuffer *buffer,
+                                                         uint64_t *in)
+{
+  switch (memory_layout) {
+    case MemoryLayout::NORMAL_LAYOUT:
+      memcpy(buffer->input_data(), in, row_size * row_size * sizeof(uint64_t));
+      break;
+    case MemoryLayout::OPTIMIZED_LAYOUT:
+      ntt_preprocessing(buffer->input_data(), in, row_size);
+      break;
+  }
+}
+
+void NttFpgaDriver::transfer_user_buffer_to_output_vector(NttFpgaBuffer *buffer,
+                                                          uint64_t *out)
+{
+  switch (memory_layout) {
+    case MemoryLayout::NORMAL_LAYOUT:
+      memcpy(out, buffer->output_data(), row_size * row_size * sizeof(uint64_t));
+      break;
+    case MemoryLayout::OPTIMIZED_LAYOUT: {
+      ntt_postprocessing(out, buffer->output_data(), row_size, log_blocks);
+      break;
+    }
+  }
+}
+
 void NttFpgaDriver::enqueue_evaluation_async(NttFpgaBuffer *buffer)
 {
   set_args(buffer);
@@ -273,14 +300,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
 
   bench("Evaluate NTT", [&]() {
     bench("Copy to internal page-aligned buffer", [&](){
-        switch (memory_layout) {
-        case MemoryLayout::NORMAL_LAYOUT:
-          memcpy(buffer->input_data(), in, row_size * row_size * sizeof(uint64_t));
-          break;
-        case MemoryLayout::OPTIMIZED_LAYOUT:
-          ntt_preprocessing(buffer->input_data(), in, row_size);
-          break;
-        }
+        transfer_input_vector_to_user_buffer(buffer, (uint64_t*) in);
     });
 
     bench("Copying input points to device", [&]() {
@@ -302,15 +322,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
     });
 
     bench("Copy from internal page-aligned buffer", [&]() {
-        switch (memory_layout) {
-        case MemoryLayout::NORMAL_LAYOUT:
-          memcpy(out, buffer->output_data(), row_size * row_size * sizeof(uint64_t));
-          break;
-        case MemoryLayout::OPTIMIZED_LAYOUT: {
-          ntt_postprocessing(out, buffer->output_data(), row_size, log_blocks);
-          break;
-        }
-        }
+        transfer_user_buffer_to_output_vector(buffer, out);
     });
   });
 
