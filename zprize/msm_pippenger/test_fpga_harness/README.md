@@ -1,5 +1,5 @@
-The test harness currently only supports afi-0df5b1800bfbfdd54
-(msm-halve-window-sizes-2)
+The test harness currently only supports afis made from master, or our current
+highest performing afi: afi-0b83061a1938e28cb
 
 # Running Tests
 
@@ -13,7 +13,7 @@ you don't have to specify `TEST_NPOW`.  (If you do, it will just be ignored)
 CMAKE=cmake3 XCLBIN=<file> TEST_LOAD_DATA_FROM=path/to/load/from cargo test --release -- --nocapture
 ```
 
-- `2^26` takes around 5-10minutes to load (6h to generate), 20-30m to run
+- `2^26` takes around 5-10minutes to load (6h to generate), **20-30m*** to run
   `multi_scalar_mult_init`, as it needs to convert all the points given to it
   into twisted edwards form.
 - `2^10` loads points and runs test within 2s
@@ -37,7 +37,7 @@ CMAKE=cmake3 XCLBIN=<file> TEST_NPOW=10 cargo test --release -- --nocapture
 # Running Benchmarking
 
 This is similar to running tests, except unstead of running `cargo test`, you
-run `cargo bench`
+run `cargo bench`.
 
 ```bash
 CMAKE=cmake3 \
