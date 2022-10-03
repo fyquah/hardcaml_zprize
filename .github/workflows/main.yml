@@ -36,3 +36,6 @@ jobs:
       - run: opam exec -- dune build
 
       - run: opam exec -- dune runtest
+      
+      - name: Check repo is clean
+        run: git diff --exit-code

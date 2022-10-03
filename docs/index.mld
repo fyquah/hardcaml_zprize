@@ -4,7 +4,7 @@ This documentation describes two projects undertaken as part of the Zprize compe
 
 {2 Multi-scalar multiplication}
 
-Multiplying millions of BLS12-377 affine points by 253 bit scalars.
+Multiplying millions of affine points from the BLS12-377 G1 curve by 253 bit scalars from the scalar field.
 
 - {!Pippenger} implements the controller logic to sequence the MSM computation.
 - {!Elliptic_curve_lib}, {!Field_ops_lib} and {!Twisted_edwards_lib} implement the core elliptic curve arithmetic operations.
@@ -24,4 +24,5 @@ See {{!page:ntt} here}
 - {!Hardcaml_axi}
 - {!Ark_bls12_377_g1}
 - {!Twisted_edwards_model_lib}
-- {!Field_ops_model}
+- {!Field_ops_lib} - Library for operations in a Galois fields (eg:
+  large-bit-width multiplication)

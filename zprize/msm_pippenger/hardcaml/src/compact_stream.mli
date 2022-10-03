@@ -1,10 +1,10 @@
 open Hardcaml
 open Hardcaml_axi
 
+(** Takes An AXI512 stream from DDR and converts it into a 256 bit stream,
+    useful for crossing SLRs when not bandwidth bound. *)
+
 module Make (Config : Config.S) : sig
-  (* CR-soon fyquah: Break [points_and_scalar] into separate streams for better
-   * performance.
-   *)
   module I : sig
     type 'a t =
       { clock : 'a
