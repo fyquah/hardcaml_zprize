@@ -52,9 +52,14 @@ module Make (Config : Config.S) = struct
   let input_point_bits = Mixed_add.Xyt.(fold port_widths ~init:0 ~f:( + ))
   let result_point_bits = Mixed_add.Xyzt.(fold port_widths ~init:0 ~f:( + ))
   let ram_read_latency = 3
-  let ram_lookup_latency = 3
-  let ram_write_latency = 3
-  let ram_output_latency = 3
+  let ram_lookup_latency = 4
+  let ram_write_latency = ram_lookup_latency
+  let ram_output_latency = 4
+
+  (* These two values are requires to be equal!! Assertion here to make sure we
+   * don't break this while tuning.
+   *)
+  let () = assert (ram_lookup_latency = ram_write_latency)
 
   module Full_controller = Full_controller.Make (struct
     module Top_config = Config

@@ -69,36 +69,36 @@ benchmarking our solution.
 We have listed all the AFI-ids and their performance at certain points in the
 repo. Currently the highest performance afi is:
 
-afi-066aeb84a7663930a (FPGA MSM kernel running at 250MHz)
+afi-0b83061a1938e28cb (FPGA MSM kernel running at 270MHz)
 
 A single 2<sup>26</sup> MSM:
 
 ```
-[memcpy-ing scalars to special memory region] 0.254459s
-[transferring scalars to gmem] 0.269489s
-[Doing FPGA Computation] 5.40025s
-[Copying results back from gmem] 0.00128308s
-[Doing on-host postprocessing] 0.475065s
-```
-
-The total time for 4 back to back MSMs, repeated 10 times. This allows us to
-mask the overhead of transfering data to the FPGA and various host processing
-steps on the scalar inputs that can happen in parallel.
 
 ```
-FPGA-MSM/2**26x4        time:   [22.182 s 22.183 s 22.183 s]
+
+The total time for 4 back to back MSMs, repeated 10 times (the output of cargo
+bench in the [test\_fpga\_harness](test_fpga_harness/README.md)). This allows us
+to mask the overhead of transfering data to the FPGA and various host processing
+steps on the scalar inputs that can happen in parallel. This is also the
+required measurement outlined in the ZPrize specs.
+
+```
+FPGA-MSM/2**26x4        time:  [20.915 s 20.915 s 20.916 s]
 ```
 
-We acheive a mean of 22.183s, which equates to **12.100** Mop/s
-((4*2^26)/1000000)/22.183).
+We acheive a mean of 20.915s, which equates to **12.835** Mop/s
+((4*2^26)/1000000)/29.915).
 
 AWS allows the average power to be measured during operation:
-
+```
+sudo fpga-describe-local-image -S 0 -M
+```
 ```
 Power consumption (Vccint):
-   Last measured: 49 watts
-   Average: 49 watts
-   Max measured: 52 watts
+   Last measured: 51 watts
+   Average: 50 watts
+   Max measured: 54 watts
 ```
 
 #### Note
@@ -118,7 +118,7 @@ AFI-id | AFI-gid | Notes | 2^26 performance
  afi-071f40ea5e182fa8f | agfi-0e2c85bf4591270d3 | msm-halve-window-sizes-2 | [transferring scalars to gmem] 0.277229s, [Doing FPGA Computation] 8.10432s
  afi-0df5b1800bfbfdd54 | agfi-036994fb80202cb8d | mega-build-3-oct-1 | [transferring scalars to gmem] 0.182392s, [Doing FPGA Computation] 6.8731s
  afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 
-
+ afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host code masking code | 4 rounds @ 20.957301742s
 ### Notes
 
 When running the tests if you terminate the binary early by `ctrl-c`, it will
@@ -128,7 +128,6 @@ these commands:
 ```
 sudo fpga-clear-local-image  -S 0
 sudo fpga-load-local-image -S 0 -I <afig-...>
-
 ```
 
 # Building for AWS
