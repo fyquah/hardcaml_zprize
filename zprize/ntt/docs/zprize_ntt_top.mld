@@ -59,38 +59,33 @@ our target 200 Mhz.
 <caption>Normal memory access pattern</caption>
   <tr>
     <td>Cores</td>
-    <td>NTTs/s</td>
     <td>PCIe down</td>
     <td>NTT processing</td>
     <td>PCIe up</td>
   </tr>
   <tr>
     <td>8</td>
-    <td>0</td>
-    <td>0</td>
-    <td>0</td>
-    <td>0</td>
+    <td>0.039</td>
+    <td>0.23</td>
+    <td>0.054</td>
   </tr>
   <tr>
     <td>16</td>
-    <td>0</td>
-    <td>0</td>
-    <td>0</td>
-    <td>0</td>
+    <td>x0.0410</td>
+    <td>0.123</td>
+    <td>0.056</td>
   </tr>
   <tr>
     <td>32</td>
-    <td>0</td>
-    <td>0</td>
-    <td>0</td>
-    <td>0</td>
+    <td>0.042</td>
+    <td>0.068</td>
+    <td>0.056</td>
   </tr>
   <tr>
     <td>64</td>
-    <td>0</td>
-    <td>0</td>
-    <td>0</td>
-    <td>0</td>
+    <td>0.041</td>
+    <td>0.044</td>
+    <td>0.056</td>
   </tr>
 </table>
 %}
