@@ -72,9 +72,9 @@ module For_bls12_377 = struct
   let slr_assignments =
     (* Only one modulo mult in SLR1, everything else in SLR2 *)
     { Slr_assignments.input = Some 1
-    ; stage0a = Some 2
+    ; stage0a = Some 1
     (** 0a has 2 multiplies *)
-    ; stage0b = Some 1
+    ; stage0b = Some 2
     (** 0b has 1 multiply *)
     ; stage1 = Some 2
     (** Stage1 has addition and subtractions *)
