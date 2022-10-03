@@ -5,28 +5,27 @@ This repo has submissions to two of the ZPrize tracks, in the `zprize` folder.
 ## Accelerating MSM Operations on FPGA
 
 We have implemented a optimized version of pippengers algorithm for calculating
-MSM, see the README.md [here](zprize/msm_pippenger/README.md) for more details.
+MSM, see the [README.md](zprize/msm_pippenger/README.md) for more details.
+
+The top level code for compiling an FPGA image and Verilog (using Hardcaml)
+resides in `zprize/msm_pippenger`. Underlying controller and field operations
+are taken from the libraries in:
+- `libs/pippenger`
+- `libs/twisted_edwards`
+- `libs/field_ops`
 
 
 ## Accelerating NTT Operations on FPGA
 
 Click [here for the writeup for our NTT submission](https://fyquah.github.io/hardcaml_zprize/zprize/zprize_ntt_top.html).
 
-The code in this repository that concerns NTT are primarily resides in
+The code in this repository that concerns NTT primarily resides in
 - `zprize/ntt`
 - `libs/hardcaml_ntt`
 
 While the code does use other support libraries (eg: `libs/hardcaml_ntt` and
 `libs/vits_infrastructure`), they are not part of the core functionality of the
 NTT core.
-
-# Compiling the bls12-377 reference
-
-Run `cargo build` in `libs/rust/ark_bls12_377_g1` to compile the dynamic library
-exposing a reference implementation of the bls12-377 g1 curve. This is
-necessary for the expect tests to work expectedly.
-
-z3 should be installed to run tests.
 
 # Compiling OCaml and Hardcaml code
 
