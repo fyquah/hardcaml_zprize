@@ -52,17 +52,19 @@ static uint32_t round_up_to_multiple_of_16(uint32_t x) {
 static uint32_t calc_log_max_num_points_per_chunk(uint64_t npoints) {
   /* [max_allowed_num_chunks] should be chosen such that
      [TIME_MSM / max_allowed_num_chunks] is strictly greater than
-     [time_post_processing + time_memcpy_one_chunk + overhead] to ensure that we always
-     keep the FPGA busy.
+     [time_post_processing + time_memcpy_one_chunk + overhead] to ensure that we
+     always keep the FPGA busy.
 
      We also don't want too many chunks! As it will use up a lot of memory.
    */
   const uint64_t max_allowed_num_chunks = 4;
 
   /* [minimum_log_max_num_points_per_chunk] is chosen such that
-     [source_kernel_input_points.data() +  (x << minimum_log_max_num_points_per_chunk)]
-     and [source_kernel_input_scalars.data() +  (x << minimum_log_max_num_points_per_chunk)]
-     will be a 8192-byte aligned address forall x.
+     [source_kernel_input_points.data() +  (x <<
+     minimum_log_max_num_points_per_chunk)] and
+     [source_kernel_input_scalars.data() +  (x <<
+     minimum_log_max_num_points_per_chunk)] will be a 8192-byte aligned address
+     forall x.
 
      Every scalar 256bits = 32bytes => 32 * 1024 % 8192 == 0
   */
@@ -163,13 +165,13 @@ class Driver {
         point.copy_to_fpga_buffer(ptr_point);
         // point.println();
 
-        ptr_point += UINT32_PER_INPUT_POINT;
       } else {
         // add point to host compute buffer
         non_convertible_points.push_back(point);
         non_convertible_indices.push_back((uint64_t)i);
         unconvertible_points++;
       }
+      ptr_point += UINT32_PER_INPUT_POINT;
 
       // Print every 1M points so the user doesn't think we're deadlocked
       if ((i + 1) % (1 << 20) == 0) {
@@ -179,9 +181,9 @@ class Driver {
 
     if (unconvertible_points) {
       std::cout
-        << "Found " << unconvertible_points
-        << " unconvertible points! These points will be handled in the host"
-        << std::endl;
+          << "Found " << unconvertible_points
+          << " unconvertible points! These points will be handled in the host"
+          << std::endl;
     }
     std::cout << "Done internal format conversion!" << std::endl;
   }
