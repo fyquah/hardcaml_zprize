@@ -329,10 +329,18 @@ class Xyzt {
     t.set_mul(x, y);
   }
   void twistedEdwardsExtendedToAffine() {
-    x.set_div(x, z);
-    y.set_div(y, z);
-    z.set(ONE_WORDS);
-    t.set(ZERO_WORDS);
+    if (z == 0) {
+      printf("z = 0 in twisted edwards extended; something went wrong?\n");
+      x.set(ZERO_WORDS);
+      y.set(ONE_WORDS);
+      z.set(ONE_WORDS);
+      t.set(ZERO_WORDS);
+    } else {
+      x.set_div(x, z);
+      y.set_div(y, z);
+      z.set(ONE_WORDS);
+      t.set(ZERO_WORDS);
+    }
   }
   void affineWeierstrassToMontgomery() {
     x.set_sub(x, weierstrass_params.alpha);
@@ -365,6 +373,10 @@ class Xyzt {
     GFq temp1, temp2;
     temp1.set_add(one, y);
     temp2.set_sub(one, y);
+    if (((temp2 == 0) || (x == 0))) {
+      printf("Twisted Edwards -> Montgomery Undefined; Catastrophic Error!\n");
+      return;
+    }
     temp1.set_div(temp1, temp2);
     temp2.set_div(twisted_scale, x);
     x.set(temp1);
@@ -438,12 +450,19 @@ class Xyzt {
   }
 
   void weierstrassDoubleInPlace() {
+    if (z == 0) {  // point at infinity stays at infinity
+      return;
+    }
     GFq t1, t2, t3, t4;
     // point doubling
     t1.set_mul(three, x);
     t1.set_mul(t1, x);
     t1.set_add(t1, weierstrass_params.a);
     t2.set_mul(two, y);
+    if (t2 == 0) {  // result is infinity
+      z.set(ZERO_WORDS);
+      return;
+    }
     t3.set_div(t1, t2);  // (3 * x1^2 + a) / (2 * y1)
 
     t2.set_add(x, x);
@@ -464,6 +483,14 @@ class Xyzt {
 
   void weierstrassAddition(const Xyzt &other) {
     // https://hyperelliptic.org/EFD/g1p/auto-shortw.html
+    if (z == 0) {  // adding to identity results in other
+      x = other.x;
+      y = other.y;
+      z = other.z;
+      t = other.t;
+      return;
+    }
+
     GFq t1, t2, t3, t4;
     if (other == *this) {
       weierstrassDoubleInPlace();
@@ -472,6 +499,10 @@ class Xyzt {
       // compute x
       t1.set_sub(other.y, y);
       t2.set_sub(other.x, x);
+      if (t2 == 0) {
+        z.set(ZERO_WORDS);
+        return
+      }
       t3.set_div(t1, t2);  // (y2 - y1) / (x2 - x1)
 
       t2.set_add(x, x);
@@ -545,7 +576,7 @@ class Xyzt {
   }
 
   void preComputeFPGA(GeneralUnifiedAddIntoTemps &temps) {
-    // (x, y, z, t) -> (2(y-x),2(y+x),4d*t)
+    // (x, y, z, t) -> ((y-x)/2,(y+x)/2,4d*t)
     GFq &temp = temps.temp1;
 
     temp.set_sub(y, x);
@@ -584,7 +615,7 @@ class Xyzt {
     t.dumpToWords("t");
   }
 
-  void copy_from_rust_type(const g1_affine_t &affine) {
+  bool copy_from_rust_type(const g1_affine_t &affine) {
     if (affine.infinity) {
       // Special representation for infinity in the twisted edwards curve
       x.set(ZERO_WORDS);
@@ -594,16 +625,12 @@ class Xyzt {
       return;
     }
 
-    // TODO(fyquah): Handle infinities
+    // import the affine weierstrass representation
     x.set((uint64_t *)affine.x.data);
     x.set_div(x, COFACTOR);
     y.set((uint64_t *)affine.y.data);
     y.set_div(y, COFACTOR);
-
-    // printf("\n\nINITIAL POINT IN C++ -----------------\n");
-    // dump();
-    // println_hex();
-    // printf("\n\n--------------------------------------\n");
+    return affineWeierstrassToExtendedTwistedEdwards();
   }
 
   void copy_to_fpga_buffer(uint32_t *b) {
@@ -619,11 +646,14 @@ class Xyzt {
     // dump();
 
     // printf("\n\n normalized point\n\n");
-    Xyzt temp;
-    temp.x.set_div(x, z);
-    temp.y.set_div(y, z);
-    temp.z.set(ONE_WORDS);
-    temp.t.set(ZERO_WORDS);
+    if (z != 0) {
+      // if z = 0, then it'll just be the identity
+      Xyzt temp;
+      temp.x.set_div(x, z);
+      temp.y.set_div(y, z);
+      temp.z.set(ONE_WORDS);
+      temp.t.set(ZERO_WORDS);
+    }
     // temp.println_hex();
     // temp.dump();
     // printf("\nPARAMS\n");

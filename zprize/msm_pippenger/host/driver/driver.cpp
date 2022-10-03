@@ -158,8 +158,7 @@ class Driver {
 
     for (ssize_t i = 0; i < npoints; i++) {
       // std::cout << rust_points[i] << std::endl;
-      point.copy_from_rust_type(rust_points[i]);
-      bool convertible = point.affineWeierstrassToExtendedTwistedEdwards();
+      bool convertible = point.copy_from_rust_type(rust_points[i]);
       if (convertible) {
         point.preComputeFPGA(post_processing_values.temps);
         point.copy_to_fpga_buffer(ptr_point);

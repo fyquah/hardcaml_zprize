@@ -113,7 +113,6 @@ extern "C" ZprizeMsmFpgaDriver *zprize_msm_fpga_init(g1_affine_t *rust_points,
   for (ssize_t i = 0; i < npoints; i++) {
     std::cout << rust_points[i] << std::endl;
     points[i].copy_from_rust_type(rust_points[i]);
-    points[i].affineWeierstrassToExtendedTwistedEdwards();
     points[i].println();
   }
   auto *driver = new ZprizeMsmFpgaDriver(points);
