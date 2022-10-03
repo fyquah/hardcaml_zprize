@@ -100,7 +100,16 @@ run_ntt_test(host_args_t host_args)
 
   std::sort(time_takens.begin(), time_takens.end());
 
+  double mean_time_taken = 0.0;
+  for (double x : time_takens) {
+    mean_time_taken += x;
+  }
+  mean_time_taken = mean_time_taken / time_takens.size();
+
   std::cout << "Latency over " << host_args.num_evaluations << " NTTs\n";
+  std::cout << "-------\n";
+  std::cout << "Mean latency: " << mean_time_taken << "s\n";
+  std::cout << "-------\n";
   std::cout << "Min latency          : " << time_takens[0] << "s\n";
   std::cout << "25-percentile latency: " << time_takens[time_takens.size() / 4] << "s\n";
   std::cout << "Median latency       : " << time_takens[time_takens.size() / 2] << "s\n";

@@ -332,10 +332,8 @@ void NttFpgaDriver::simple_evaluate(uint64_t *out, const uint64_t *in, uint64_t 
 }
 
 void NttFpgaDriver::expert__evaluate_on_fpga_blocking(UserBuffer* buffer) {
-  std::cout << "Enqueued phase1 work and waiting" << std::endl;
   enqueue_phase1_work(buffer);
   OCL_CHECK(err, err = buffer->ev_phase1_work.wait());
-  std::cout << "Enqueued phase2 work and waiting" << std::endl;
   enqueue_phase2_work(buffer);
   OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
 }
