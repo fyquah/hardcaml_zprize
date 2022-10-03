@@ -71,10 +71,16 @@ repo. Currently the highest performance afi is:
 
 afi-0b83061a1938e28cb (FPGA MSM kernel running at 270MHz)
 
-A single 2<sup>26</sup> MSM:
+Note these tests take up to 30min each as we transform 2<sup>26</sup> affine
+points into their twisted edwards representation.
+
+Running `cargo test` to verify the result for 4 rounds of 2<sup>26</sup> MSM:
 
 ```
-
+Running MSM of [67108864] input points (4 batches)
+Streaming input scalars across 4 chunks per batch (Mask IO and Post Processing)
+Running multi_scalar_mult took Ok(20.957301742s) (round = 0)
+test msm_correctness ... ok
 ```
 
 The total time for 4 back to back MSMs, repeated 10 times (the output of cargo
