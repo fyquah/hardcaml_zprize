@@ -52,8 +52,9 @@ fn msm_with_identity_result() {
     let g1_generator = G1Affine::prime_subgroup_generator();
     let mut points = Vec::new();
     let mut scalars = Vec::new();
+    let mut arkworks_results = Vec::new();
     for i in 0..(num_points) {
-        if i == 0 {
+        if i % 2 == 0 {
             points.push(g1_generator);
         } else {
             points.push(g1_generator.neg());
@@ -64,21 +65,28 @@ fn msm_with_identity_result() {
         scalars.push(Fp256::<FrParameters>::new(BigInteger256::from(1)));
     }
 
+    for b in 0..batches {
+        let start = b * points.len();
+        let end = (b + 1) * points.len();
+        arkworks_results.push(
+                VariableBaseMSM::multi_scalar_mul(points.as_slice(), unsafe {
+                    std::mem::transmute::<&[_], &[BigInteger256]>(&scalars[start..end])
+                    }).into_affine());
+    }
+
     let mut context = multi_scalar_mult_init(points.as_slice());
     let msm_results = multi_scalar_mult(&mut context, points.as_slice(), unsafe {
         std::mem::transmute::<&[_], &[BigInteger256]>(scalars.as_slice())
     });
 
     for b in 0..batches {
-        let start = b * points.len();
-        let end = (b + 1) * points.len();
-        let arkworks_result =
-            VariableBaseMSM::multi_scalar_mul(points.as_slice(), unsafe {
-                std::mem::transmute::<&[_], &[BigInteger256]>(&scalars[start..end])
-            }).into_affine();
+        let arkworks_result = arkworks_results[b];
+        let our_result = msm_results[b].into_affine();
+        println!("Our result = {:?}", our_result);
+        println!("Arkworks result = {:?}", arkworks_result);
 
         assert_eq!(
-            msm_results[b].into_affine(),
+            our_result,
             arkworks_result,
             "msm_with_identity_result test failed!");
     }
