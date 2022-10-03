@@ -14,8 +14,8 @@ module Bls12_377 = struct
      *)
     Some
       [ { slr = SLR0; num_windows = 10 }
-      ; { slr = SLR1; num_windows = 4 }
-      ; { slr = SLR2; num_windows = 6 }
+      ; { slr = SLR1; num_windows = 5 }
+      ; { slr = SLR2; num_windows = 5 }
       ]
   ;;
 end
