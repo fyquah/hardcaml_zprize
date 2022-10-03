@@ -1,2 +1,2 @@
-#define LOGBLOCKS 2
+#define LOGBLOCKS 0
 #define LOGROWS 6

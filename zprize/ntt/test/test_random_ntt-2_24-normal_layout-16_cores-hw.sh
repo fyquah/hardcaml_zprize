@@ -9,6 +9,8 @@ cp ../host/test_random.exe ./
 sed -e "s#CURRENT_DIRECTORY#$PWD#g" xrt.template.ini >xrt.ini
 
 ./test_random.exe \
-    --xclbin ../fpga/reverse/build/build_dir.hw.xilinx_u55n_gen3x4_xdma_2_202110_1/ntt_fpga.xclbin \
-    --core-type REVERSE \
-    --log-row-size 9
+    --xclbin ../fpga/ntt-2_24-normal_layout-16_cores/build/build_dir.hw.xilinx_u55n_gen3x4_xdma_2_202110_1/ntt_fpga.xclbin \
+    --num-test-cases 10 \
+    --core-type NTT-2_24 \
+    --log-blocks 0 \
+    --memory-layout NORMAL_LAYOUT

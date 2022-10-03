@@ -13,10 +13,12 @@ cp ../host/evaluate_given.exe ./
 sed -e "s#CURRENT_DIRECTORY#$PWD#g" xrt.template.ini >xrt.ini
 
 ../host/evaluate_given.exe  \
-    --xclbin ../fpga/ntt-2_18/build/build_dir.hw.xilinx_u55n_gen3x4_xdma_2_202110_1/ntt_fpga.xclbin \
-    --core-type NTT-2_18 \
+    --xclbin ../fpga/ntt-2_24-normal_layout-32_cores/build/build_dir.hw.xilinx_u55n_gen3x4_xdma_2_202110_1/ntt_fpga.xclbin \
+    --core-type NTT-2_24 \
     --input-filename "$INPUT_FILENAME" \
-    --output-filename "$OUTPUT_FILENAME"
+    --output-filename "$OUTPUT_FILENAME" \
+    --memory-layout NORMAL_LAYOUT \
+    --log-blocks 2
 
 diff "$OUTPUT_FILENAME" "$EXPECTED_OUTPUT_FILENAME"
 

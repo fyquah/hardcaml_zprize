@@ -34,24 +34,25 @@ MemoryLayout memory_layout_from_string(std::string);
 
 class NttFpgaDriverArg {
 private:
-  NttFpgaDriverArg(CoreType core_type, MemoryLayout, uint64_t log_row_size);
+  NttFpgaDriverArg(CoreType core_type, MemoryLayout, uint64_t log_row_size, uint64_t log_blocks);
 
 public:
   const CoreType core_type;
   const MemoryLayout memory_layout;
   const uint64_t log_row_size;
+  const uint64_t log_blocks;
 
   uint64_t row_size();
 
   uint64_t num_elements();
 
-  static NttFpgaDriverArg create_ntt_2_24(MemoryLayout);
+  static NttFpgaDriverArg create_ntt_2_24(MemoryLayout, uint64_t log_blocks);
 
-  static NttFpgaDriverArg create_ntt_2_18(MemoryLayout);
+  static NttFpgaDriverArg create_ntt_2_18(MemoryLayout, uint64_t log_blocks);
 
-  static NttFpgaDriverArg create_ntt_2_12(MemoryLayout);
+  static NttFpgaDriverArg create_ntt_2_12(MemoryLayout, uint64_t log_blocks);
 
-  static NttFpgaDriverArg create_reverse(MemoryLayout, uint64_t log_row_size);
+  static NttFpgaDriverArg create_reverse(MemoryLayout, uint64_t log_row_size, uint64_t log_blocks);
 };
 
 class NttFpgaDriver {
@@ -88,6 +89,7 @@ private:
   const CoreType core_type;
   const MemoryLayout memory_layout;
   const uint64_t log_row_size;
+  const uint64_t log_blocks;
   const uint64_t row_size;
   const uint64_t matrix_size;
   bool loaded_xclbin;
@@ -147,6 +149,13 @@ public:
   UserBuffer* request_buffer();
 
   /**
+   * Transfer the NTT input vector to the provided user buffer. Depending
+   * on the memory-layout supported by the NTT core, this will either be a
+   * simple memcpy or a more complicated data rearrangement.
+   */
+  void transfer_input_vector_to_user_buffer(UserBuffer*, uint64_t*);
+
+  /**
    * Asynchronously enqueue the buffer for NTT evaluation.
    *
    * Upong calling enqueue_evaluate_async:
@@ -166,6 +175,14 @@ public:
    * enqueued for any evaluation, behavious is undefined.
    */
   void wait_for_result(UserBuffer*);
+
+  /**
+   * Transfer the NTT output vector from the user provided user buffer. To the
+   * given data pointer. Depending on the memory-layout supported by the NTT
+   * core, this will either be a simple memcpy or a more complicated data
+   * rearrangement.
+   */
+  void transfer_user_buffer_to_output_vector(UserBuffer*, uint64_t*);
 
   /**
    * Returns the buffer to the driver. This buffer will be free for future
