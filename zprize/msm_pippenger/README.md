@@ -125,6 +125,7 @@ AFI-id | AFI-gid | Notes | 2^26 performance
  afi-0df5b1800bfbfdd54 | agfi-036994fb80202cb8d | mega-build-3-oct-1 | [transferring scalars to gmem] 0.182392s, [Doing FPGA Computation] 6.8731s
  afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 
  afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host code masking code | 4 rounds @ 20.957301742s
+ 
 ### Notes
 
 When running the tests if you terminate the binary early by `ctrl-c`, it will
@@ -136,12 +137,42 @@ sudo fpga-clear-local-image  -S 0
 sudo fpga-load-local-image -S 0 -I <afig-...>
 ```
 
-# Building for AWS
+# Building the design from source
 
-The AFIs above can be built from source using the following instructions (after
-installing OCaml so the Verilog source can be built).
+Instructions are given below for building from source. A prerequisite is that
+OCaml has been setup (outlined on the [main README.md](../../README.md)).
 
-You need to clone the aws-fpga repo: https://github.com/aws/aws-fpga/
+## Compiling the bls12-377 reference
+
+Run `cargo build` in `libs/rust/ark_bls12_377_g1` to compile the dynamic library
+exposing a reference implementation of the bls12-377 g1 curve. This is
+necessary for the expect tests to work expectedly.
+
+z3 should be installed to run tests.
+
+## Simulating Hardcaml
+
+We have various expect tests in the [test folders](hardcaml/test) which can be
+run by calling `dune runtest`. To run a longer simulation, we provided binaries
+that can be called and various arguments set. These run with the
+[Verilator](https://www.veripool.org/verilator/) backend which after a longer
+compile time, will provide much faster simulation time than the built-in
+Hardcaml simulator. Make sure you have Verilator installed when running this
+binary. To simulate 128 random points, run the following command:
+
+```
+./hardcaml/bin/simulate.exe -- kernel -num-points 128 -verilator -timeout 1000000
+```
+
+The `-waves` switch can be optionally provided to open the simulation in the
+hardcaml waveform viewer. A larger timeout should be provided when simulating
+more points.
+
+## Building an FPGA image for AWS
+
+You need to clone the [aws-fpga repo](https://github.com/aws/aws-fpga/), as well
+as run on a AWS box with the [FPGA Developer
+AMI](https://aws.amazon.com/marketplace/pp/prodview-gimv3gqbpe57k) installed.
 
 ```
 source ~/aws-fpga/vitis_setup.sh
@@ -154,31 +185,32 @@ If you want the Vivado GUI over the ssh to AWS, you need to install:
 yum install libXtst.x86_64
 ```
 
-Building from scratch:
+Cd into the `fpga` directory which contains the scripts to build an actual FPGA
+design (takes 6-8 hours), or a emulation module (takes 15 minutes).
 
 ```
-cd zprize/msm_pippenger/fpga
-dune build
+cd fpga
 ./compile_hw.sh or ./compile_hw_emu.sh
 ```
 
-Testing:
+### Running a hardware emulation simulation
 
 Modify xrt.template.ini if you want to disable GUI.
 ```
-cd zprize/msm_pippenger/test
+cd /test
 ./run_hw_emu.sh
 ```
+### Creating the AWS AFI
 
-Creating the AWS AFI:
+Once you have successfully called `compile_hw.sh` in the `fpga` folder:
 
 ```
-cd zprize/msm_pippenger/fpga
 ./compile_afi.sh
 ```
 
-After running the compile\_afi.sh script, there should be a folder 'afi/'. Get
-the afi id from the file afi/\...\_afi_id.txt this to get the afi id and run:
+After running the `compile_afi.sh` script, there should be a folder 'afi/'. Get
+the afi id from the file `afi/{date}_afi_id.txt` and run the following command
+to track the progress of its creation:
 
 ```
 aws ec2 describe-fpga-images --fpga-image-ids <afi-...>
@@ -186,10 +218,10 @@ aws ec2 describe-fpga-images --fpga-image-ids <afi-...>
 Which will show up as "available" when the image is ready to use.
 
 
-# Running on AWS
+## Running on AWS
 
-You need to run these steps on the run box. Make sure you have cloned the
-aws-fpga repo and run:
+You need to run these steps on a AWS F1 box with an FPGA. Make sure you have
+cloned the aws-fpga repo and run:
 
 ```
 source ~/aws-fpga/vitis_runtime_setup.sh
@@ -204,21 +236,19 @@ systemctl status mpd
 You need the .awsxclbin file from the build box, usually the easiest way is to
 download this from the s3 bucket or scp it over.
 
-Now you can run the host.exe test program:
 
-```
-./host.exe  msm_pippenger.link.awsxclbin input.points output.points
-```
+## Running `host_buckets.exe` debug test
 
-# Running `host_buckets.exe` debug test
-
-`host_buckets.exe` is a debug application that pumps test vectors into the
-FPGA from a file, and compare against a reference file.
+`host_buckets.exe` is a debug application that pumps test vectors into the FPGA
+from a file, and compare against a reference file. Note this is NOT the
+benchmarking program and has not been optimized in anyway. For actual runs and
+benchmarking, please look in [test_fpga_harness](test_fpga_harness) and/or see
+the benchmarking section above.
 
 Firstly, compile the host binaries:
 
 ```bash
-cd fantastic-carnival/zprize/msm_pippenger/host
+cd host
 mkdir build/
 cd build/
 
