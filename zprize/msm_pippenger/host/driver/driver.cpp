@@ -139,6 +139,7 @@ class Driver {
               << std::endl;
     bls12_377_g1::Xyzt point;
     uint32_t *ptr_point = source_kernel_input_points.data();
+    uint64_t unconvertible_points = 0;
 
     for (ssize_t i = 0; i < npoints; i++) {
       // std::cout << rust_points[i] << std::endl;
@@ -154,12 +155,20 @@ class Driver {
         // add point to host compute buffer
         non_convertible_points.push_back(point);
         non_convertible_indices.push_back((uint64_t)i);
+        unconvertible_points++;
       }
 
       // Print every 1M points so the user doesn't think we're deadlocked
       if ((i + 1) % (1 << 20) == 0) {
         std::cout << "Converted " << (i + 1) << " points ..." << std::endl;
       }
+    }
+
+    if (unconvertible_points) {
+      std::cout
+        << "Found " << unconvertible_points
+        << " unconvertible points! These points will be handled in the host"
+        << std::endl;
     }
     std::cout << "Done internal format conversion!" << std::endl;
   }

@@ -381,6 +381,7 @@ class Xyzt {
       return false;
     }
     twistedEdwardsAffineToExtended();
+    return true;
   }
   // postprocess function
   void extendedTwistedEdwardsToWeierstrass() {
