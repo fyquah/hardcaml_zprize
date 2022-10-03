@@ -10,6 +10,15 @@ MSM, see the README.md [here](zprize/msm_pippenger/README.md) for more details.
 
 ## Accelerating NTT Operations on FPGA
 
+Click [here for the writeup for our NTT submission](https://fyquah.github.io/hardcaml_zprize/zprize/zprize_ntt_top.html).
+
+The code in this repository that concerns NTT are primarily resides in
+- `zprize/ntt`
+- `libs/hardcaml_ntt`
+
+While the code does use other support libraries (eg: `libs/hardcaml_ntt` and
+`libs/vits_infrastructure`), they are not part of the core functionality of the
+NTT core.
 
 # Compiling the bls12-377 reference
 
