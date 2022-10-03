@@ -5,7 +5,7 @@ This repo has submissions to two of the ZPrize tracks, in the `zprize` folder.
 ## Accelerating MSM Operations on FPGA
 
 We have implemented a optimized version of pippengers algorithm for calculating
-MSM, see the README.md [here](zprize/msm_pippenger/README.md) for more details.
+MSM, see the [README.md](zprize/msm_pippenger/README.md) for more details.
 
 The top level code for compiling an FPGA image and Verilog (using Hardcaml)
 resides in `zprize/msm_pippenger`. Underlying controller and field operations

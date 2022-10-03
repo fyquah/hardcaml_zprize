@@ -96,6 +96,7 @@ FPGA-MSM/2**26x4        time:  [20.915 s 20.915 s 20.916 s]
 We acheive a mean of 20.915s, which equates to **12.835** Mop/s
 ((4*2^26)/1000000)/20.915).
 
+### Power
 AWS allows the average power to be measured during operation:
 ```
 sudo fpga-describe-local-image -S 0 -M
@@ -107,12 +108,24 @@ Power consumption (Vccint):
    Max measured: 54 watts
 ```
 
-#### Note
-Because our solution offloads a non-trival amount of work to perform in parallel
-to the host, you will see the best performance after a fresh reboot, and without
-other CPU-intensive tasks running at the same time.
+The breakdown of how long each stage takes can be printed when changed the value
+of `mask_io` in `host/driver/driver.cpp` (this is not used in benchmarking as it
+has lower performance):
 
-### All AFIs
+### Notes
+ 1. Because our solution offloads a non-trival amount of work to perform in
+parallel to the host, you will see the best performance after a fresh reboot,
+and without other CPU-intensive tasks running at the same time.
+ 2. When running the tests if you terminate the binary early by `ctrl-c`, it
+will leave the FPGA in a bad state which requires clearing and re-programming
+with these commands:
+
+```
+sudo fpga-clear-local-image  -S 0
+sudo fpga-load-local-image -S 0 -I <afig-...>
+```
+
+### All historical AFIs
 
 AFI-id | AFI-gid | Notes | 2^26 performance
 ------- | ------- | ----- | -----
@@ -126,16 +139,6 @@ AFI-id | AFI-gid | Notes | 2^26 performance
  afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 
  afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host code masking code | 4 rounds @ 20.957301742s
  
-### Notes
-
-When running the tests if you terminate the binary early by `ctrl-c`, it will
-leave the FPGA in a bad state which requires clearing and re-programming with
-these commands:
-
-```
-sudo fpga-clear-local-image  -S 0
-sudo fpga-load-local-image -S 0 -I <afig-...>
-```
 
 # Building the design from source
 
