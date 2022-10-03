@@ -25,7 +25,7 @@ module Make (Config : Top_config.S) : sig
       ; tvalid : 'a (** Output data is valid. *)
       ; rd_addr : 'a (** Read address to internal RAM. *)
       ; rd_en : 'a (** Read enable to internal RAM. *)
-      ; rd_any : 'a
+      ; rd_any : 'a (** Any one of the RAMs is being accessed *)
       ; block : 'a
           (** Internal block of NTTs being accessed (forms part of read address). *)
       }
