@@ -138,6 +138,7 @@ dependencies = [
  "cc",
  "cmake",
  "criterion",
+ "num-bigint",
  "rand",
  "rand_chacha",
  "rayon",
