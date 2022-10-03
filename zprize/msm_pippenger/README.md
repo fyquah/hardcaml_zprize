@@ -94,7 +94,7 @@ FPGA-MSM/2**26x4        time:  [20.915 s 20.915 s 20.916 s]
 ```
 
 We acheive a mean of 20.915s, which equates to **12.835** Mop/s
-((4*2^26)/1000000)/29.915).
+((4*2^26)/1000000)/20.915).
 
 AWS allows the average power to be measured during operation:
 ```
