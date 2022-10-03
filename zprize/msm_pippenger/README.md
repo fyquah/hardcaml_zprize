@@ -8,6 +8,16 @@ curve.
 
 * Twisted edwards curve and extended projective points for a lower latency point
   addition algorithm, and a high performance fully-pipelined adder on the FPGA
+   - We convert points from the original Weierstrass form to an equivalent Montgomery curve through
+   a linear change of variable, as detailed on 
+   [Wikipedia](https://en.wikipedia.org/wiki/Montgomery_curve#Equivalence_with_Weierstrass_curves).
+   In particular, given $(t, v)$ on a Weierstrass curve, we perform the map
+   $$ (t, v)\mapsto (x, y) = (s(t-\alpha), sv) $$
+
+   - We then convert points from the Montgomery curve to a birationally equivalent Twisted Edwards 
+   curve. We use the following transform: given $(u, v)$ on a Montgomery curve, we perform the map
+   $$ (t, v)\mapsto (x, y) = (\gamma \frac{u}{v}, \frac{u-1}{u+1}) $$
+
 * Mask PCIe latency by allowing MSM operations to start while points are being
   streamed in batches from the host
 * Multiplier optimizations aimed at the Barret reduction algorithm and how they
@@ -16,9 +26,31 @@ curve.
   pblocking to avoid routing congestion
 * Scalars are converted into a signed form so that bucket memory gets a free bit
   per window
+   - For each window $i$, $i\in[1,N]$, denote the number of bits $n_i$ and the bucket value by $b_i$. 
+   Then, $b_i\in [0,2^{n_i}-1]$ in a regular unsigned form. For $b_i\in [2^{n_i-1}, 2^{n_i}-1]$, we instead
+   use $b_i-2^{n_i}\in[-2^{n_i-1},-1]$, and add $1$ to $b_{i+1}$.
+   - We start from window 0 and perform this transform iteratively up through window $N-2$. We are not
+   able to perform this transform on window $N-1$ because there is no higher bucket to overflow to. Note
+   that, because the prime of the scalar field does not have all 1s in the top bits, we do not have to 
+   worry about overflow in the top window.
+   - After this transform, for all but the top window, $b_i\in[-2^{n_i-1},2^{n_i-1}-1]$. However, note
+   that, in the projective space on Twisted Edwards curves, $-(x,y,z,t) = (-x, y, z, -t)$. So, we can 
+   just use $|b_i|\in[0,2^{n_i-1}]$ as the bucket values and subtract instead of adding negative points.
+   This halves the number of buckets in each window.
+
 * Offloading the final triangle sum to the host
-* Using BRAM to store coefficents that can be used to reduce modulo adder and
-  subtractor latency
+* Using BRAM to store coefficents that can be used to reduce the latency of modulo operations (addition,
+subtraction, and Barrett reduction).
+   - Given a number $n\in[0, Aq]$, we can reduce to $n\in[0,q]$ with two steps using a lookup BRAM.
+   In particular, let $a = \lceil\log_2{A}\rceil$ be the number of bits needed to represent $A$ and 
+   $s=\lceil\log_2{q}\rceil$ be the number of bits needed to represent the prime (253 for BLS12-377 G1).
+   Then, $n$ can be represented as an $a+s$-bit number. 
+
+   Then, we build a lookup table of all $a$-bit prefixes. For each prefix $p\in[1,2^{a}-1]$, we store
+   the largest multiple of $q$ that, when written with $a+s$ bits, has $p-1$ as its top $a$ bits. Then,
+   given $n$, we can subtract off this multiple of $q$, giving a number $n^\prime$ in the range $[0, 3q)$. 
+   Finally, we multiplex between $n^\prime, n^\prime-q, n^\prime-2q$ and choose the correctly reduced value.
+
 
 ## Block diagram
 
