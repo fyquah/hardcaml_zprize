@@ -1,3 +1,5 @@
+(* Tests the reference 4 step algorithm. *)
+
 open Core
 module Gf = Hardcaml_ntt.Gf.Z
 module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf)

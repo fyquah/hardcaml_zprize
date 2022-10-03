@@ -1,3 +1,6 @@
+(** Computes a stream of twiddle factors (successive powers of the initial
+   roots) used in the first pass of the 4 step algorithm. *)
+
 open Base
 open Hardcaml
 
