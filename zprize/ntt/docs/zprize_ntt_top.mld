@@ -10,8 +10,11 @@ NTT into multiple 2{^12} NTTs across columns and rows of a 2{^12} x 2{^12}
 matrix.
 
 Overall complexity (in terms of butterly operations performed) is roughly
-equivalent, though and extra twiddle factor correction pass is required between
-the column and row phases.
+equivalent to a single 2{^24} INNT, though an extra twiddle factor correction pass
+is required between the column and row phases.
+
+On the otherhand, onchip memory usage is drastically reduce, and it becomes possible to
+implement multiple smaller INNT cores for improved performance through parallelism.
 
 {2 Code structure}
 
@@ -23,4 +26,181 @@ There are 2 kernels involved:
 
 - {{!page:zprize_ntt_hardcaml_kernel}Hardcaml RTL kernel} implementing the core NTT algorithm
 - {{!page:zprize_ntt_cpp_kernel}C++ HLS kernel} which sequences PCIe and HBM memory accesses
+
+{2 Memory bandwidth and streaming}
+
+THe 4 step algorithm requires both a coloumn and row transform, with transposes between phases.
+This is performed both by controlling the memory access pattern (normal layout build) or by
+pre and post processing the input/output matrices (optimized layout builds).
+
+One significant issue we have faced with this project is the bandwidth performance of HBM.
+In normal layouts, we tend to burst 64 to 512 bytes before opening a new row.  The row open operation appears to be taking upto 200-250 HBM clock cycles (about 100 cycle at our internal 200 Mhz clock).
+We had expected significantly better performance from HBM than this and lacked time to try
+tuning varios HBM parameters to see if we could get better performance.
+
+The optimized layouts use the host for pre/post processing and dramaticlly improve bandwidth
+efficiency - the smallest transfers are now 2048 - 4096 bytes (which is only for one read
+phase - the other read/write phases are completely linear).
+
+We see tremendously improved through put of the core with this scheme, though we expect it to
+be judged harshly in this competition due to the extra pre/post processing step.  We include
+it none-the-less as it shows the potential performance we can get to with either a more optimised
+HBM structure, or different memory architecture (like DDR4).
+
+{2 Throughput}
+
+We now show the result of 6 designs which target differing parallelism and memory architectures.
+
+Note that each core instantiated has a throughput of approximately one INNT per second at
+our target 200 Mhz.
+
+{%html:
+<table class="perf">
+<caption>Normal memory access pattern</caption>
+  <tr>
+    <td>Cores</td>
+    <td>NTTs/s</td>
+    <td>PCIe down</td>
+    <td>NTT processing</td>
+    <td>PCIe up</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+  </tr>
+  <tr>
+    <td>16</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+  </tr>
+  <tr>
+    <td>32</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+  </tr>
+  <tr>
+    <td>64</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+  </tr>
+</table>
+%}
+
+{%html:
+<table class="perf">
+<caption>Optimized memory access pattern</caption>
+  <tr>
+    <td>Cores</td>
+    <td>Preprocessing</td>
+    <td>PCIe down</td>
+    <td>NTT processing</td>
+    <td>PCIe up</td>
+    <td>Postprocessing</td>
+  </tr>
+  <tr>
+    <td>32</td>
+    <td>0.0218</td>
+    <td>0.0417</td>
+    <td>0.0348</td>
+    <td>0.0555</td>
+    <td>0.0228</td>
+  </tr>
+  <tr>
+    <td>64</td>
+    <td>0.0213</td>
+    <td>0.0414</td>
+    <td>0.0267</td>
+    <td>0.0552</td>
+    <td>0.0231</td>
+  </tr>
+</table>
+%}
+
+{2 Resource usage}
+
+{%html:
+<table class="perf">
+<caption>Normal memory access pattern</caption>
+  <tr>
+    <td>Cores</td>
+    <td>LUTs</td>
+    <td>REGs</td>
+    <td>DSPs</td>
+    <td>BRAM</td>
+    <td>URAM</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td>169482</td>
+    <td>222508</td>
+    <td>264</td>
+    <td>162</td>
+    <td>48</td>
+  </tr>
+  <tr>
+    <td>16</td>
+    <td>189613</td>
+    <td>237651</td>
+    <td>520</td>
+    <td>162</td>
+    <td>96</td>
+  </tr>
+  <tr>
+    <td>32</td>
+    <td>228679</td>
+    <td>265938</td>
+    <td>1032</td>
+    <td>162</td>
+    <td>192</td>
+  </tr>
+  <tr>
+    <td>64</td>
+    <td>327714</td>
+    <td>327887</td>
+    <td>2052</td>
+    <td>162</td>
+    <td>384</td>
+  </tr>
+</table>
+%}
+
+{%html:
+<table class="perf">
+<caption>Optimized memory access pattern</caption>
+  <tr>
+    <td>Cores</td>
+    <td>LUTs</td>
+    <td>REGs</td>
+    <td>DSPs</td>
+    <td>BRAM</td>
+    <td>URAM</td>
+  </tr>
+  <tr>
+    <td>32</td>
+    <td>166270</td>
+    <td>183713</td>
+    <td>1028</td>
+    <td>162</td>
+    <td>192</td>
+  </tr>
+  <tr>
+    <td>64</td>
+    <td>265308</td>
+    <td>243870</td>
+    <td>2052</td>
+    <td>162</td>
+    <td>384</td>
+  </tr>
+</table>
+%}
+
 

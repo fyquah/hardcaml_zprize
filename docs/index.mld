@@ -4,7 +4,7 @@ This documentation describes two projects undertaken as part of the Zprize compe
 
 {2 Multi-scalar multiplication}
 
-Multiplying millions of BLS12-377 affine points by 253 bit scalars.
+Multiply 2{^26} BLS12-377 affine points by 253 bit scalars and add the result.
 
 - {!Pippenger} implements the controller logic to sequence the MSM computation.
 - {!Elliptic_curve_lib}, {!Field_ops_lib} and {!Twisted_edwards_lib} implement the core elliptic curve arithmetic operations.
@@ -12,10 +12,10 @@ Multiplying millions of BLS12-377 affine points by 253 bit scalars.
 
 {2 Inverse NTT}
 
-Performs the inverse number theoretic transform on quite large inputs.
+Perform 2{^24} inverse number theoretic transform over a 64 bit finite field.
 
 - {{!page:ntt}Hardcaml_ntt} implements the core components of for the NTT transform.
-- {{!page:zprize_ntt_top}Zprize_ntt} implements the top level design.
+- {{!page:zprize_ntt_top}Zprize_ntt} implements the top level design and dicsusses results.
 
 {2 Support libraries}
 
