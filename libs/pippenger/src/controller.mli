@@ -38,8 +38,12 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) : sig
     val names : string list
   end
 
-  val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
-  val hierarchy : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val create : build_mode:Build_mode.t -> Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+
+  val hierarchy
+    :  build_mode:Build_mode.t
+    -> Scope.t
+    -> Signal.t Interface.Create_fn(I)(O).t
 
   module For_synthesis : sig
     val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
