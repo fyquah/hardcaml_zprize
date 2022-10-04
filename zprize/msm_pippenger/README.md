@@ -5,12 +5,11 @@ the MSM of a large number of elliptic point and scalar pairs on the BLS12-377
 curve. 
 
 Performance is measured as per the ZPrize specs at 20.504s for 4 rounds of
-2<sup>26</sup> MSMs, which equates to **13.092** Mop/s. Measureuments are
-further detailed in the benchmarking section.
+2<sup>26</sup> MSMs, which equates to **13.092** Mop/s. 
 
 Detailed instructions on re-creating these results from source are in the
-[building from source](#building-the-design-from-source) and
-[benchmarking](#benchmarking) sections below.
+[building from source](#building-the-design-from-source) and more detailed
+measurement results in the [benchmarking](#benchmarking) sections below.
 
 
 ## Overview of the architecture
