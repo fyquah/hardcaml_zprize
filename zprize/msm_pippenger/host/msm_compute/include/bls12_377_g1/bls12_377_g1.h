@@ -532,7 +532,7 @@ class Xyzt {
   }
 
   void weierstrassMultiplication(const biginteger256_t &scalar) {
-    Xyzt temp = *this;
+    Xyzt temp(*this);
     setToWeierstrassInfinity();
     for (int i = 0; i < SCALAR_NUM_BITS; i++) {
       if (scalar.getBit(i)) {
@@ -542,9 +542,10 @@ class Xyzt {
     }
   }
 
-  void weierstrassMultiplyAndAdd(Xyzt point, const biginteger256_t &scalar) {
-    point.weierstrassMultiplication(scalar);
-    weierstrassAddition(point);
+  void weierstrassMultiplyAndAdd(const Xyzt &point, const biginteger256_t &scalar) {
+    Xyzt temp(point);
+    temp.weierstrassMultiplication(scalar);
+    weierstrassAddition(temp);
   }
 
   void generalUnifiedAddInto(const Xyzt &other) {
