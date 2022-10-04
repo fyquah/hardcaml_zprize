@@ -1,10 +1,24 @@
 {1 Hardcaml_ntt}
 
-{{!Hardcaml_ntt}Documentation}
+This is a document about the design of a single NTT-evaluation block
 
-{2 Core architecture}
+The rough overview of the design is as follows:
 
-{3 Data path}
+{%html: <img src="https://fyquah.github.io/hardcaml_zprize/assets/ntt-core-overview.png" />%}
+
+This designed core is designed with throughput in mind:
+
+- the input-ram and output-ram can be read from and written to while the
+controller is doing work
+- the controller tries to give work to the datapath every clock cycle to ensure
+that the datapath stays busy
+
+Not depicited in the diagram is some resource sharing. In practice, it is
+wasteful to have a single controller for every datapath, transposer ram etc.
+In our implementation, we have a controller manage 8 cores, as a balance between
+fan-out and resource savings.
+
+{2 Data path}
 
 The data path consists of 2 field multipliers and adders.
 
@@ -16,15 +30,15 @@ The data path is reused to perform the twiddle phase after the first pass of
 the 4-step algorithm.  Each coefficient must be scaled by a specific root of unity
 and then the root scaled.  This pass take N cycles.
 
-{3 Controller}
+{2 Controller}
 
 The controller sequences the address for coefficient RAMs and the controls the 
 data path.
 
-{3 RAMs}
+{2 RAMs}
 
-We required 2 read and 2 write ports for all RAMs ihn the design.  This includes the
-inputs RAMs, internal RAMs, and output RAMs.
+We required 2 read and 2 write ports for all RAMs in the design.  This includes
+the inputs RAMs, internal RAMs, and output RAMs.
 
 Since FPGA RAMs consist of 2 ports, we build our require structure from 2 UltraRAMs.
 Each UltraRAM has both it's ports connected to either the read or write side.
@@ -34,12 +48,17 @@ When a [flip] signal is toggled the port directions swap.
 The RAMs are architectued such that we can load new INNT coefficents, store
 a processed INTT, and perform a INNT in parallel.
 
-{4 Scaling}
+{2 Scaling}
 
-The [Parallel_cores] block instantiates [1 lsl logcores] INTT blocks.  It also 
+Our design can be parameterized by [logcores] and [logblocks].
+
+The {!Parallel_cores} block instantiates [1 << logcores] INTT blocks.  It also 
 defines the width of the data path into the cores.
 
-The [Multi_parallel_cores] block instantiates [1 lsl logblocks] [Parallel_cores.
+The {!Multi_parallel_cores} block instantiates [1 << logblocks] {Parallel_cores}
+blocks. This the design scales with [1 << (logcores + logblocks)] cores.
 
-This the design scales with [1 lsl (logcores+logblocks)] cores.
+{2 API Documentation}
+
+{{!Hardcaml_ntt}Documentation}
 

@@ -55,6 +55,9 @@ of performing a 2{^12} NTT using on-chip memory.
 Our actual NTT implementation comprises of two phases. Let C be the number of
 parallel NTT cores in our design.
 
+(in actuality, our design scales by blocks of 8 cores, but it's easier to
+think in terms of cores)
+
 Phase 1: Performs steps 1, 2 and 3 of the algorithm
 - The HLS kernel streams the first C columns via AXI Stream to the Hardcaml
   kernel from a HBM bank

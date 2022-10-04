@@ -218,8 +218,6 @@ would want for an actual product, but we've not had time to implement.
 
 - We don't have a single design that can perform NTT for all sizes. We have a
   different firmware.
-- Again, this is a simple enhrancement (either in the RTL / host driver), but
-  we did not managed to implement that in time.
 - The design is not very robust against Ctrl+C invocations (in the sense that
   it can start giving bad results after). Hence, when running test/benchmarking
   scripts, please let it finish rather than killing it!
