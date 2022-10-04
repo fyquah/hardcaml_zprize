@@ -118,3 +118,8 @@ by exploiting very heavy precomputation. The key idea is that the two summands d
 need to be in the same coordinate space. The exact algorithm used for precomputation is
 [described here in the documentation of the precompute mixed adder component](https://fyquah.github.io/hardcaml_zprize/zprize/Twisted_edwards_lib/Mixed_add_precompute/index.html)
 
+While there is a [mixed addition formulae for addition in scaled twisted Edwards with `7M + 8A`](https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-4), that formulae is not strongly unified. This means we need to specially handle identities and
+cases where both points are equivalent (in affine coordinates). Although we are guranteed
+that the input points do not contain infinites (also known as identity points), our intermediate result
+and initial state can still contain infinities. Having a strongly unified adder makes dealing with a
+lot of this easier to reason about.
