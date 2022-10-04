@@ -110,7 +110,6 @@ class Driver {
   // host compute for non-convertible points
   std::vector<uint64_t> non_convertible_indices;
   std::vector<bls12_377_g1::Xyzt> non_convertible_points;
-  std::vector<biginteger256_t> non_convertible_scalars[4];
 
   // OpenCL stuff
   cl::CommandQueue q;
@@ -304,7 +303,7 @@ class Driver {
     }
   }
 
-  void postProcess(const uint32_t *source_kernel_output, int batch_num) {
+  void postProcess(const uint32_t *source_kernel_output, int batch_num, const biginteger256_t *scalars) {
     const uint64_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
 
     post_processing_values.final_result.setToTwistedEdwardsIdentity();
@@ -351,13 +350,17 @@ class Driver {
     // add all the weierstrass points
     printf(" *** RAHUL: adding in non convertible points (batch %d)***\n", batch_num);
     if (__builtin_expect(!non_convertible_points.empty(), 0)) {
-      printf(" *** RAHUL: points.size() = %lu, scalars[%d].size() = %lu ***\n", non_convertible_points.size(), batch_num, non_convertible_scalars[batch_num].size());
+      printf(" *** RAHUL: points.size() = %lu, indices.size() = %lu***\n", non_convertible_points.size(), non_convertible_indices.size(), batch_num);
       assert(non_convertible_points.size() ==
-             non_convertible_scalars[batch_num].size());
+             non_convertible_indices.size());
       for (size_t i = 0; i < non_convertible_points.size(); i++) {
-        printf(" *** RAHUL: point (%lu) ***\n", i);
+uint64_t idx = non_convertible_indices[i];
+        printf(" *** RAHUL: point (%lu), index = %lu", i, idx);
+auto *scalar_ptr = (scalars + (batch_num * total_num_points) + i);
+std::cout << *scalar_ptr << std::endl;
+
         weierstrassMultiplyAndAdd(post_processing_values.final_result, non_convertible_points[i],
-                                                                      non_convertible_scalars[batch_num][i]);
+                                                                      *scalar_ptr);
       }
     }
 printf("finished postProcess\n");
@@ -379,29 +382,21 @@ fflush(stdout);
         get_input_scalars_pointer() + (buffer_start * UINT32_PER_INPUT_SCALAR);
     uint64_t scalars_end = scalars_start + scalars_size;
 
+std::cout << "FIRST SCALAR IN CHUNK: " << *(scalars + scalars_start) << std::endl;
     // copy in all the points
     memcpy(ptr_device_input_scalar, (void *)(scalars + scalars_start),
            UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * scalars_size);
 
     // remove the non-convertible points and save them to buffer
     for (const auto &idx : non_convertible_indices) {
-printf("non convertible idx: %lu", idx);
-      if ((scalars_start - (batch_num * total_num_points) <= idx) && (idx < scalars_end - (batch_num * total_num_points))) {
-        memset(ptr_device_input_scalar + UINT32_PER_INPUT_SCALAR * (idx - scalars_start), 0,
+uint64_t scalars_start_idx = scalars_start - (batch_num * total_num_points);
+uint64_t scalars_end_idx = scalars_end - (batch_num * total_num_points);
+printf("non convertible idx: %lu; start, end = %lu, %lu\n", idx, scalars_start_idx, scalars_end_idx);
+      if ((scalars_start_idx <= idx) && (idx < scalars_end_idx)) {
+        memset(ptr_device_input_scalar + UINT32_PER_INPUT_SCALAR * (idx - scalars_start_idx), 0,
                UINT32_PER_INPUT_SCALAR * sizeof(uint32_t));
-
-      non_convertible_scalars[batch_num].push_back(scalars[idx]);
       }
     }
-  }
-
-  void post_process_final_result_and_copy_to_rust_type(uint64_t b,
-                                                       g1_projective_t *out,
-                                                       int batch_num) {
-    postProcess(b % 2 == 0 ? source_kernel_output_a.data()
-                           : source_kernel_output_b.data(),
-                batch_num);
-    post_processing_values.final_result.copy_to_rust_type(*out);
   }
 
   inline void run_single_batch(g1_projective_t *out, biginteger256_t *scalars,
@@ -482,7 +477,7 @@ printf("non convertible idx: %lu", idx);
     });
 
     bench("Doing on-host postprocessing", [&]() {
-      postProcess(source_kernel_output_a.data(), batch_num);
+      postProcess(source_kernel_output_a.data(), batch_num, scalars);
       post_processing_values.final_result.copy_to_rust_type(*out);
     });
   }
@@ -502,7 +497,7 @@ printf("non convertible idx: %lu", idx);
 printf("doing postProcess(batch = %d)\n", processed_outputs);
       postProcess((processed_outputs % 2 == 0 ? source_kernel_output_a.data()
                                               : source_kernel_output_b.data()),
-                  processed_outputs);
+                  processed_outputs, scalars);
       post_processing_values.final_result.copy_to_rust_type(*out);
       processed_outputs++;
       out++;
