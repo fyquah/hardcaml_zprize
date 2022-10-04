@@ -5,7 +5,8 @@ This repo has submissions to two of the ZPrize tracks, in the `zprize` folder.
 ## Accelerating MSM Operations on FPGA
 
 We have implemented an optimized version of Pippengers algorithm for calculating
-MSM, see the [README.md](zprize/msm_pippenger/README.md) for more details.
+MSM, see the [README.md](zprize/msm_pippenger/README.md) for more details and
+instructions on building from source.
 
 The top level code for compiling an FPGA image and Verilog (using Hardcaml)
 resides in `zprize/msm_pippenger`. Underlying controller and field operations
@@ -49,10 +50,11 @@ opam install . --deps-only
 ```
 
 You might need to install extra packages (m4 gmp-devep libffi-devel
-libgmp3-dev), especially on the AWS boxes. In ubuntu, you can run
+libgmp3-dev), especially on the AWS boxes. In ubuntu you can run the following
+command. For Centos on the AWS boxes, use `sudo yum install`.
 
 ```
-sudo apt-get install m4 gmp-devel libffi-devel libgmp3-dev z3
+sudo apt-get install m4 gmp-devel libffi-devel libgmp3-dev z3 cargo
 ```
 
 To check everything installed correctly
@@ -61,6 +63,9 @@ To check everything installed correctly
 opam exec -- dune build
 opam exec -- dune runtest
 ```
+
+Now please continue to the relevant section listed [above](#zprize-submissions)
+to build the top level designs from source.
 
 # Contributing
 
