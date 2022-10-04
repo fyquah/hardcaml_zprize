@@ -1,3 +1,5 @@
+(** Instantiate [2^Config.logcores] ntt designs. *)
+
 open! Base
 open Hardcaml
 

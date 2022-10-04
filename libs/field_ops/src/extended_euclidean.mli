@@ -1,3 +1,5 @@
+(** Internal module for computing the extended euclidean algorithm. *)
+
 type t =
   { coef_x : Z.t
   ; coef_y : Z.t

@@ -17,8 +17,8 @@ module Make (Config : Top_config.S) = struct
     type 'a t =
       { clock : 'a
       ; clear : 'a
-      ; start : 'a
-      ; first_4step_pass : 'a
+      ; start : 'a (** Start running a pass. *)
+      ; first_4step_pass : 'a (** High is running the first pass. *)
       ; data_in : 'a Axi_stream.Source.t
       ; data_out_dest : 'a Axi_stream.Dest.t
       }
@@ -29,7 +29,7 @@ module Make (Config : Top_config.S) = struct
     type 'a t =
       { data_out : 'a Axi_stream.Source.t
       ; data_in_dest : 'a Axi_stream.Dest.t
-      ; done_ : 'a
+      ; done_ : 'a (** Low while processing a pass. *)
       }
     [@@deriving sexp_of, hardcaml ~rtlmangle:true]
   end
@@ -90,10 +90,18 @@ module Make (Config : Top_config.S) = struct
         ; wr_addr =
             Array.init blocks ~f:(fun _ ->
               pipe_with_keep ~n:Load_sm.write_pipelining load_sm.wr_addr)
-        ; rd_en = pipe_with_keep ~n:Store_sm.read_address_pipelining store_sm.rd_en
+        ; rd_en =
+            pipe_with_keep
+              ~enable:store_sm.rd_any
+              ~n:Store_sm.read_address_pipelining
+              store_sm.rd_en
+            &: repeat store_sm.rd_any (width store_sm.rd_en)
         ; rd_addr =
             Array.init blocks ~f:(fun _ ->
-              pipe_with_keep ~n:Store_sm.read_address_pipelining store_sm.rd_addr)
+              pipe_with_keep
+                ~enable:store_sm.rd_any
+                ~n:Store_sm.read_address_pipelining
+                store_sm.rd_addr)
         ; input_done = load_sm.done_
         ; output_done = store_sm.done_
         }
@@ -103,31 +111,32 @@ module Make (Config : Top_config.S) = struct
     { O.data_out =
         { Axi_stream.Source.tvalid = store_sm.tvalid
         ; tdata =
-            (let rd_en = store_sm.rd_en <>:. 0 in
-             (* We're assuming vivado will do some rejigging here.  We could/should
+            (* We're assuming vivado will do some rejigging here.  We could/should
                 instantiate a pipelined mux. *)
-             pipe
-               ~n:Store_sm.read_data_tree_mux_stages
-               ~enable:rd_en
-               (let qs =
-                  List.init blocks ~f:(fun index ->
-                    cores.rd_q.(index)
-                    |> Array.to_list
-                    |> concat_lsb
-                    |> pipe_with_keep ~enable:rd_en ~n:Store_sm.read_data_pipelining)
-                in
-                if Config.logblocks = 0
-                then List.nth_exn qs 0
-                else
-                  mux
-                    (pipe
-                       ~n:
-                         (Hardcaml_ntt.Core_config.ram_latency
-                         + Store_sm.read_address_pipelining
-                         + Store_sm.read_data_pipelining)
-                       ~enable:rd_en
-                       store_sm.block)
-                    qs))
+            pipe
+              ~n:Store_sm.read_data_tree_mux_stages
+              ~enable:store_sm.rd_any
+              (let qs =
+                 List.init blocks ~f:(fun index ->
+                   cores.rd_q.(index)
+                   |> Array.to_list
+                   |> concat_lsb
+                   |> pipe_with_keep
+                        ~enable:store_sm.rd_any
+                        ~n:Store_sm.read_data_pipelining)
+               in
+               if Config.logblocks = 0
+               then List.nth_exn qs 0
+               else
+                 mux
+                   (pipe
+                      ~n:
+                        (Hardcaml_ntt.Core_config.ram_latency
+                        + Store_sm.read_address_pipelining
+                        + Store_sm.read_data_pipelining)
+                      ~enable:store_sm.rd_any
+                      store_sm.block)
+                   qs)
         ; tlast = gnd
         ; tkeep = ones (num_cores * Gf.num_bits / 8)
         ; tstrb = ones (num_cores * Gf.num_bits / 8)

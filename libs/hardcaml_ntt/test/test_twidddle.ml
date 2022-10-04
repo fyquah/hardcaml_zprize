@@ -1,3 +1,5 @@
+(* Test the 4 step algorithm twiddle calculation logic. *)
+
 open Base
 open Hardcaml
 open! Hardcaml_waveterm

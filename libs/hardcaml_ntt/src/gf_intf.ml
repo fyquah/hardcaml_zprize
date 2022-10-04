@@ -1,6 +1,7 @@
 open Base
 open Hardcaml
 
+(** Goldilocks field arithmetic. *)
 module type S = sig
   type t [@@deriving sexp_of, compare, equal]
 
@@ -26,6 +27,7 @@ end
 module type Gf = sig
   module type S = S
 
+  (** Hardware implementations of the field arithmetic. *)
   module Make (Bits : Comb.S) : sig
     include S
 
@@ -44,21 +46,32 @@ module type Gf = sig
     val to_z : t -> Z.t
   end
 
+  (** Big number based reference implementation of the field arithmetic. *)
   module Z : sig
     include S
 
+    (** Display as hex. *)
     module Hex : sig
       type nonrec t = t [@@deriving sexp_of]
     end
 
     (** {2 Misc} *)
 
+    (** Invert the element *)
     val inverse : t -> t
+
+    (** Raise the element to the given integer power. *)
     val pow : t -> int -> t
+
     val pp : Formatter.t -> t -> unit
+
+    (** Create a random field element. *)
     val random : unit -> t
   end
 
+  (** Bits based hardware implementation. *)
   module Bits : module type of Make (Bits)
+
+  (** Signal based hardware implementation. *)
   module Signal : module type of Make (Signal)
 end

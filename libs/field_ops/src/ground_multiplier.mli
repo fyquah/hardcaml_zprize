@@ -1,3 +1,30 @@
+(** A full "naive" multiplication module without tricks. *)
+
+(** This module use used as the base case of more complicated recursive
+    multipliers (eg: {!Karatsuba_ofman_mult} and {!Approx_msb_multiplier})
+
+    This module offers 3 ways of implementing multipliers, which can be specified
+    by {!Config.t}, they are:
+
+    - [Verilog_multiply] - this generates a [a * b] in verilog and lets the
+    synthesizer decides how to implement it. This will usually get mapped into
+    DSPs.
+    - [Hybrid_dsp_and_luts] - this generate a hybrid multiplier where the
+    multiplier result computation is split into 2 parts, where some is done in
+    DSP and some is done in LUTs.
+    - [Mixed] - Generates a [Verilog_multiply] for multiplication between
+    unknowns. If one of the operand is a constant, it might optionally implement
+    a custom lut-based multiplier depending on its value. Read on for more info.
+
+    [Mixed] and [Hybrid_dsp_and_luts] also support a
+    [lut_only_hamming_weight_threshold] that uses LUTs-only to implement
+    multiplication when [b] is a constant and its
+    {{:https://en.wikipedia.org/wiki/Non-adjacent_form} Non-Adjacent Form}
+    has a low hamming weight. This is useful to tune LUT vs DSP trade-off in
+    designs. The multiplier implemented in LUTs uses the high-school
+    multiplication algorithm.
+*)
+
 open Hardcaml
 
 module Config : sig
@@ -10,17 +37,7 @@ module Config : sig
     | Mixed of
         { latency : int
         ; lut_only_hamming_weight_threshold : int option
-            (** Implements the ground multiplier with luts if the hamming
-             * weight of [argb] is less than
-             * lut_only_hamming_weight_threshold]. Skips this optimization if
-             * it's None.
-            *)
         ; hybrid_hamming_weight_threshold : int option
-            (** Implements the ground multiplier with a hybrid dsp+lut
-             * multiplier if the hamming weight of [argb] is less than
-             * lut_only_hamming_weight_threshold]. Skips this optimization
-             * if it's None.
-            *)
         }
     | Specialized_43_bit_multiply
   [@@deriving sexp_of]

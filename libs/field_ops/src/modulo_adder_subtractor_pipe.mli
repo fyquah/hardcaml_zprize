@@ -1,28 +1,28 @@
-(** Multistage pipelined ripple-carry-adder (or subtractor).
- *
- * This module computs [a `op1` b `op2` c `op3` d...], where each of the ops
- * are either (+) or (-) (they don't have to be the same). The output of the
- * module will contain all the results and carries of the following:
- *
- * - a `op1` b
- * - a `op1` b `op2` c
- * - a `op1` b `op2` c `op3` d
- * - ...
- *
- * The generated architecture for a single pipeline stage for summing 3 numbers
- * looks something like the following:
- *
- * > LUT > CARRY8 > LUT > CARRY8
- *           ^              ^
- * > LUT > CARRY8 > LUT > CARRY8
- *           ^              ^
- * > LUT > CARRY8 > LUT > CARRY8
- *           ^              ^
- * > LUT > CARRY8 > LUT > CARRY8
- *
- * This architecture have a different CARRY8 output for every add operation.
- * This ensures that the carry-chain have a carry-in input can be used
- * appropriately across multiple pipeline stages
+(** Multistage pipelined ripple-carry-adder (or subtractor), internally used to implement modulo_add and modulo_sub.
+
+   This module computes [a `op1` b `op2` c `op3` d...], where each of the ops
+   are either (+) or (-) (they don't have to be the same). The output of the
+   module will contain all the results and carries of the following:
+
+   - a `op1` b
+   - a `op1` b `op2` c
+   - a `op1` b `op2` c `op3` d
+   - ...
+
+   The generated architecture for a single pipeline stage for summing 3 numbers
+   looks something like the following:
+
+   {[
+  
+   > LUT > CARRY8 > LUT > CARRY8
+             ^              ^
+   > LUT > CARRY8 > LUT > CARRY8
+             ^              ^
+   > LUT > CARRY8 > LUT > CARRY8
+             ^              ^
+   > LUT > CARRY8 > LUT > CARRY8
+
+   ]}
 *)
 
 open Hardcaml

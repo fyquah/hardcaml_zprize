@@ -1,3 +1,9 @@
+(** Modulo multiplication with barrett reduction. *)
+
+(** Please see the documentation in {!Barrett_reduction} for more
+   information.
+*)
+
 open Base
 open Hardcaml
 

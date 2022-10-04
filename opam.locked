@@ -36,9 +36,11 @@ depends: [
   "expect_test_helpers_core" {= "v0.15.0"}
   "fieldslib" {= "v0.15.0"}
   "fix" {= "20220121"}
+  "fmt" {= "0.9.0"}
   "fpath" {= "0.7.3"}
   "hardcaml" {= "v0.15.0"}
   "hardcaml_circuits" {= "v0.15.0"}
+  "hardcaml_step_testbench" {= "v0.15.0"}
   "hardcaml_verify" {= "v0.15.0"}
   "hardcaml_verilator" {= "v0.15.0"}
   "hardcaml_waveterm" {= "v0.15.0"}
@@ -61,11 +63,12 @@ depends: [
   "ocaml_intrinsics" {= "v0.15.2"}
   "ocamlbuild" {= "0.14.1"}
   "ocamlfind" {= "1.9.3"}
-  "ocamlformat" {= "0.24.1"}
+  "ocamlformat" {= "0.23.0"}
   "ocb-stubblr" {= "0.1.1-1"}
   "ocp-indent" {= "1.8.1"}
   "ocplib-endian" {= "1.2"}
-  "odoc-parser" {= "2.0.0"}
+  "odoc" {= "2.1.1"}
+  "odoc-parser" {= "1.0.1"}
   "parsexp" {= "v0.15.0"}
   "ppx_assert" {= "v0.15.0"}
   "ppx_base" {= "v0.15.0"}
@@ -118,6 +121,7 @@ depends: [
   "topkg" {= "1.0.5"}
   "topological_sort" {= "v0.15.0"}
   "typerep" {= "v0.15.0"}
+  "tyxml" {= "4.5.0"}
   "uchar" {= "0.0.2"}
   "uucp" {= "14.0.0"}
   "uuseg" {= "14.0.0"}

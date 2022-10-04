@@ -1,3 +1,5 @@
+(** Internal module to arbitrate access to an expensive resource. *)
+
 open Hardcaml
 open Signal
 
