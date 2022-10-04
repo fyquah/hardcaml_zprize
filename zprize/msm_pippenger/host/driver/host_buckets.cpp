@@ -13,17 +13,15 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-#include "xcl2.hpp"
-
-#include "bls12_377_g1/bls12_377_g1.h"
-
 #include <experimental/xrt_device.h>
 #include <experimental/xrt_kernel.h>
 
+#include <chrono>
 #include <fstream>
 #include <vector>
 
-#include <chrono>
+#include "bls12_377_g1/bls12_377_g1.h"
+#include "xcl2.hpp"
 using namespace std::chrono;
 
 #define BITS_PER_INPUT_POINT 384 * 3  // 377, but aligned to 64
@@ -32,10 +30,13 @@ using namespace std::chrono;
 #define DDR_BITS 512
 
 // We round up our points to the nearest multiple of the AXI stream / DDR
-#define BYTES_PER_INPUT_POINT (((BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
-#define BYTES_PER_SCALAR_INPUT (((SCALAR_BITS + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_INPUT_POINT \
+  (((BITS_PER_INPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_SCALAR_INPUT \
+  (((SCALAR_BITS + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 #define SCALARS_PER_DDR_WORD (DDR_BITS / SCALAR_BITS)
-#define BYTES_PER_OUTPUT (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
+#define BYTES_PER_OUTPUT \
+  (((BITS_PER_OUTPUT_POINT + DDR_BITS - 1) / DDR_BITS) * DDR_BITS) / 8
 
 class LogTimeTaken {
  private:
@@ -43,7 +44,8 @@ class LogTimeTaken {
   std::chrono::time_point<std::chrono::steady_clock> start;
 
  public:
-  LogTimeTaken(const char* descr) : descr(descr), start(std::chrono::steady_clock::now()) {}
+  LogTimeTaken(const char* descr)
+      : descr(descr), start(std::chrono::steady_clock::now()) {}
 
   ~LogTimeTaken() {
     auto end = std::chrono::steady_clock::now();
@@ -74,20 +76,23 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
     ;
   input_points_file.close();
 
-  for (num_scalar_words = 0; std::getline(input_scalars_file, line); num_scalar_words++)
+  for (num_scalar_words = 0; std::getline(input_scalars_file, line);
+       num_scalar_words++)
     ;
   input_scalars_file.close();
 
   if (((num_points + 1) / 2) != num_scalar_words)
     throw "Invalid point/scalar inputs: (num_scalar_words, num_points) = (" +
-        std::to_string(num_scalar_words) + ", " + std::to_string(num_points) + ")\n";
+        std::to_string(num_scalar_words) + ", " + std::to_string(num_points) +
+        ")\n";
 
-  for (num_output_points = 0; std::getline(output_file, line); num_output_points++)
+  for (num_output_points = 0; std::getline(output_file, line);
+       num_output_points++)
     ;
   output_file.close();
 
-  printf("Running MSM with [%i] input points and [%i] output points\n", num_points,
-         num_output_points);
+  printf("Running MSM with [%i] input points and [%i] output points\n",
+         num_points, num_output_points);
 
   auto input_points_size = (BYTES_PER_INPUT_POINT * num_points) / 4;
   auto input_scalars_size = (num_scalar_words * (512 / 8)) / 4;
@@ -106,15 +111,18 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
   size_t vector_input_scalars_size_bytes = sizeof(int) * input_scalars_size;
   size_t vector_output_size_bytes = sizeof(int) * output_size;
 
-  std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input_points(input_points_size);
-  std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_input_scalars(
-      input_scalars_size);
-  std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(output_size);
+  std::vector<uint32_t, aligned_allocator<uint32_t> >
+      source_kernel_input_points(input_points_size);
+  std::vector<uint32_t, aligned_allocator<uint32_t> >
+      source_kernel_input_scalars(input_scalars_size);
+  std::vector<uint32_t, aligned_allocator<uint32_t> > source_kernel_output(
+      output_size);
   memset(source_kernel_input_points.data(), 0,
          sizeof(uint32_t) * source_kernel_input_points.size());
   memset(source_kernel_input_scalars.data(), 0,
          sizeof(uint32_t) * source_kernel_input_scalars.size());
-  memset(source_kernel_output.data(), 0, sizeof(uint32_t) * source_kernel_output.size());
+  memset(source_kernel_output.data(), 0,
+         sizeof(uint32_t) * source_kernel_output.size());
 
   // Load input points from the test file
   input_points_file.open(input_points);
@@ -146,8 +154,6 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
     input_scalars_file.close();
   }
 
-
-
   // OPENCL HOST CODE AREA START
   // Create Program and Kernel
   auto devices = xcl::get_xil_devices();
@@ -161,21 +167,25 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
   for (unsigned int i = 0; i < devices.size(); i++) {
     auto device = devices[i];
     // Creating Context and Command Queue for selected Device
-    OCL_CHECK(err, context = cl::Context(device, nullptr, nullptr, nullptr, &err));
-    OCL_CHECK(err, q = cl::CommandQueue(
-                       context, device,
-                       CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE | CL_QUEUE_PROFILING_ENABLE, &err));
+    OCL_CHECK(err,
+              context = cl::Context(device, nullptr, nullptr, nullptr, &err));
+    OCL_CHECK(err, q = cl::CommandQueue(context, device,
+                                        CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE |
+                                            CL_QUEUE_PROFILING_ENABLE,
+                                        &err));
 
-    std::cout << "Trying to program device[" << i << "]: " << device.getInfo<CL_DEVICE_NAME>()
-              << std::endl;
+    std::cout << "Trying to program device[" << i
+              << "]: " << device.getInfo<CL_DEVICE_NAME>() << std::endl;
     cl::Program program(context, {device}, bins, nullptr, &err);
     if (err != CL_SUCCESS) {
       std::cout << "Failed to program device[" << i << "] with xclbin file!\n";
     } else {
       std::cout << "Device[" << i << "]: program successful!\n";
       OCL_CHECK(err, krnl_mm2s_points = cl::Kernel(program, "krnl_mm2s", &err));
-      OCL_CHECK(err, krnl_mm2s_scalars = cl::Kernel(program, "krnl_mm2s", &err));
-      OCL_CHECK(err, krnl_msm_pippenger = cl::Kernel(program, "krnl_msm_pippenger", &err));
+      OCL_CHECK(err,
+                krnl_mm2s_scalars = cl::Kernel(program, "krnl_mm2s", &err));
+      OCL_CHECK(err, krnl_msm_pippenger =
+                         cl::Kernel(program, "krnl_msm_pippenger", &err));
       OCL_CHECK(err, krnl_s2mm = cl::Kernel(program, "krnl_s2mm", &err));
       valid_device = true;
       break;  // we break because we found a valid device
@@ -187,16 +197,19 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
   }
 
   // Allocate Buffer in Global Memory
-  OCL_CHECK(err, cl::Buffer buffer_input_points(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-                                                vector_input_points_size_bytes,
-                                                source_kernel_input_points.data(), &err));
-  OCL_CHECK(err, cl::Buffer buffer_input_scalars(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-                                                 vector_input_scalars_size_bytes,
-                                                 source_kernel_input_scalars.data(), &err));
+  OCL_CHECK(err, cl::Buffer buffer_input_points(
+                     context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+                     vector_input_points_size_bytes,
+                     source_kernel_input_points.data(), &err));
+  OCL_CHECK(err, cl::Buffer buffer_input_scalars(
+                     context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+                     vector_input_scalars_size_bytes,
+                     source_kernel_input_scalars.data(), &err));
 
   OCL_CHECK(err,
-            cl::Buffer buffer_output(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
-                                     vector_output_size_bytes, source_kernel_output.data(), &err));
+            cl::Buffer buffer_output(
+                context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
+                vector_output_size_bytes, source_kernel_output.data(), &err));
 
   // Set the "Kernel 0" Arguments
   OCL_CHECK(err, err = krnl_mm2s_points.setArg(0, buffer_input_points));
@@ -214,14 +227,16 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
 
   // Copy input data to device global memory
   bench("Copying points to gmem", [&]() {
-    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input_points}, 0 /* 0 means from host*/,
-                                                    nullptr));
+    OCL_CHECK(err,
+              err = q.enqueueMigrateMemObjects(
+                  {buffer_input_points}, 0 /* 0 means from host*/, nullptr));
     OCL_CHECK(err, err = q.finish());
   });
 
   bench("Copying scalars to gmem", [&]() {
-    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input_scalars},
-                                                    0 /* 0 means from host*/, nullptr));
+    OCL_CHECK(err,
+              err = q.enqueueMigrateMemObjects(
+                  {buffer_input_scalars}, 0 /* 0 means from host*/, nullptr));
     OCL_CHECK(err, err = q.finish());
   });
 
@@ -241,7 +256,8 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
 
   bench("Copying results back from gmem", [&]() {
     // Copy Result from Device Global Memory to Host Local Memory
-    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_output}, CL_MIGRATE_MEM_OBJECT_HOST));
+    OCL_CHECK(err, err = q.enqueueMigrateMemObjects(
+                       {buffer_output}, CL_MIGRATE_MEM_OBJECT_HOST));
     OCL_CHECK(err, err = q.finish());
   });
 
@@ -284,7 +300,8 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
 
       if (!(fpga == expected)) {
         failed = 1;
-        std::cout << "Bucket " << point / (BYTES_PER_OUTPUT / 4) << "failed:" << std::endl;
+        std::cout << "Bucket " << point / (BYTES_PER_OUTPUT / 4)
+                  << "failed:" << std::endl;
         std::cout << "q:\n";
         gmp_printf("q: %#Zx\n", bls12_377_g1::q);
         std::cout << "FPGA:\n";
@@ -320,7 +337,8 @@ int test_streaming(const std::string& binaryFile, std::string& input_points,
 int main(int argc, char** argv) {
   if (argc != 5) {
     std::cout << "Usage: " << argv[0]
-              << " <XCLBIN File> <INPUT POINT File> <INPUT SCALAR File> <OUTPUT POINT File>"
+              << " <XCLBIN File> <INPUT POINT File> <INPUT SCALAR File> "
+                 "<OUTPUT POINT File>"
               << std::endl;
     return EXIT_FAILURE;
   }
