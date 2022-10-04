@@ -123,6 +123,7 @@ class GFq {
 
   ~GFq() { mpz_clear(v); }
 
+  GFq &operator=(const GFq &) = delete;
   // arithmetic
   void divBy2() {
     bool even = mpz_divisible_2exp_p(v, 1);
@@ -210,7 +211,11 @@ class GFq {
 
   bool operator==(const GFq &other) const { return mpz_cmp(v, other.v) == 0; }
 
+  bool operator==(const int &other) const { return mpz_cmp_si(v, other) == 0; }
+
   bool operator!=(const GFq &other) const { return mpz_cmp(v, other.v) != 0; }
+
+  bool operator!=(const int &other) const { return mpz_cmp_si(v, other) != 0; }
 };
 
 // parameter constants
@@ -292,7 +297,18 @@ class Xyzt {
       : x(words_x), y(words_y), z(words_z), t(words_t) {}
 
   Xyzt() : Xyzt(ZERO_WORDS, ONE_WORDS, ONE_WORDS, ZERO_WORDS) {}
-  Xyzt(const Xyzt &other) : x(other.x), y(other.y), z(other.z), t(other.t) {}
+  Xyzt(const Xyzt &other) : x(other.x), y(other.y), z(other.z), t(other.t) {
+    // printf(" *** RAHUL: construct from another\n");
+    // fflush(stdout);
+  }
+
+  Xyzt &operator=(const Xyzt &) = delete;
+  void set(const Xyzt &other) {
+    x.set(other.x);
+    y.set(other.y);
+    z.set(other.z);
+    t.set(other.t);
+  }
 
   void set_32b(const uint32_t words_x[], const uint32_t words_y[],
                const uint32_t words_z[], const uint32_t words_t[]) {
@@ -314,12 +330,14 @@ class Xyzt {
 
   bool is_z_zero() const { return mpz_cmp_si(z.v, 0) == 0; }
 
-  void setToIdentity() {
+  void setToTwistedEdwardsIdentity() {
     x.set(ZERO_WORDS);
     y.set(ONE_WORDS);
     z.set(ONE_WORDS);
     t.set(ZERO_WORDS);
   }
+
+  void setToWeierstrassInfinity() { z.set(ZERO_WORDS); }
 
   // conversions
   void twistedEdwardsAffineToExtended() {
@@ -327,10 +345,18 @@ class Xyzt {
     t.set_mul(x, y);
   }
   void twistedEdwardsExtendedToAffine() {
-    x.set_div(x, z);
-    y.set_div(y, z);
-    z.set(ONE_WORDS);
-    t.set(ZERO_WORDS);
+    if (z == 0) {
+      printf("z = 0 in twisted edwards extended; something went wrong?\n");
+      x.set(ZERO_WORDS);
+      y.set(ONE_WORDS);
+      z.set(ONE_WORDS);
+      t.set(ZERO_WORDS);
+    } else {
+      x.set_div(x, z);
+      y.set_div(y, z);
+      z.set(ONE_WORDS);
+      t.set(ZERO_WORDS);
+    }
   }
   void affineWeierstrassToMontgomery() {
     x.set_sub(x, weierstrass_params.alpha);
@@ -344,40 +370,80 @@ class Xyzt {
     x.set_div(x, montgomery_params.c_B);
     x.set_add(x, temp);
     y.set_div(y, montgomery_params.c_B);
+    z.set(ONE_WORDS);
   }
 
-  void affineMontgomeryToTwistedEdwards() {
+  // if the mapping is not possible, leave the point unchanged and return false.
+  bool affineMontgomeryToTwistedEdwards() {
     GFq temp1, temp2, temp3;
     temp3.set_mul(twisted_scale, x);
     temp1.set_sub(x, one);
     temp2.set_add(x, one);
+    if ((y == 0) || (temp2 == 0)) {
+      return false;
+    }
     x.set_div(temp3, y);
     y.set_div(temp1, temp2);
+    return true;
   }
-  void affineTwistedEdwardsToMontgomery() {
+  bool affineTwistedEdwardsToMontgomery() {
     GFq temp1, temp2;
     temp1.set_add(one, y);
     temp2.set_sub(one, y);
+    if (((temp2 == 0) || (x == 0))) {
+      // printf("Twisted Edwards -> Montgomery Undefined; Infinity!\n");
+      return false;
+    }
     temp1.set_div(temp1, temp2);
     temp2.set_div(twisted_scale, x);
     x.set(temp1);
     y.set_mul(temp1, temp2);
+    return true;
   }
 
-  // preprocess function
-  void affineWeierstrassToExtendedTwistedEdwards() {
+  // preprocess function - if the point cannot be converted to twisted edwards
+  // form, leave it unchanged and return false.
+  bool affineWeierstrassToExtendedTwistedEdwards() {
     affineWeierstrassToMontgomery();
-    affineMontgomeryToTwistedEdwards();
+    bool convertable = affineMontgomeryToTwistedEdwards();
+    if (!convertable) {
+      affineMontgomeryToWeierstrass();
+      return false;
+    }
     twistedEdwardsAffineToExtended();
+    return true;
   }
   // postprocess function
   void extendedTwistedEdwardsToWeierstrass() {
     twistedEdwardsExtendedToAffine();
-    affineTwistedEdwardsToMontgomery();
+    bool convertible = affineTwistedEdwardsToMontgomery();
+    if (!convertible) {
+      setToWeierstrassInfinity();
+    } else {
+      affineMontgomeryToWeierstrass();
+    }
+  }
+
+  void extendedTwistedEdwardsToWeierstrassInMontgomerySpace() {
+    twistedEdwardsExtendedToAffine();
+    bool convertible = affineTwistedEdwardsToMontgomery();
+    if (!convertible) {
+      setToWeierstrassInfinity();
+      return;
+    }
+
     affineMontgomeryToWeierstrass();
     x.set_mul(x, COFACTOR);
     y.set_mul(y, COFACTOR);
     z.set(COFACTOR);
+  }
+
+  void weistrassValuesInMontgomerySpace() {
+    if (z != 0) {
+      x.set_mul(x, COFACTOR);
+      y.set_mul(y, COFACTOR);
+      z.set(COFACTOR);
+    }
   }
 
   void generalUnifiedAddInto(const Xyzt &other,
@@ -424,6 +490,81 @@ class Xyzt {
     z.set_mul(F, G);
   }
 
+  void weierstrassDoubleInPlace() {
+    if (z == 0) {  // point at infinity stays at infinity
+      return;
+    }
+    GFq t1, t2, t3, t4;
+    // point doubling
+    t1.set_mul(three, x);
+    t1.set_mul(t1, x);
+    t1.set_add(t1, weierstrass_params.a);
+    t2.set_mul(two, y);
+    if (t2 == 0) {  // result is infinity
+      setToWeierstrassInfinity();
+      return;
+    }
+    t3.set_div(t1, t2);  // t3 = (3 * x1^2 + a) / (2 * y1)
+
+    t2.set_add(x, x);
+    t2.set_add(t2, x);  // t2 = (2 * x1 + x1)
+    t2.set_mul(t2, t3); // t2 = t2 * t3
+
+    t4.set_mul(t3, t3);  // t4 = (3 * x1^2 + a)^2 / (2 * y1)^2
+    t1.set_sub(t4, x);   // t1 = t4 - x1
+    t1.set_sub(t1, x);   // t1 = t1 - x1
+
+    t3.set_mul(t3, t4);  // t3 = t3 * t4 = (3 * x1^2 + a)^3 / (2 * y1)^3
+    t2.set_sub(t2, t3);  // t2 = t2 - t3
+    t2.set_sub(t2, y);   // t2 = t2 - y1
+
+    x.set(t1);
+    y.set(t2);
+  }
+
+  void weierstrassAddition(const Xyzt &other) {
+    // https://hyperelliptic.org/EFD/g1p/auto-shortw.html
+    if (z == 0) {  // adding to identity results in other
+      x.set(other.x);
+      y.set(other.y);
+      z.set(other.z);
+      t.set(other.t);
+      return;
+    }
+
+    GFq t1, t2, t3, t4;
+    if (other == *this) {
+      weierstrassDoubleInPlace();
+    } else if (other.z == 0) {
+      // other is infinity, do nothing
+    } else {
+      // point addition
+      // compute x
+      t1.set_sub(other.y, y);
+      t2.set_sub(other.x, x);
+      if (t2 == 0) {
+        setToWeierstrassInfinity();
+        return;
+      }
+      t3.set_div(t1, t2);  // (y2 - y1) / (x2 - x1)
+
+      t2.set_add(x, x);
+      t2.set_add(t2, other.x);  // (2 * x1 + x2)
+      t2.set_mul(t3, t2);
+
+      t4.set_mul(t3, t3);
+      t1.set_sub(t4, x);
+      t1.set_sub(t1, other.x);  // x3
+
+      t3.set_mul(t3, t4);
+      t2.set_sub(t2, t3);
+      t2.set_sub(t2, y);
+
+      x.set(t1);
+      y.set(t2);
+    }
+  }
+
   void generalUnifiedAddInto(const Xyzt &other) {
     GeneralUnifiedAddIntoTemps temps;
     generalUnifiedAddInto(other, temps);
@@ -463,7 +604,7 @@ class Xyzt {
   }
 
   void preComputeFPGA(GeneralUnifiedAddIntoTemps &temps) {
-    // (x, y, z, t) -> (2(y-x),2(y+x),4d*t)
+    // (x, y, z, t) -> ((y-x)/2,(y+x)/2,4d*t)
     GFq &temp = temps.temp1;
 
     temp.set_sub(y, x);
@@ -502,28 +643,19 @@ class Xyzt {
     t.dumpToWords("t");
   }
 
-  void copy_from_rust_type(const g1_affine_t &affine) {
+  bool copy_from_rust_type(const g1_affine_t &affine) {
     if (affine.infinity) {
       // Special representation for infinity in the twisted edwards curve
-      x.set(ZERO_WORDS);
-      y.set(ONE_WORDS);
-      t.set(ZERO_WORDS);
-      z.set(ONE_WORDS);
-      return;
+      setToTwistedEdwardsIdentity();
+      return true;
     }
 
-    // TODO(fyquah): Handle infinities
+    // import the affine weierstrass representation
     x.set((uint64_t *)affine.x.data);
     x.set_div(x, COFACTOR);
     y.set((uint64_t *)affine.y.data);
     y.set_div(y, COFACTOR);
-
-    // printf("\n\nINITIAL POINT IN C++ -----------------\n");
-    // dump();
-    // println_hex();
-    // printf("\n\n--------------------------------------\n");
-
-    affineWeierstrassToExtendedTwistedEdwards();
+    return affineWeierstrassToExtendedTwistedEdwards();
   }
 
   void copy_to_fpga_buffer(uint32_t *b) {
@@ -534,16 +666,20 @@ class Xyzt {
 
   void copy_to_rust_type(g1_projective_t &projective) {
     // printf("FINAL RESULT, COPYING TO RUST\n");
+    // fflush(stdout);
     // println();
     // println_hex();
     // dump();
 
     // printf("\n\n normalized point\n\n");
-    Xyzt temp;
-    temp.x.set_div(x, z);
-    temp.y.set_div(y, z);
-    temp.z.set(ONE_WORDS);
-    temp.t.set(ZERO_WORDS);
+    if (z != 0) {
+      // if z = 0, then it'll just be the identity
+      Xyzt temp;
+      temp.x.set_div(x, z);
+      temp.y.set_div(y, z);
+      temp.z.set(ONE_WORDS);
+      temp.t.set(ZERO_WORDS);
+    }
     // temp.println_hex();
     // temp.dump();
     // printf("\nPARAMS\n");
@@ -561,6 +697,49 @@ class Xyzt {
     return x != other.x || y != other.y || z != other.z || t != other.t;
   }
 };
+
+void weierstrassMultiplication(Xyzt &base, const biginteger256_t &scalar) {
+  Xyzt temp;
+  temp.set(base);
+  base.setToWeierstrassInfinity();
+
+  // printf("    ** RAHUL: doing multiplication: %p\n", &base);
+  // fflush(stdout);
+  // printf("    ** RAHUL: setting temp: %p\n", &base);
+  // fflush(stdout);
+  // temp.set(base);
+  // printf("    ** RAHUL: created multiplication temp\n");
+  // fflush(stdout);
+
+  for (int i = 0; i < SCALAR_NUM_BITS; i++) {
+    // printf("%d ", i);
+    // if (i % 32 == 0) printf("\n");
+    if (scalar.getBit(i)) {
+      base.weierstrassAddition(temp);
+    }
+    temp.weierstrassDoubleInPlace();
+  }
+  // printf("DONE \n");
+  // fflush(stdout);
+}
+
+void weierstrassMultiplyAndAdd(Xyzt &base, const Xyzt &point,
+                               const biginteger256_t &scalar) {
+  static Xyzt temp;
+  temp.set(point);
+
+  // printf(" ** RAHUL : MaA created temp: %p\n", &temp);
+  // fflush(stdout);
+  // temp.println();
+
+  weierstrassMultiplication(temp, scalar);
+  // printf(" ** RAHUL : MaA did multiplication\n");
+  // fflush(stdout);
+
+  base.weierstrassAddition(temp);
+  // printf(" ** RAHUL : MaA completed\n");
+  // fflush(stdout);
+}
 
 }  // namespace bls12_377_g1
 

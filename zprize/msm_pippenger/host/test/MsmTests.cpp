@@ -15,7 +15,7 @@ TEST(PointArithmetic, Add) {
   a.t.set_mul(a.t, a.z);
 
   bls12_377_g1::Xyzt b;
-  b.setToIdentity();
+  b.setToTwistedEdwardsIdentity();
   a.println();
 
   for (int i = 0; i < 10; i++) {

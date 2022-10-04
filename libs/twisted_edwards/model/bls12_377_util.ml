@@ -14,7 +14,7 @@ let modulo_inverse x =
   let { Extended_euclidean.coef_x; coef_y = _; gcd } =
     Extended_euclidean.extended_euclidean ~x ~y:p
   in
-  assert (Z.equal gcd Z.one);
+  if not (Z.equal gcd Z.one) then raise_s [%message "Error computing modulo inverse!"];
   let ret = Z.(coef_x mod p) in
   let ret = if Z.lt ret Z.zero then Z.(ret + p) else ret in
   if not (Z.gt ret (Z.of_int (-1)) && Z.lt ret p)
