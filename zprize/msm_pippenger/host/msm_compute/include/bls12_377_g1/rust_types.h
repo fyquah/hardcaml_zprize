@@ -8,10 +8,18 @@
 struct biginteger256_t {
   uint64_t data[4];
 
+
+  biginteger256_t& operator=(const biginteger256_t&) = delete;
+biginteger256_t(const biginteger256_t &other) {
+printf("copying bigint256\n");
+for(int i =0; i <4; i++) data[i] = other.data[i];
+//memcpy(data, other.data, sizeof(data));
+
+}
   inline uint64_t &operator[](uint64_t i) { return data[i]; }
 
-  inline uint64_t getBit(uint64_t i) {
-    std::cout << "getBit" << std::endl;
+  inline uint64_t getBit(uint64_t i) const {
+    // std::cout << "getBit" << std::endl;
     return (data[i / 64] >> (i % 64)) & 1;
   }
 

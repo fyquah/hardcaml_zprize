@@ -97,6 +97,79 @@ let ark_bls12_377_g1_to_twisted_edewards_affine p1 =
       { x = Ark_bls12_377_g1.x p1; y = Ark_bls12_377_g1.y p1 }
 ;;
 
+let%expect_test "Show all points that can't be represented in twisted edwards form" =
+  let weierstrass_params = Lazy.force Bls12_377_params.weierstrass in
+  let montgomery_params = C.weierstrass_params_to_montgomery_params weierstrass_params in
+  let _twisted_edwards_params =
+    C.montgomery_params_to_twisted_edwards_params montgomery_params
+  in
+  let invalid_x =
+    modulo_sub
+      (modulo_add weierstrass_params.alpha p)
+      (modulo_inverse weierstrass_params.s)
+  in
+  let invalid_y = Z.zero in
+  printf "There is no twisted edwards representation when either:\n";
+  printf "    x = 0x%s\n" (Z.format "x" invalid_x);
+  printf " OR y = 0x%s\n" (Z.format "x" invalid_y);
+  [%expect
+    {|
+    There is no twisted edwards representation when either:
+        x = 0x32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc00
+     OR y = 0x0 |}];
+  (* The weistrass formulae is of the form y^2 = x^3 + 1
+     
+     As a corollary, there is really only 5 of these invalid points possible in
+     this finite field.
+   *)
+  let invalid_points =
+    let when_x_is_invalid =
+      let y_squared = Modulo_ops.(modulo_pow invalid_x (of_int 3) + of_int 1) in
+      let y1, y2 = Toneli_shank.tonelli_shank ~p y_squared |> Option.value_exn in
+      [ { Weierstrass_curve.x = invalid_x; y = y1 }
+      ; { Weierstrass_curve.x = invalid_x; y = y2 }
+      ]
+    in
+    (* TODO(fyquah): Also print the remaining 2 points .. *)
+    let when_y_is_invalid =
+      let y = invalid_y in
+      [ { Weierstrass_curve.x = Z.( - ) p Z.one; y } ]
+    in
+    when_x_is_invalid @ when_y_is_invalid
+  in
+  Stdio.printf "All points that can't be represented in twisted edwards form:\n";
+  List.iter invalid_points ~f:(fun p ->
+    Stdio.printf "- x = 0x%s\n" (Z.format "x" p.x);
+    Stdio.printf "  y = 0x%s\n\n" (Z.format "x" p.y));
+  [%expect
+    {|
+    All points that can't be represented in twisted edwards form:
+    - x = 0x32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc00
+      y = 0x6e4b66bb23ef4bef715f597162d6662d8161cd062d6212d39392e17232444a0760b5dc479db98123ab3887aa3cb34e
+
+    - x = 0x32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc00
+      y = 0x13feedf5ca1219ed6c9a666fb3e72d4eca17825fac7b17c4b5fcf4e47d703b60faaa767e862467f615d877855c34cb3
+
+    - x = 0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000000
+      y = 0x0 |}];
+  (* Make sure that we can't convert any of them to weistrass, and validate
+   * that they are indeed validate affine points.
+   *)
+  List.iter invalid_points ~f:(fun p ->
+    assert (
+      Ark_bls12_377_g1.is_on_curve (Ark_bls12_377_g1.create ~x:p.x ~y:p.y ~infinity:false));
+    Expect_test_helpers_core.require_does_raise [%here] (fun () ->
+      ignore
+        (ark_bls12_377_g1_to_twisted_edewards_affine
+           (Ark_bls12_377_g1.create ~x:p.x ~y:p.y ~infinity:false)
+          : Twisted_edwards_curve.affine)));
+  [%expect
+    {|
+    "Error computing modulo inverse!"
+    "Error computing modulo inverse!"
+    "Error computing modulo inverse!" |}]
+;;
+
 let generate_fp_not_zero = generate_z ~lo_incl:Z.one ~hi_incl:Z.(p - one)
 
 let generate_z_factor =
@@ -214,10 +287,10 @@ let randomized_sum_test ~host_precompute =
                generate_point
         ~else_:
           ((* Exercise various odd cases in this test:
-               - p1 + O
-               - p1 + p1
-               - p1 + (-p1)
-            *)
+              - p1 + O
+              - p1 + p1
+              - p1 + (-p1)
+           *)
            generate_with_probability
              ~p:0.30
              ~then_:(return pidentity)

@@ -2,16 +2,18 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-use ark_ff::BigInteger256;
 use ark_ec::ProjectiveCurve;
+use ark_ff::BigInteger256;
+
+use serial_test::serial;
+use std::str::FromStr;
+use std::time::SystemTime;
 
 #[allow(unused_imports)]
 use blst_msm::*;
 
-use std::str::FromStr;
-use std::time::SystemTime;
-
 #[test]
+#[serial]
 fn msm_correctness() {
     let (batches, points, scalars, arkworks_results) = util::generate_or_load_test_data();
     let mut context = multi_scalar_mult_init(points.as_slice());

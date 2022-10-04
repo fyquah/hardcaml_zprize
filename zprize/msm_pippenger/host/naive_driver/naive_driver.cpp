@@ -24,7 +24,7 @@ class ZprizeMsmFpgaDriver {
   void naive_msm(g1_projective_t *out, biginteger256_t *scalars) {
     bls12_377_g1::init();
     bls12_377_g1::Xyzt ans;
-    ans.setToIdentity();
+    ans.setToTwistedEdwardsIdentity();
     for (size_t i = 0; i < numPoints(); i++) {
       std::cout << "POINT " << i << std::endl;
       std::cout << "SCALAR[" << i << "] = ";
@@ -50,7 +50,7 @@ class ZprizeMsmFpgaDriver {
   void pippenger_msm(g1_projective_t *out, biginteger256_t *scalars) {
     bls12_377_g1::init();
     bls12_377_g1::Xyzt final_result;
-    final_result.setToIdentity();
+    final_result.setToTwistedEdwardsIdentity();
 
     bls12_377_g1::Xyzt accum, running;
     bls12_377_g1::GeneralUnifiedAddIntoTemps temps;
@@ -63,7 +63,7 @@ class ZprizeMsmFpgaDriver {
 
       // compute bucket sums (model fpga)
       std::vector<bls12_377_g1::Xyzt> bucket_sums(CUR_NUM_BUCKETS);
-      for (auto &pt : bucket_sums) pt.setToIdentity();
+      for (auto &pt : bucket_sums) pt.setToTwistedEdwardsIdentity();
       for (size_t pt_idx = 0; pt_idx < numPoints(); pt_idx++) {
         const uint64_t bucket =
             scalars[pt_idx].getSlice(bit_offset, CUR_WINDOW_LEN);
@@ -72,8 +72,8 @@ class ZprizeMsmFpgaDriver {
       }
 
       // perform triangle sum
-      accum.setToIdentity();
-      running.setToIdentity();
+      accum.setToTwistedEdwardsIdentity();
+      running.setToTwistedEdwardsIdentity();
       for (int bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 1;
            bucket_idx--) {
         bls12_377_g1::triangleSumUpdate(accum, running, bucket_sums[bucket_idx],

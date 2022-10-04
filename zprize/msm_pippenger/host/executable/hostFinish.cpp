@@ -11,8 +11,8 @@ int main() {
 
   int bit_offset = 0;
   for (int window_idx = 0; window_idx < bls12_377_g1::NUM_WINDOWS; window_idx++) {
-    accum.setToIdentity();
-    running.setToIdentity();
+    accum.setToTwistedEdwardsIdentity();
+    running.setToTwistedEdwardsIdentity();
     for (int bucket_idx = bls12_377_g1::NUM_BUCKETS(window_idx) - 1; bucket_idx >= 0;
          bucket_idx--) {
       bls12_377_g1::Xyzt p;

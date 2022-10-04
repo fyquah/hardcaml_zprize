@@ -12,15 +12,20 @@ use ark_bls12_377::G1Affine;
 use ark_bls12_377::FrParameters;
 use ark_ec::msm::VariableBaseMSM;
 use ark_ff::BigInteger256;
+use ark_ff::BigInteger384;
 use ark_ff::Fp256;
+use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use ark_serialize::CanonicalDeserialize;
+
+use num_bigint::BigUint;
 
 use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
 
 use std::time::SystemTime;
+use std::convert::TryFrom;
 
 pub fn generate_points_scalars<G: AffineCurve>(
     len: usize,
@@ -46,6 +51,21 @@ pub fn generate_points_scalars<G: AffineCurve>(
         .collect::<Vec<_>>();
 
     (points, scalars)
+}
+
+pub fn create_g1_affine_from_string(x: &[u8], y: &[u8]) -> G1Affine {
+    let x_biguint = BigUint::parse_bytes(x, 16).unwrap();
+    let y_biguint = BigUint::parse_bytes(y, 16).unwrap();
+
+    G1Affine::new(
+        <G1Affine as AffineCurve>::BaseField::from_repr(
+            BigInteger384::try_from(x_biguint).unwrap()
+        ).unwrap(),
+        <G1Affine as AffineCurve>::BaseField::from_repr(
+            BigInteger384::try_from(y_biguint).unwrap()
+        ).unwrap(),
+        false
+    )
 }
 
 pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParameters>>, Vec<G1Affine>) {
@@ -79,7 +99,16 @@ pub fn generate_or_load_test_data() -> (usize, Vec<G1Affine>, Vec<Fp256<FrParame
                 } else {
                     println!("Testing with randomly generated inputs");
                     let mut arkworks_results = Vec::new();
-                    let (points, scalars) = generate_points_scalars::<G1Affine>(1usize << npoints_npow, batches);
+                    let (mut points, scalars) = generate_points_scalars::<G1Affine>(1usize << npoints_npow, batches);
+
+                    if std::env::var("TEST_INSERT_BAD_POINTS") == Ok(String::from("1")) {
+                        println!("Inserting some bad points into the array!");
+                        points[0] = create_g1_affine_from_string(
+                            b"32d756062d349e59416ece15ccbf8e86ef0d33183465a42fe2cb65fc1664272e6bb28f0e1c7a7c9c05824ad09adc000",
+                            b"6e4b66bb23ef4bef715f597162d6662d8161cd062d6212d39392e17232444a0760b5dc479db98123ab3887aa3cb34e"
+                        );
+                    }
+
                     for b in 0..batches {
                         let start = b * points.len();
                         let end = (b + 1) * points.len();
