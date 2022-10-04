@@ -121,9 +121,9 @@ class GFq {
     mpz_set(v, other.v);
   }
 
-  ~GFq() {  mpz_clear(v); }
+  ~GFq() { mpz_clear(v); }
 
-  GFq& operator=(const GFq&) = delete;
+  GFq &operator=(const GFq &) = delete;
   // arithmetic
   void divBy2() {
     bool even = mpz_divisible_2exp_p(v, 1);
@@ -298,17 +298,17 @@ class Xyzt {
 
   Xyzt() : Xyzt(ZERO_WORDS, ONE_WORDS, ONE_WORDS, ZERO_WORDS) {}
   Xyzt(const Xyzt &other) : x(other.x), y(other.y), z(other.z), t(other.t) {
-printf(" *** RAHUL: construct from another\n");
-fflush(stdout);
-}
+    printf(" *** RAHUL: construct from another\n");
+    fflush(stdout);
+  }
 
-  Xyzt& operator=(const Xyzt&) = delete;
-void set(const Xyzt &other) {
-x.set(other.x);
-y.set(other.y);
-z.set(other.z);
-t.set(other.t);
-}
+  Xyzt &operator=(const Xyzt &) = delete;
+  void set(const Xyzt &other) {
+    x.set(other.x);
+    y.set(other.y);
+    z.set(other.z);
+    t.set(other.t);
+  }
   void set_32b(const uint32_t words_x[], const uint32_t words_y[],
                const uint32_t words_z[], const uint32_t words_t[]) {
     x.set_32b(words_x);
@@ -643,7 +643,7 @@ t.set(other.t);
 
   void copy_to_rust_type(g1_projective_t &projective) {
     printf("FINAL RESULT, COPYING TO RUST\n");
-fflush(stdout);
+    fflush(stdout);
     // println();
     // println_hex();
     // dump();
@@ -676,43 +676,41 @@ fflush(stdout);
 };
 
 void weierstrassMultiplication(Xyzt &base, const biginteger256_t &scalar) {
-printf("    ** RAHUL: doing multiplication: %p\n", &base);
-fflush(stdout);
-    Xyzt temp;
-printf("    ** RAHUL: setting temp: %p\n", &base);
-fflush(stdout);
-temp.set(base);
-printf("    ** RAHUL: created multiplication temp\n");
-fflush(stdout);
-    base.setToWeierstrassInfinity();
-    for (int i = 0; i < SCALAR_NUM_BITS; i++) {
-      printf("%d ", i);
-if(i % 32 == 0) printf("\n");
-      if (scalar.getBit(i)) {
-        base.weierstrassAddition(temp);
-      }
-      temp.weierstrassDoubleInPlace();
+  printf("    ** RAHUL: doing multiplication: %p\n", &base);
+  fflush(stdout);
+  Xyzt temp;
+  printf("    ** RAHUL: setting temp: %p\n", &base);
+  fflush(stdout);
+  temp.set(base);
+  printf("    ** RAHUL: created multiplication temp\n");
+  fflush(stdout);
+  base.setToWeierstrassInfinity();
+  for (int i = 0; i < SCALAR_NUM_BITS; i++) {
+    printf("%d ", i);
+    if (i % 32 == 0) printf("\n");
+    if (scalar.getBit(i)) {
+      base.weierstrassAddition(temp);
     }
-printf("DONE \n");
-fflush(stdout);
+    temp.weierstrassDoubleInPlace();
   }
+  printf("DONE \n");
+  fflush(stdout);
+}
 
-  void weierstrassMultiplyAndAdd(Xyzt &base, const Xyzt &point,
-                                 const biginteger256_t &scalar) {
-    static Xyzt temp;
-temp.set(point);
-    printf(" ** RAHUL : MaA created temp: %p\n", &temp);
-fflush(stdout);
-temp.println();
-    weierstrassMultiplication(temp, scalar);
-    printf(" ** RAHUL : MaA did multiplication\n");
-fflush(stdout);
-    base.weierstrassAddition(temp);
-    printf(" ** RAHUL : MaA completed\n");
-fflush(stdout);
-  }
-
-
+void weierstrassMultiplyAndAdd(Xyzt &base, const Xyzt &point,
+                               const biginteger256_t &scalar) {
+  static Xyzt temp;
+  temp.set(point);
+  printf(" ** RAHUL : MaA created temp: %p\n", &temp);
+  fflush(stdout);
+  temp.println();
+  weierstrassMultiplication(temp, scalar);
+  printf(" ** RAHUL : MaA did multiplication\n");
+  fflush(stdout);
+  base.weierstrassAddition(temp);
+  printf(" ** RAHUL : MaA completed\n");
+  fflush(stdout);
+}
 
 }  // namespace bls12_377_g1
 
