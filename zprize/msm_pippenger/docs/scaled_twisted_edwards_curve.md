@@ -98,3 +98,22 @@ In practice however, this is not a problem.
 to a slow code path when handling these points. In our implementation, we simply
 offload these points to the CPU. 
 - It's unclear if it can occur from repeated addition of the G1 Generator, so it's not clear if it and occur at all!
+
+## Converting to Scaled Twisted Edwards Curve
+
+A mixed addition on the scaled twisted edwards curve [costs `8M + 1*a + 7A`](https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#addition-madd-2008-hwcd-2). But with a simple scaling transformation, we can [reduce
+this further to `7M + 1*k + 8A + 1*2`](https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-madd-2008-hwcd-3).
+The reduced operation count applies to twisted edwards curve with `a = -1`. We
+can achieve that by transforming our coordinate system once more:
+
+```
+transform_twisted_edwards_to_scaled_twisted_edwards(u, v) -> (twisted_scale * u, v)
+
+where twisted_scale = sqrt(((-3 * alpha * s) - 2) / s)
+```
+
+In our actual implementation, we go one step further, reducing the amount of work to `7M + 6A`
+by exploiting very heavy precomputation. The key idea is that the two summands do not
+need to be in the same coodinate space. The exact algorithm used for precomputation is
+[described here in the documentation of the precompute mixed adder component](https://fyquah.github.io/hardcaml_zprize/zprize/Twisted_edwards_lib/Mixed_add_precompute/index.html)
+
