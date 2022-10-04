@@ -182,7 +182,7 @@ more points.
 ## Building an FPGA image for AWS
 
 You need to clone the [aws-fpga repo](https://github.com/aws/aws-fpga/), as well
-as run on a AWS box with the [FPGA Developer
+as run on an AWS box with the [FPGA Developer
 AMI](https://aws.amazon.com/marketplace/pp/prodview-gimv3gqbpe57k) installed.
 
 ```
@@ -275,7 +275,7 @@ present a summary of those results.
 
 AFI used for benchmarking: afi-0938ad46413691732.
 
-The image built from at the source at the time of writing will produce an FPGA
+The image built from the source at the time of writing will produce an FPGA
 AFI that runs at 278MHz, automatically clocked down from 280MHz by Vitis. We
 have also provided this AFI we built and tested with in the home directory of
 the fpga (runner) box, as well as in the s3 bucket provided to us in a `/afis`
@@ -356,10 +356,10 @@ benchmarking as it has lower performance):
 ```
 
 ### Notes
- 1. Because our solution offloads a non-trival amount of work to perform in
-parallel to the host, you will see the best performance after a fresh reboot,
+ 1. Because our solution offloads a non-trival amount of work to the host 
+ to perform in parallel, you will see the best performance after a fresh reboot,
 and without other CPU-intensive tasks running at the same time.
- 2. When running the tests if you terminate the binary early by `ctrl-c`, it
+ 2. When running the tests, if you terminate the binary early by `ctrl-c`, it
 will leave the FPGA in a bad state which requires clearing and re-programming
 with these commands:
 
