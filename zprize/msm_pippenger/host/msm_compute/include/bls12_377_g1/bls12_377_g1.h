@@ -489,19 +489,19 @@ class Xyzt {
       setToWeierstrassInfinity();
       return;
     }
-    t3.set_div(t1, t2);  // (3 * x1^2 + a) / (2 * y1)
+    t3.set_div(t1, t2);  // t3 = (3 * x1^2 + a) / (2 * y1)
 
     t2.set_add(x, x);
-    t2.set_add(t2, x);  // (2 * x1 + x1)
-    t2.set_mul(t2, t3);
+    t2.set_add(t2, x);  // t2 = (2 * x1 + x1)
+    t2.set_mul(t2, t3); // t2 = t2 * t3
 
-    t4.set_mul(t3, t3);
-    t1.set_sub(t4, x);
-    t1.set_sub(t4, x);  // x3
+    t4.set_mul(t3, t3);  // t4 = (3 * x1^2 + a)^2 / (2 * y1)^2
+    t1.set_sub(t4, x);   // t1 = t4 - x1
+    t1.set_sub(t1, x);   // t1 = t1 - x1
 
-    t3.set_mul(t3, t4);
-    t2.set_sub(t2, t3);
-    t2.set_sub(t2, y);
+    t3.set_mul(t3, t4);  // t3 = t3 * t4 = (3 * x1^2 + a)^3 / (2 * y1)^3
+    t2.set_sub(t2, t3);  // t2 = t2 - t3
+    t2.set_sub(t2, y);   // t2 = t2 - y1
 
     x.set(t1);
     y.set(t2);
@@ -520,6 +520,8 @@ class Xyzt {
     GFq t1, t2, t3, t4;
     if (other == *this) {
       weierstrassDoubleInPlace();
+    } else if (other.z == 0) {
+      // other is infinity, do nothing
     } else {
       // point addition
       // compute x
