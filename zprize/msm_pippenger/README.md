@@ -61,13 +61,13 @@ curve.
 
 # Benchmarking 2<sup>26</sup> points
 
-See the README.md [here](test_fpga_harness/README.md) for instructions on
-benchmarking our solution.
+See the the test\_harness [README.md](test_fpga_harness/README.md) for
+instructions on benchmarking our solution to get the performance number required
+got the ZPrize competition.
 
 ## AFI-ids and measured performance
 
-We have listed all the AFI-ids and their performance at certain points in the
-repo. Currently the highest performance afi is:
+Currently our highest performance afi is:
 
 afi-0b83061a1938e28cb (FPGA MSM kernel running at 270MHz)
 
@@ -125,7 +125,7 @@ sudo fpga-clear-local-image  -S 0
 sudo fpga-load-local-image -S 0 -I <afig-...>
 ```
 
-### All historical AFIs
+### Historical AFIs
 
 AFI-id | AFI-gid | Notes | 2^26 performance
 ------- | ------- | ----- | -----
@@ -138,12 +138,12 @@ AFI-id | AFI-gid | Notes | 2^26 performance
  afi-0df5b1800bfbfdd54 | agfi-036994fb80202cb8d | mega-build-3-oct-1 | [transferring scalars to gmem] 0.182392s, [Doing FPGA Computation] 6.8731s
  afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 
  afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host code masking code | 4 rounds @ 20.957301742s
- 
+
 
 # Building the design from source
 
 Instructions are given below for building from source. A prerequisite is that
-OCaml has been setup (outlined on the [main README.md](../../README.md)).
+OCaml has been setup (outlined in the main [README.md](../../README.md)).
 
 ## Compiling the bls12-377 reference
 
