@@ -307,7 +307,7 @@ class Driver {
   void postProcess(const uint32_t *source_kernel_output, int batch_num) {
     const uint64_t NUM_32B_WORDS_PER_OUTPUT = BYTES_PER_OUTPUT / 4;
 
-    post_processing_values.final_result.setToIdentity();
+    post_processing_values.final_result.setToTwistedEdwardsIdentity();
 
     uint64_t bit_offset = 0;
     uint64_t point_idx = 0;
@@ -317,8 +317,8 @@ class Driver {
       const auto CUR_NUM_BUCKETS = bls12_377_g1::NUM_BUCKETS(window_idx);
 
       // perform triangle sum
-      post_processing_values.accum.setToIdentity();
-      post_processing_values.running.setToIdentity();
+      post_processing_values.accum.setToTwistedEdwardsIdentity();
+      post_processing_values.running.setToTwistedEdwardsIdentity();
 
       // need signed int because of >= check
       for (int64_t bucket_idx = CUR_NUM_BUCKETS - 1; bucket_idx >= 0;
