@@ -345,25 +345,30 @@ class Driver {
     }
 
     // final_result.println();
-    post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
+
+    // In the overwhelming case, we don't need to do the final weierstrass patching
+    if (__builtin_expect(non_convertible_points.empty(), 1)) {
+      post_processing_values.final_result.extendedTwistedEdwardsToWeierstrassInMontgomerySpace();
+      return;
+    }
 
     // add all the weierstrass points
     // printf(" *** RAHUL: adding in non convertible points (batch %d)***\n",
     //       batch_num);
-    if (__builtin_expect(!non_convertible_points.empty(), 0)) {
-      // printf(" *** RAHUL: points.size() = %lu, indices.size() = %lu***\n", non_convertible_points.size(), non_convertible_indices.size(), batch_num);
-      assert(non_convertible_points.size() == non_convertible_indices.size());
-      for (size_t i = 0; i < non_convertible_points.size(); i++) {
-        uint64_t idx = non_convertible_indices[i];
-        // printf(" *** RAHUL: point (%lu), index = %lu", i, idx);
-        auto *scalar_ptr = (scalars + (batch_num * total_num_points) + idx);
-        // std::cout << *scalar_ptr << std::endl;
 
-        weierstrassMultiplyAndAdd(post_processing_values.final_result, non_convertible_points[i],
-                                                                      *scalar_ptr);
-      }
+    post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
+
+    // printf(" *** RAHUL: points.size() = %lu, indices.size() = %lu***\n", non_convertible_points.size(), non_convertible_indices.size(), batch_num);
+    assert(non_convertible_points.size() == non_convertible_indices.size());
+    for (size_t i = 0; i < non_convertible_points.size(); i++) {
+      uint64_t idx = non_convertible_indices[i];
+      // printf(" *** RAHUL: point (%lu), index = %lu", i, idx);
+      auto *scalar_ptr = (scalars + (batch_num * total_num_points) + idx);
+      // std::cout << *scalar_ptr << std::endl;
+
+      weierstrassMultiplyAndAdd(post_processing_values.final_result, non_convertible_points[i],
+                                                                    *scalar_ptr);
     }
-
     post_processing_values.final_result.weistrassValuesInMontgomerySpace();
     // printf("finished postProcess\n");
     // fflush(stdout);

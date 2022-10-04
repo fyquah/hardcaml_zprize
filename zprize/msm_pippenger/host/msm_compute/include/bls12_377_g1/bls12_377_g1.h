@@ -423,6 +423,20 @@ class Xyzt {
     }
   }
 
+  void extendedTwistedEdwardsToWeierstrassInMontgomerySpace() {
+    twistedEdwardsExtendedToAffine();
+    bool convertible = affineTwistedEdwardsToMontgomery();
+    if (!convertible) {
+      setToWeierstrassInfinity();
+      return;
+    }
+
+    affineMontgomeryToWeierstrass();
+    x.set_mul(x, COFACTOR);
+    y.set_mul(y, COFACTOR);
+    z.set(COFACTOR);
+  }
+
   void weistrassValuesInMontgomerySpace() {
     if (z != 0) {
       x.set_mul(x, COFACTOR);
