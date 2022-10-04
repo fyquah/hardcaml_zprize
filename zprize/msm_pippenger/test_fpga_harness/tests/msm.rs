@@ -50,7 +50,7 @@ fn msm_correctness() {
 #[test]
 #[serial]
 fn msm_with_interemediate_infinity_when_adding_non_representable_points1() {
-    println!(" *** RAHUL DEBUG *** ", num_rounds);
+    println!(" *** RAHUL DEBUG *** ");
     let batches = 1;
     let num_points = 4;
     let mut points = Vec::new();
