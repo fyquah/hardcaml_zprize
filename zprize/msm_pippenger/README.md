@@ -192,7 +192,15 @@ cd fpga
 
 ### Running a hardware emulation simulation
 
-You can also optionally run a Vivado simulation of the design which includes the AWS shell and DDR-4 logic. This takes a lot longer than the Hardcaml simulation above but provides a more true-to-hardware test enviroment.
+You can also optionally run a Vivado simulation of the design which includes the
+AWS shell and DDR-4 logic. This takes a lot longer than the Hardcaml simulation
+above but provides a more true-to-hardware test enviroment.
+
+```
+cd fpga
+./compile_hw_emu.sh
+
+```
 
 If you want the Vivado GUI over the ssh to AWS, you need to install:
 
@@ -200,12 +208,8 @@ If you want the Vivado GUI over the ssh to AWS, you need to install:
 yum install libXtst.x86_64
 ```
 
-```
-cd fpga
-./compile_hw_emu.sh
-
-```
-Once the emulation image is built run this command. You can optionally modify xrt.template.ini if you want to disable GUI:
+Once the emulation image is built run this command. You can optionally modify
+xrt.template.ini if you want to disable GUI:
 
 ```
 cd /test
