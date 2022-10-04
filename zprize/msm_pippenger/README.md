@@ -252,11 +252,13 @@ We have done repeated builds to make sure the image built from source is
 identical to what we tested. As a checkpoint, here are a few checksums that will
 be reported by Vivado:
 
+```
 Phase 1.1 Placer Initialization Netlist Sorting | Checksum: e1119738
 Ending Placer Task | Checksum: 1625c9702
 Phase 4.1 Global Iteration 0 | Checksum: 2d7b45461
 Phase 4.5 Global Iteration 4 | Checksum: 231df891e
 Phase 13 Route finalize | Checksum: 176e41d90
+```
 
 ## The test harness
 
