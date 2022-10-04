@@ -318,12 +318,14 @@ class Xyzt {
 
   bool is_z_zero() const { return mpz_cmp_si(z.v, 0) == 0; }
 
-  void setToIdentity() {
+  void setToTwistedEdwardsIdentity() {
     x.set(ZERO_WORDS);
     y.set(ONE_WORDS);
     z.set(ONE_WORDS);
     t.set(ZERO_WORDS);
   }
+
+  void setToWeierstrassInfinity() { z.set(ZERO_WORDS); }
 
   // conversions
   void twistedEdwardsAffineToExtended() {
@@ -371,18 +373,19 @@ class Xyzt {
     y.set_div(temp1, temp2);
     return true;
   }
-  void affineTwistedEdwardsToMontgomery() {
+  bool affineTwistedEdwardsToMontgomery() {
     GFq temp1, temp2;
     temp1.set_add(one, y);
     temp2.set_sub(one, y);
     if (((temp2 == 0) || (x == 0))) {
-      printf("Twisted Edwards -> Montgomery Undefined; Catastrophic Error!\n");
-      return;
+      printf("Twisted Edwards -> Montgomery Undefined; Infinity!\n");
+      return false;
     }
     temp1.set_div(temp1, temp2);
     temp2.set_div(twisted_scale, x);
     x.set(temp1);
     y.set_mul(temp1, temp2);
+    return true;
   }
 
   // preprocess function - if the point cannot be converted to twisted edwards
@@ -400,11 +403,15 @@ class Xyzt {
   // postprocess function
   void extendedTwistedEdwardsToWeierstrass() {
     twistedEdwardsExtendedToAffine();
-    affineTwistedEdwardsToMontgomery();
-    affineMontgomeryToWeierstrass();
-    x.set_mul(x, COFACTOR);
-    y.set_mul(y, COFACTOR);
-    z.set(COFACTOR);
+    bool convertible = affineTwistedEdwardsToMontgomery();
+    if (convertible) {
+      setToWeierstrassInfinity();
+    } else {
+      affineMontgomeryToWeierstrass();
+      x.set_mul(x, COFACTOR);
+      y.set_mul(y, COFACTOR);
+      z.set(COFACTOR);
+    }
   }
 
   void generalUnifiedAddInto(const Xyzt &other,
@@ -620,10 +627,7 @@ class Xyzt {
   bool copy_from_rust_type(const g1_affine_t &affine) {
     if (affine.infinity) {
       // Special representation for infinity in the twisted edwards curve
-      x.set(ZERO_WORDS);
-      y.set(ONE_WORDS);
-      t.set(ZERO_WORDS);
-      z.set(ONE_WORDS);
+      setToTwistedEdwardsInfinity();
       return true;
     }
 
