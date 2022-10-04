@@ -5,17 +5,16 @@ the MSM of a large number of elliptic point and scalar pairs on the BLS12-377 G1
 curve. 
 
 Performance is measured as per the ZPrize specs at 20.504s for 4 rounds of
-2<sup>26</sup> MSMs, which equates to **13.092** Mop/s. Measurements are
-further detailed in the benchmarking section.
+2<sup>26</sup> MSMs, which equates to **13.092** Mop/s.
 
 Detailed instructions on re-creating these results from source are in the
-[building from source](#building-the-design-from-source) and
-[benchmarking](#benchmarking) sections below.
+[building from source](#building-the-design-from-source) and more detailed
+measurement results in the [benchmarking](#benchmarking) sections below.
 
 
 ## Overview of the architecture
 
-We decided to implement a heavily optimized version of [Pippenger's
+We have implemented a heavily optimized version of [Pippenger's 
 algorithm](https://dl.acm.org/doi/abs/10.1137/0209022) in order to solve the MSM
 problem.
 
@@ -91,7 +90,7 @@ calculating the point addition.
 A high level block diagram showing the different data flows and modules used in
 our MSM implementation.
 
-![Block diagram](docs/block_diagram.png)
+![Block diagram](docs/assets/block_diagram.png)
 
 ## Resource utilization
 
@@ -133,23 +132,175 @@ still being able to successfully route in Vivado.
 +----------------------------+--------+--------+--------+--------+--------+--------+
 ```
 
+# Building the design from source
+
+Instructions are given below for building from source. A prerequisite is that
+OCaml has been setup (outlined in the main [README.md](../../README.md)).
+
+It is important you use the AMI version 1.10.5 and Vivado version 2020.2 to
+acheive the same results. The rtl_checksum expected of the Verilog when
+generated from the Hardcaml source is 1929f78e1e4bafd9cf88d507a3afa055.
+
+## Compiling the BLS12-377 reference
+
+Run `cargo build` in `libs/rust/ark_bls12_377_g1` to compile the dynamic library
+exposing a reference implementation of the BLS12-377 g1 curve. This is
+necessary for the expect tests to work expectedly.
+
+z3 should also be installed to run tests.
+
+## Generating the Verilog from Hardcaml
+
+The following instructions assume you are in the `zprize/msm_pippenger` folder.
+
+The Hardcaml code can be built by calling `dune build`, which will also cause
+the top level Verilog to be generated in
+`fpga/krnl_msm_pippenger/krnl_msm_pippenger.v`. We also provide a dune target
+for generating an md5sum `fpga/krnl_msm_pippenger/rtl_checksum.md5` of the
+Verilog expected, so that if changes to the Hardcaml source are made that modify
+the Verilog (which is not checked into the repo), the rtl-checksum will show a
+difference.
+
+### Simulations in Hardcaml
+
+We have various expect tests in the [test folders](hardcaml/test) which can be
+run by calling `dune runtest`. To optionally run a longer simulation, we added
+binaries that can be called and various arguments set. These run with the
+[Verilator](https://www.veripool.org/verilator/) backend, which after a longer
+compile time, will provide much faster simulation time than the built-in
+Hardcaml simulator. Make sure you have Verilator installed when running this
+binary. To simulate 128 random points, run the following command:
+
+```
+dune exec ./hardcaml/bin/simulate.exe -- kernel -num-points 128 -verilator -timeout 1000000
+```
+
+The `-waves` switch can be optionally provided to open the simulation in the
+hardcaml waveform viewer. A larger timeout should be provided when simulating
+more points.
+
+## Building an FPGA image for AWS
+
+You need to clone the [aws-fpga repo](https://github.com/aws/aws-fpga/), as well
+as run on a AWS box with the [FPGA Developer
+AMI](https://aws.amazon.com/marketplace/pp/prodview-gimv3gqbpe57k) installed.
+
+```
+source ~/aws-fpga/vitis_setup.sh
+```
+
+Cd into the `fpga` directory which contains the scripts to build an actual FPGA
+design (takes 6-8 hours), or a emulation module (takes 15 minutes). Both of
+these scripts below will build the Hardcaml to generate the required Verilog.
+
+```
+cd fpga
+./compile_hw.sh
+```
+
+### Running a hardware emulation simulation
+
+You can also optionally run a Vivado simulation of the design which includes the
+AWS shell and DDR-4 logic. This takes a lot longer than the Hardcaml simulation
+above but provides a more true-to-hardware test enviroment.
+
+```
+cd fpga
+./compile_hw_emu.sh
+```
+
+Once the emulation image is built run this command. You can optionally modify
+xrt.template.ini if you want to enable GUI:
+
+```
+cd /test
+./run_hw_emu.sh
+```
+
+If you want the Vivado GUI over the ssh to AWS, you need to install:
+
+```
+yum install libXtst.x86_64
+```
+
+### Creating the AWS AFI
+
+Once you have successfully called `compile_hw.sh` in the `fpga` folder, you want
+to pass the results to the AWS script responsible for generating the AFI an
+end-user can run:
+
+```
+./compile_afi.sh
+```
+
+After running the `compile_afi.sh` script, there should be a folder 'afi/'. Get
+the afi id from the file `afi/{date}_afi_id.txt` and run the following command
+to track the progress of its creation:
+
+```
+aws ec2 describe-fpga-images --fpga-image-ids <afi-...>
+```
+Which will show up as "available" when the image is ready to use.
+
 # Benchmarking
 
-See the test\_harness [README.md](test_fpga_harness/README.md) for
+## AWS setup
+
+You need to run these steps on an AWS F1 box with an FPGA. Make sure you have
+cloned the aws-fpga repo and run:
+
+```
+source ~/aws-fpga/vitis_runtime_setup.sh
+```
+
+Optionally check the status of the FPGA:
+
+```
+systemctl status mpd
+```
+
+You need the .awsxclbin file from the build box - usually the easiest way is to
+download this from the s3 bucket or scp it over.
+
+## Running the MSM
+
+See the the test\_harness [README.md](test_fpga_harness/README.md) for detailed
 instructions on benchmarking our solution against 2<sup>26</sup> to get the
-performance number required for the ZPrize competition. This section presents a
-summary of those results.
+performance number required for the ZPrize competition. The following sections
+present a summary of those results.
 
 ## AFI-ids and measured performance
 
-Currently our highest performance afi is:
+### Notes for ZPrize judges
 
-afi-0938ad46413691732 (FPGA MSM kernel running at 278MHz)
+AFI used for benchmarking: afi-0938ad46413691732.
 
-Note each of these tests take up to 30min each as we transform 2<sup>26</sup>
-affine points into their twisted Edwards representation.
+The image built from at the source at the time of writing will produce an FPGA
+AFI that runs at 278MHz, automatically clocked down from 280MHz by Vitis. We
+have also provided this AFI we built and tested with in the home directory of
+the fpga (runner) box, as well as in the s3 bucket provided to us in a `/afis`
+folder.
 
-Running `cargo test` to verify the result for 4 rounds of 2<sup>26</sup> MSM:
+## The test harness
+
+We took the test harness written in Rust for the GPU track and implemented
+against the same API for testing our FPGA implementation.
+
+Detailed instructions for running the test harness can be found in
+[test\_fpga\_harness](test_fpga_harness/README.md). Note each of these tests
+take up to 30min each as we transform 2<sup>26</sup> affine points into their
+twisted Edwards representation. A summary of the commands and their output is
+given here.
+
+The following command will time and verify the result for 4 rounds of
+2<sup>26</sup> MSM:
+
+```
+cd test_fpga_harness
+CMAKE=cmake3 XCLBIN=~/afi-0938ad46413691732.awsxclbin TEST_LOAD_DATA_FROM=~/testdata/2_26 cargo test  --release -- --nocapture
+```
+
+Output to show the latency of 4 rounds and correctness:
 
 ```
 Running MSM of [67108864] input points (4 batches)
@@ -158,13 +309,16 @@ Running multi_scalar_mult took Ok(20.504301742s) (round = 0)
 test msm_correctness ... ok
 ```
 
-We can then benchmark the result to eliminate noise and get a better measurement.
-Below is the total time for the same measurement as above but repeated 10 times
-(the output of cargo bench in the
-[test\_fpga\_harness](test_fpga_harness/README.md)). This allows us to mask the
-overhead of transferring data to the FPGA and various host processing steps on
-the scalar inputs that can happen in parallel. This is also the required
-measurement outlined in the ZPrize specs.
+We also benchmark the result to eliminate noise and get a more accurate
+measurement. Below is the total time for the same measurement as above but
+repeated 10 times
+
+```
+cd test_fpga_harness
+CMAKE=cmake3 XCLBIN=~/afi-0938ad46413691732.awsxclbin TEST_LOAD_DATA_FROM=~/testdata/2_26 cargo bench
+```
+
+Output to show the result of 10 runs of 4 rounds each:
 
 ```
 FPGA-MSM/2**26x4        time:  [20.404 s 20.504 s 20.621 s]
@@ -187,7 +341,9 @@ Power consumption (Vccint):
    Max measured: 54 watts
 ```
 
-The breakdown of how long each stage takes can be printed by changing the value
+### Breakdown of individual host steps
+
+The breakdown of how long each stage takes can be printed when changed the value
 of `mask_io` to `false` in `host/driver/driver.cpp` (this is not used in
 benchmarking as it has lower performance):
 
@@ -200,10 +356,10 @@ benchmarking as it has lower performance):
 ```
 
 ### Notes
- 1. Because our solution offloads a non-trival amount of work to the host 
- to perform in parallel, you will see the best performance after a fresh reboot,
+ 1. Because our solution offloads a non-trival amount of work to perform in
+parallel to the host, you will see the best performance after a fresh reboot,
 and without other CPU-intensive tasks running at the same time.
- 2. When running the tests, if you terminate the binary early by `ctrl-c`, it
+ 2. When running the tests if you terminate the binary early by `ctrl-c`, it
 will leave the FPGA in a bad state which requires clearing and re-programming
 with these commands:
 
@@ -227,121 +383,7 @@ AFI-id | AFI-gid | git branch / Notes | 2^26 performance
  afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host masking code | 4 rounds @ 20.957301742s
  afi-0938ad46413691732 | agfi-04dec9d922d689fad | mega-build-1-oct-3, timing optimizations, 280MHz, host masking code | 4 rounds @ 20.504s
 
-# Building the design from source
-
-Instructions are given below for building from source. A prerequisite is that
-OCaml has been setup (outlined in the main [README.md](../../README.md)).
-
-It is important you use the AMI version 1.10.5 and Vivado version 2020.2 to
-acheive the same results. The rtl_checksum expected of the Verilog when
-generated from the Hardcaml source is 1929f78e1e4bafd9cf88d507a3afa055.
-
-## Compiling the BLS12-377 reference
-
-Run `cargo build` in `libs/rust/ark_bls12_377_g1` to compile the dynamic library
-exposing a reference implementation of the BLS12-377 g1 curve. This is
-necessary for the expect tests to work expectedly.
-
-z3 should also be installed to run tests.
-
-## Building and simulating in Hardcaml
-
-The Hardcaml code can be built by calling `dune build`, which will also cause
-the top level Verilog to be generated in
-`fpga/krnl_msm_pippenger/krnl_msm_pippenger.v`. We also provide a dune target
-for generating an md5sum `(fpga/krnl_msm_pippenger/rtl_checksum.md5)` of the
-Verilog expected, so that if changes to the Hardcaml source are made that modify
-the Verilog (which is not checked into the repo), the rtl-checksum will show a
-difference.
-
-We have various expect tests in the [test folders](hardcaml/test) which can be
-run by calling `dune runtest`. To run a longer simulation, we added binaries
-that can be called and various arguments set. These run with the
-[Verilator](https://www.veripool.org/verilator/) backend, which after a longer
-compile time, will provide much faster simulation time than the built-in
-Hardcaml simulator. Make sure you have Verilator installed when running this
-binary. To simulate 128 random points, run the following command:
-
-```
-dune exec ./hardcaml/bin/simulate.exe -- kernel -num-points 128 -verilator -timeout 1000000
-```
-
-The `-waves` switch can be optionally provided to open the simulation in the
-hardcaml waveform viewer. A larger timeout should be provided when simulating
-more points.
-
-## Building an FPGA image for AWS
-
-You need to clone the [aws-fpga repo](https://github.com/aws/aws-fpga/), as well
-as run on a AWS box with the [FPGA Developer
-AMI](https://aws.amazon.com/marketplace/pp/prodview-gimv3gqbpe57k) installed.
-
-```
-source ~/aws-fpga/vitis_setup.sh
-source ~/aws-fpga/vitis_runtime_setup.sh
-```
-
-If you want the Vivado GUI over the ssh to AWS, you need to install:
-
-```
-yum install libXtst.x86_64
-```
-
-Cd into the `fpga` directory which contains the scripts to build an actual FPGA
-design (takes 6-8 hours), or a emulation module (takes 15 minutes). Both of
-these scripts below will build the Hardcaml to generate the required Verilog.
-
-```
-cd fpga
-./compile_hw.sh or ./compile_hw_emu.sh
-```
-
-### Running a hardware emulation simulation
-
-Modify xrt.template.ini if you want to disable GUI.
-```
-cd /test
-./run_hw_emu.sh
-```
-
-### Creating the AWS AFI
-
-Once you have successfully called `compile_hw.sh` in the `fpga` folder, you want
-to pass the results to the AWS script responsible for generating the AFI an
-end-user can run:
-
-```
-./compile_afi.sh
-```
-
-After running the `compile_afi.sh` script, there should be a folder 'afi/'. Get
-the afi id from the file `afi/{date}_afi_id.txt` and run the following command
-to track the progress of its creation:
-
-```
-aws ec2 describe-fpga-images --fpga-image-ids <afi-...>
-```
-Which will show up as "available" when the image is ready to use.
-
-
-## Running on AWS
-
-You need to run these steps on an AWS F1 box with an FPGA. Make sure you have
-cloned the aws-fpga repo and run:
-
-```
-source ~/aws-fpga/vitis_runtime_setup.sh
-```
-
-Check the status of the FPGA:
-
-```
-systemctl status mpd
-```
-
-You need the .awsxclbin file from the build box - usually the easiest way is to
-download this from the s3 bucket or scp it over.
-
+# Debuging
 
 ## Running `host_buckets.exe` debug test
 
