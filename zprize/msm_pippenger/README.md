@@ -10,7 +10,7 @@ further detailed in the benchmarking section.
 
 Detailed instructions on re-creating these results from source are in the
 [building from source](#building-the-design-from-source) and
-[benchmarking](#benchmarking-2<sup>26</sup>-points) sections below.
+[benchmarking](#benchmarking) sections below.
 
 
 ## Overview of the architecture
