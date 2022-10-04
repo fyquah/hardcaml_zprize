@@ -74,7 +74,8 @@ for scaled twisted edwards curve).
  5. Instead of performing a full Barrett reduction or full modular addition/subtraction, we perform 
  a coarse reduction and allow additive error to accumulate through our point adder. Then, we correct 
  this error all at once using BRAMs as ROMs to store coefficients that can be used to reduce values
- in the range $[0,512q]$ to their modular equivalents in $[0,q]$.
+ in the range $[0,512q]$ to their modular equivalents in $[0,q]$. The implementation of the
+ ROM-based fine-reduction is described [here in the Bram_reduce module's documentation](https://fyquah.github.io/hardcaml_zprize/zprize/Field_ops_lib/Bram_reduce/index.html).
 
  6. Selecting a bucket size that allows for efficient usage of FPGA URAM,
   allowing non-uniform bucket sizes, and pblocking windows to separate SLRs in
@@ -82,7 +83,8 @@ for scaled twisted edwards curve).
 
  7. Scalars are converted into signed form and our twisted Edwards point adder is
     modified to support point subtraction, which allows all bucket memory to be
-    reduced in half.
+    reduced in half. The details of the scalar transformation are described
+    [here in the Scalar_transformation module's documentation](https://fyquah.github.io/hardcaml_zprize/zprize/Msm_pippenger/Scalar_transformation/index.html).
 
  8. Host code is optimized to allow for offloading the final triangle sum and
     bucket doubling operations.
