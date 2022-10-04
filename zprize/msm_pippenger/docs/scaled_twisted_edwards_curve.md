@@ -3,52 +3,68 @@
 We chose to convert to the twisted edwards curve, rather than working in the
 weistrass form, to reduce resource usage of the pipelined mixed adder. With
 the tricks documented here, we managed to get down to `7M + 6A`, a very
-big improvement over `11M + 8A` required for projective coordinates in
-weistrass form.
+big improvement over [`7M + 4S + 9A` required for Jacobian coordinates](https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-madd-2007-bl)
 
-## Conversion to Twisted Edwards Curve
+We did some modelling of all this in OCaml to validate all the requirements
+for the transformations are met, and a point addition in twisted edwards form do
+indeed map to an addition in weistrass form (by using arkworks as a reference).
+See [here](../../../libs/twisted_edwards/model) for our modelling tests.
 
-The BLS curve in its vanilla form (Weistrass Form) is as follows:
+## Converting Curve Parameters to Twisted Edwards
+
+The transformation from the curve in weistrass form to twisted edwards form is a
+2-step process - First it needs to be transformed to the Montgomery form, only
+then it can be transformed to the elliptic curve form. The [wikipedia article on
+Montgomery Curve](https://en.wikipedia.org/wiki/Montgomery_curve) has a good
+explaination on this.
+
+Here's is a summary of the method:
+
+Elliptic curve in weistrass form exhibits the following formula
 
 ```
-y^2 = x^3 + 1
+y^2 = x^3 + ax + b
 
-parameters:
-a = 0
-b = 1
+where a and b are the parameters of the curve
 ```
 
-We first convert it to a montgomery curve form
+The montgomery curve has the following formula:
+
+```
+By^2 = x^3 + (A * x^2) + x
+
+where A and B are the parameters of the curve
+```
+
+A elliptic curve in weistrass form can be rewritten as a formulae in montgomery
+curve by rewriting the parameters as follows when certain conditions hold.
+(Said conditions do hold in BLS12-377)
 
 ```
 A = 3 * alpha * s
 B = s
 
 where
+alpha is a root of the equation x^3 + ax + b = 0
 s = sqrt((3 * alpha^2) + a)^(-1)
 ```
 
-Alas, to go from montgomery curve to the twisted edewards curve
+Twisted Edwards Curves has the following formulae
 
 ```
-a = P - 1
-d = (2 - A) / (2 + A)
+(a * x^2) + y^2 = 1 + (d * x^2 * y^2)
+
+where a and d are parameters of the curve
 ```
 
-Converting affine points from the weistrass form to the twisted edwards curve
-follows the similar to step process too:
+A montgomery curve can be rewritten as a twisted edwards curve with the following
+formulae when `a != d`:
 
 ```
+A = 2 * (a + d) / (a - d)
+B = 4 / (a - d)
 ```
 
-In practice, we expect these numbers not to show up at all. Assuming a uniform
-distribution, probability is minisiicue. In our implementation, the host driver
-checks for the existence of these points, and offload their computation to the
-host with the naive high-school multiplication algorithm.
-
-## Reducing Work with Scaled Twisted Edwards Curve
-
-## Tests
-
-We did some modelling of all this in OCaml to convince ourselves that all this
-is right, as well as compared
+The linked wikipedia article above goes into detail on when these parameter
+transformations are valid. We validated that the required assumptions
+do hold in bls12-377, and hence can be represented as a twisted edwards curve.
