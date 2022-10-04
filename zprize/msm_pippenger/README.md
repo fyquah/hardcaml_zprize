@@ -1,7 +1,7 @@
 # FPGA Implementation of the MSM pippengers algorithm
 
 We have implemented a FPGA design that runs on a AWS F1 instance and can compute
-the MSM of a large number of eliptic point and scalar pairs on the BLS12-377
+the MSM of a large number of elliptic point and scalar pairs on the BLS12-377
 curve.
 
 ## Overview of the architecture
@@ -10,8 +10,8 @@ We decided to implement a heavily optimized version of [pippengers
 algorithm](https://dl.acm.org/doi/abs/10.1137/0209022) in order to solve the MSM
 problem.
 
-We picked window sizes of between 12 and 13 bits, which allowed for efficent
-mapping to FPGA URAM resources which are natively 4096 elements deep. Points are
+We picked window sizes of between 12 and 13 bits, which allowed for efficient
+mapping to FPGA URAM resources which are naively 4096 elements deep. Points are
 transformed and pre-loaded into DDR-4, so that at run time only scalars are sent
 from the host to the FPGA via PCIe. We implemented a single fully-pipelined
 point adder on the FPGA which adds points to buckets as directed by the
@@ -21,17 +21,16 @@ addition in-flight). Once all points have been added into buckets, the FPGA
 streams back the result for the host to do the final (much smaller) triangle
 summation. This approach allows us to focus on implementing a very high
 performance adder on the FPGA (as these additions dominate pippengers
-algorithm), and then leaving the final triangle summation and bucket double as a
-task for the host to perform.
+algorithm), and then leaving smaller tasks for the host to perform.
 
-The above description overly simplifys the amount of optimizations and tricks we
+The above description overly simplifies the amount of optimizations and tricks we
 have implemented to get performance. A summary of the optimizations are listed
 out below.
 
 ## Optimizations
 
  1. Early on we decided rather than implementing all of pippengers algorithm on
-the FPGA, it would be better to only implement point additions, and focus on as
+the LPG, it would be better to only implement point additions, and focus on as
 high throughput as possible. We implemented a fully pipelined adder which can
 take new inputs to add every clock cycle, with a result appearing on the output
 after 238 clock cycles in the final version.
@@ -40,7 +39,7 @@ after 238 clock cycles in the final version.
 resources (DSPs, LUTs, carry chains, ...), so we investigated different
 transforms we could do in advance that would reduce the complexity on the FPGA.
 We ended up deciding to transform to a twisted edwards curve and extended
-projective coordinates. We also do a pre-transformation on the hos tthat allows
+projective coordinates. We also do a pre-transformation on the host that allows
 us to remove some of the constants required when calculating the point addition.
 
  3. We mask PCIe latency by allowing MSM operations to start while points are
@@ -50,11 +49,11 @@ us to remove some of the constants required when calculating the point addition.
  4. Multiplier optimizations in the Barret reduction algorithm so that constants
     require less FPGA resources.
 
- 5. Adder and subtractor use BRAMs as ROMs to store coefficents that can be used
+ 5. Adder and subtractor use BRAMs as ROMs to store coefficients that can be used
   to reduce modulo adder and subtractor latency.
 
- 6. Selecting a bucket size that allows for efficent usage of FPGA URAM,
-  allowing non-uniform bucket sizes, and pblocking windows to seperate SLRs in
+ 6. Selecting a bucket size that allows for efficient usage of FPGA URAM,
+  allowing non-uniform bucket sizes, and pblocking windows to separate SLRs in
   the FPGA to avoid routing congestion.
 
  7. Scalars are converted into signed form and our twisted edwards adder is
@@ -75,7 +74,7 @@ our MSM implementation.
 
 The AWS shell uses roughly 20% of the resources available on the FPGA. We tuned
 our MSM implementation to use the remaining resources as much as possible while
-still being able to succesfully route in Vivado.
+still being able to successfully route in Vivado.
 
 ```
 +----------------------------+--------+--------+--------+--------+--------+--------+
@@ -135,22 +134,25 @@ Running multi_scalar_mult took Ok(20.504301742s) (round = 0)
 test msm_correctness ... ok
 ```
 
-We can then benchmark the result to eliminate noise and get a better measurment.
+We can then benchmark the result to eliminate noise and get a better measurement.
 Below is the total time for the same measurement as above but repeated 10 times
 (the output of cargo bench in the
 [test\_fpga\_harness](test_fpga_harness/README.md)). This allows us to mask the
-overhead of transfering data to the FPGA and various host processing steps on
+overhead of transferring data to the FPGA and various host processing steps on
 the scalar inputs that can happen in parallel. This is also the required
 measurement outlined in the ZPrize specs.
+
 ```
 FPGA-MSM/2**26x4        time:  [20.404 s 20.504 s 20.621 s]
 ```
 
-We acheive a mean of 20.915s, which equates to **13.092** Mop/s
+We achieve a mean of 20.915s, which equates to **13.092** Mop/s
 ((4*2^26)/1000000)/20.504).
 
 ### Power
+
 AWS allows the average power to be measured during operation:
+
 ```
 sudo fpga-describe-local-image -S 0 -M
 ```
