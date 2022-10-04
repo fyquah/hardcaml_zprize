@@ -11,29 +11,72 @@ algorithm](https://dl.acm.org/doi/abs/10.1137/0209022) in order to solve the MSM
 problem.
 
 We picked window sizes of between 12 and 13 bits, which allowed for efficent
-mapping to FPGA URAM resources which are natively 4096 elements deep.
+mapping to FPGA URAM resources which are natively 4096 elements deep. Points are
+transformed and pre-loaded into DDR-4, so that at run time only scalars are sent
+from the host to the FPGA via PCIe. We implemented a single fully-pipelined
+point adder on the FPGA which adds points to buckets as directed by the
+controller until there are no more points left. The controller automatically
+handles stalls (only accessing a bucket when it does not already have an
+addition in-flight). Once all points have been added into buckets, the FPGA
+streams back the result for the host to do the final (much smaller) triangle
+summation. This approach allows us to focus on implementing a very high
+performance adder on the FPGA (as these additions dominate pippengers
+algorithm), and then leaving the final triangle summation and bucket double as a
+task for the host to perform.
 
-## Optimizations used
+The above description overly simplifys the amount of optimizations and tricks we
+have implemented to get performance. A summary of the optimizations are listed
+out below.
 
-* Twisted edwards curve and extended projective points for a lower latency point
-  addition algorithm, and a high performance fully-pipelined adder on the FPGA
-* Mask PCIe latency by allowing MSM operations to start while points are being
-  streamed in batches from the host
-* Multiplier optimizations aimed at the Barret reduction algorithm and how they
-  map to the FPGA
-* Selecting a bucket size that allows for efficent usage of FPGA URAM, and
-  pblocking to avoid routing congestion
-* Scalars are converted into a signed form so that bucket memory gets a free bit
-  per window
-* Offloading the final triangle sum to the host
-* Using BRAM to store coefficents that can be used to reduce modulo adder and
-  subtractor latency
+## Optimizations
+
+ 1. Early on we decided rather than implementing all of pippengers algorithm on
+the FPGA, it would be better to only implement point additions, and focus on as
+high throughput as possible. We implemented a fully pipelined adder which can
+take new inputs to add every clock cycle, with a result appearing on the output
+after 238 clock cycles in the final version.
+
+ 2. Implementing an adder on affine or projective coordinates requires more FPGA
+resources (DSPs, LUTs, carry chains, ...), so we investigated different
+transforms we could do in advance that would reduce the complexity on the FPGA.
+We ended up deciding to transform to a twisted edwards curve and extended
+projective coordinates. We also do a pre-transformation on the hos tthat allows
+us to remove some of the constants required when calculating the point addition.
+
+ 3. We mask PCIe latency by allowing MSM operations to start while points are
+  being streamed in batches from the host. When a result is being processed we
+  are also able to start the MSM on the next batch.
+
+ 4. Multiplier optimizations in the Barret reduction algorithm so that constants
+    require less FPGA resources.
+
+ 5. Adder and subtractor use BRAMs as ROMs to store coefficents that can be used
+  to reduce modulo adder and subtractor latency.
+
+ 6. Selecting a bucket size that allows for efficent usage of FPGA URAM,
+  allowing non-uniform bucket sizes, and pblocking windows to seperate SLRs in
+  the FPGA to avoid routing congestion.
+
+ 7. Scalars are converted into signed form and our twisted edwards adder is
+    modified to support point subtraction, which allows all bucket memory to be
+    reduced in half.
+
+ 8. Host code is optimized to allow for offloading the final triangle sum and
+    bucket doubling operations.
 
 ## Block diagram
+
+A high level block diagram showing the different data flows and modules used in
+our MSM implementation.
 
 ![Block diagram](docs/block_diagram.png)
 
 ## Resource utilization
+
+The AWS shell uses roughly 20% of the resources available on the FPGA. We tuned
+our MSM implementation to use the remaining resources as much as possible while
+still being able to succesfully route in Vivado.
+
 ```
 +----------------------------+--------+--------+--------+--------+--------+--------+
 |          Site Type         |  SLR0  |  SLR1  |  SLR2  | SLR0 % | SLR1 % | SLR2 % |
@@ -72,7 +115,7 @@ mapping to FPGA URAM resources which are natively 4096 elements deep.
 
 See the the test\_harness [README.md](test_fpga_harness/README.md) for
 instructions on benchmarking our solution to get the performance number required
-got the ZPrize competition.
+for the ZPrize competition. This section presents a summary of those results.
 
 ## AFI-ids and measured performance
 
@@ -88,7 +131,7 @@ Running `cargo test` to verify the result for 4 rounds of 2<sup>26</sup> MSM:
 ```
 Running MSM of [67108864] input points (4 batches)
 Streaming input scalars across 4 chunks per batch (Mask IO and Post Processing)
-Running multi_scalar_mult took Ok(20.957301742s) (round = 0)
+Running multi_scalar_mult took Ok(20.504301742s) (round = 0)
 test msm_correctness ... ok
 ```
 
@@ -119,8 +162,8 @@ Power consumption (Vccint):
 ```
 
 The breakdown of how long each stage takes can be printed when changed the value
-of `mask_io` in `host/driver/driver.cpp` (this is not used in benchmarking as it
-has lower performance):
+of `mask_io` to `false` in `host/driver/driver.cpp` (this is not used in
+benchmarking as it has lower performance):
 
 ```
 [memcpy-ing scalars to special memory region] 0.28928s
@@ -169,12 +212,20 @@ Run `cargo build` in `libs/rust/ark_bls12_377_g1` to compile the dynamic library
 exposing a reference implementation of the bls12-377 g1 curve. This is
 necessary for the expect tests to work expectedly.
 
-z3 should be installed to run tests.
+z3 should also be installed to run tests.
 
-## Simulating Hardcaml
+## Building and simulating in Hardcaml
+
+The Hardcaml code can be built by calling `dune build`, which will also cause
+the top level Verilog to be generated in
+`fpga/krnl_msm_pippenger/krnl_msm_pippenger.v`. We also provide a dune target
+for generating a md5sum `(fpga/krnl_msm_pippenger/rtl_checksum.md5)` of the
+Verilog expected, so that if changes to the Hardcaml source are made that modify
+the Verilog (which is not checked into the repo), the rtl-checksum would show a
+difference.
 
 We have various expect tests in the [test folders](hardcaml/test) which can be
-run by calling `dune runtest`. To run a longer simulation, we provided binaries
+run by calling `dune runtest`. To run a longer simulation, we added binaries
 that can be called and various arguments set. These run with the
 [Verilator](https://www.veripool.org/verilator/) backend which after a longer
 compile time, will provide much faster simulation time than the built-in
@@ -182,7 +233,7 @@ Hardcaml simulator. Make sure you have Verilator installed when running this
 binary. To simulate 128 random points, run the following command:
 
 ```
-./hardcaml/bin/simulate.exe -- kernel -num-points 128 -verilator -timeout 1000000
+dune exec ./hardcaml/bin/simulate.exe -- kernel -num-points 128 -verilator -timeout 1000000
 ```
 
 The `-waves` switch can be optionally provided to open the simulation in the
@@ -207,7 +258,8 @@ yum install libXtst.x86_64
 ```
 
 Cd into the `fpga` directory which contains the scripts to build an actual FPGA
-design (takes 6-8 hours), or a emulation module (takes 15 minutes).
+design (takes 6-8 hours), or a emulation module (takes 15 minutes). Both of
+these scripts below will build the Hardcaml to generate the required Verilog.
 
 ```
 cd fpga
@@ -221,9 +273,12 @@ Modify xrt.template.ini if you want to disable GUI.
 cd /test
 ./run_hw_emu.sh
 ```
+
 ### Creating the AWS AFI
 
-Once you have successfully called `compile_hw.sh` in the `fpga` folder:
+Once you have successfully called `compile_hw.sh` in the `fpga` folder you want
+to pass the results to the AWS script responsible for generating the AFI an
+end-user can run:
 
 ```
 ./compile_afi.sh
