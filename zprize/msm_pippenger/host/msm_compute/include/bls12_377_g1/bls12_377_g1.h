@@ -503,7 +503,7 @@ class Xyzt {
       t2.set_sub(other.x, x);
       if (t2 == 0) {
         z.set(ZERO_WORDS);
-        return
+        return;
       }
       t3.set_div(t1, t2);  // (y2 - y1) / (x2 - x1)
 
@@ -624,7 +624,7 @@ class Xyzt {
       y.set(ONE_WORDS);
       t.set(ZERO_WORDS);
       z.set(ONE_WORDS);
-      return;
+      return true;
     }
 
     // import the affine weierstrass representation
