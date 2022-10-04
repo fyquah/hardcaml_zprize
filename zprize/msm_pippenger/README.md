@@ -182,8 +182,8 @@ source ~/aws-fpga/vitis_setup.sh
 ```
 
 Cd into the `fpga` directory which contains the scripts to build an actual FPGA
-design (takes 6-8 hours), or a emulation module (takes 15 minutes). Both of
-these scripts below will build the Hardcaml to generate the required Verilog.
+design (takes 6-8 hours). The compile script below will also build the Hardcaml
+to generate the required Verilog.
 
 ```
 cd fpga
