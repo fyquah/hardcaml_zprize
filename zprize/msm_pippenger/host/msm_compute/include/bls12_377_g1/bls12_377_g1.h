@@ -369,6 +369,7 @@ class Xyzt {
     x.set_div(x, montgomery_params.c_B);
     x.set_add(x, temp);
     y.set_div(y, montgomery_params.c_B);
+    z.set(ONE_WORDS);
   }
 
   // if the mapping is not possible, leave the point unchanged and return false.
@@ -419,6 +420,11 @@ class Xyzt {
       setToWeierstrassInfinity();
     } else {
       affineMontgomeryToWeierstrass();
+    }
+  }
+
+  void weistrassValuesInMontgomerySpace() {
+    if (z != 0) {
       x.set_mul(x, COFACTOR);
       y.set_mul(y, COFACTOR);
       z.set(COFACTOR);

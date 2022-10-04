@@ -364,6 +364,8 @@ std::cout << *scalar_ptr << std::endl;
                                                                       *scalar_ptr);
       }
     }
+
+    post_processing_values.final_result.weistrassValuesInMontgomerySpace();
     printf("finished postProcess\n");
     fflush(stdout);
   }
