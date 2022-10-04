@@ -199,7 +199,6 @@ above but provides a more true-to-hardware test enviroment.
 ```
 cd fpga
 ./compile_hw_emu.sh
-
 ```
 
 Once the emulation image is built run this command. You can optionally modify
@@ -235,8 +234,9 @@ aws ec2 describe-fpga-images --fpga-image-ids <afi-...>
 ```
 Which will show up as "available" when the image is ready to use.
 
+# Benchmarking
 
-## Running on AWS
+## AWS setup
 
 You need to run these steps on a AWS F1 box with an FPGA. Make sure you have
 cloned the aws-fpga repo and run:
@@ -254,7 +254,7 @@ systemctl status mpd
 You need the .awsxclbin file from the build box, usually the easiest way is to
 download this from the s3 bucket or scp it over.
 
-# Benchmarking
+## Running the MSM
 
 See the the test\_harness [README.md](test_fpga_harness/README.md) for detailed
 instructions on benchmarking our solution against 2<sup>26</sup> to get the
