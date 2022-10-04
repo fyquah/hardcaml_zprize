@@ -258,8 +258,8 @@ download this from the s3 bucket or scp it over.
 
 See the the test\_harness [README.md](test_fpga_harness/README.md) for detailed
 instructions on benchmarking our solution against 2<sup>26</sup> to get the
-performance number required for the ZPrize competition. This section presents a
-summary of those results.
+performance number required for the ZPrize competition. The following sections
+present a summary of those results.
 
 ## AFI-ids and measured performance
 
@@ -273,7 +273,10 @@ have also provided this AFI we built and tested with in the home directory of
 the fpga (runner) box, as well as in the s3 bucket provided to us in a `/afis`
 folder.
 
-## Benchmarking test harness
+## The test harness
+
+We took the test harness written in Rust for the GPU track and implemented
+against the same API for testing our FPGA implementation.
 
 Detailed instructions for running the test harness can be found in
 [test\_fpga\_harness](test_fpga_harness/README.md). Note each of these tests
