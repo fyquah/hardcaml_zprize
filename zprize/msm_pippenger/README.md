@@ -236,6 +236,8 @@ z3 should also be installed to run tests.
 
 ## Building and simulating in Hardcaml
 
+The following instructions assume you are in the `zprize/msm_pippenger` folder.
+
 The Hardcaml code can be built by calling `dune build`, which will also cause
 the top level Verilog to be generated in
 `fpga/krnl_msm_pippenger/krnl_msm_pippenger.v`. We also provide a dune target
