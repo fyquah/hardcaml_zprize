@@ -34,6 +34,7 @@ The main submission document for the NTT Acceleration contest is available in th
 In this competition, we create a FPGA design that performs a 2{^24} inverse
 number theoretic transform over a 64 bit finite field.
 
-The associated documentation pages for this competition include:
-- {!Hardcaml_ntt} implements the core components of for the NTT transform.
-- {!Zprize_ntt} implements the top level design and dicsusses results.
+The other documentation pages for this competition include:
+- {{!page:ntt}Hardcaml_ntt} - documentation about the design of the main mini
+  NTT core
+- {{!page:zprize_ntt_build_instructions}} - Building and testing instructions

@@ -45,11 +45,13 @@ There are 2 vitis kernels involved in our implementation:
 
 Our implementation can be parameterized by the number of cores it supports -
 the only requirement is it has a power of 2 and there must be at least 8 cores
-(and subject to resource limits on the FPGA). 
+(and subject to resource limits on the FPGA). Each of these cores is capable
+of performing a 2{^12} NTT using on-chip memory.
 
-Where C is the number of coress.
+{3 2 Phases to Compute the NTT}
 
-Our actual NTT implementation comprises of two phases
+Our actual NTT implementation comprises of two phases. Let C be the number of
+parallel NTT cores in our design.
 
 Phase 1: Performs steps 1, 2 and 3 of the algorithm
 - The HLS kernel streams the first C columns via AXI Stream to the Hardcaml
@@ -64,9 +66,8 @@ Phase 2: Performs step 4 and step 5 of the algorithm simultaneously.
 - The HLS kernel concurrently writes it back in columns - this implicitly
   performs a matrix transpose without the dedicated step
 
-Some minor optimizations that are included in our implementation:
-- The NTT core double buffers the contents coming from memory, this means that
-  while its performing a NTT, it can start accepting input for the next NTT.
+For a more thorough discussion on the design of individual NTT-cores, please
+refer the {{!page:ntt}Hardcaml_ntt} page.
 
 {2 Memory Bandwidth and Streaming}
 
@@ -88,9 +89,6 @@ be judged harshly in this competition due to the extra pre/post processing step.
 it none-the-less as it shows the potential performance we can get to with either a more optimised
 HBM structure, or different memory architecture (like DDR4).
 
-We will present the results for the normal layout (no data rearrangement) and
-optimized layout (ie: with preprocessing data arrangement separately)
-
 {2 Experiments}
 
 To evaluate our results, we perform 2 sets of experiments
@@ -104,7 +102,10 @@ yeilding different level of parallelisms.
 
 {3 Optimized-layout Builds}
 
-We demonstrate the result for the 16-core variant ones
+As discussed in the preceeding section, our performance is significantly
+bound by bandwidth. We conduct 2 builds (32-core and 64-core variant) with a
+simple data-rearrangement preprocessing step such that the host can stream data
+in 2048-4096 byte bursts.
 
 {2 Results (For Competition Criteria)}
 
@@ -150,7 +151,7 @@ control. The number is reported as "fixed" in the post_route_utilization.rpt
 ----------------------------------------------------------
 | Resource  | Available on FPGA | Used by Vitis Platform |
 ----------------------------------------------------------
-|     LUTS  |            870720 |                  62191 |
+|      LUTS |            870720 |                  62191 |
 | Registers |           1743360 |                  81502 |
 |       DSP |              5952 |                      4 |
 |    BRAM36 |              1344 |                      0 |
@@ -174,15 +175,15 @@ in our utlization
 
 {[
 
---------------------------------------------------------------------
-|             Utilization (%)                    |        |        |
-|   LUTs |  Registers |    DSP |   BRAM |   URAM | U_norm |  FOM   |
---------------------------------------------------------------------
-| 0.0518 |     0.0341 | 0.0430 | 0.1205 | 0.0750 | 0.3245 | 0.3095 |
-| 0.0749 |     0.0428 | 0.0860 | 0.1205 | 0.1500 | 0.4743 | 0.2505 |
-| 0.1198 |     0.0590 | 0.1720 | 0.1205 | 0.3000 | 0.7714 | 0.2451 |
-| 0.2335 |     0.0946 | 0.3441 | 0.1205 | 0.6000 | 1.3927 | 0.3301 |
---------------------------------------------------------------------
+------------------------------------------------------------------------------
+|                     Utilization (%)                      |        |        |
+|  Build  |  LUTs  |  Registers |    DSP |   BRAM |   URAM | U_norm |  FOM   |
+------------------------------------------------------------------------------
+| 8-core  | 0.0518 |     0.0341 | 0.0430 | 0.1205 | 0.0750 | 0.3245 | 0.3095 |
+| 16-core | 0.0749 |     0.0428 | 0.0860 | 0.1205 | 0.1500 | 0.4743 | 0.2505 |
+| 32-core | 0.1198 |     0.0590 | 0.1720 | 0.1205 | 0.3000 | 0.7714 | 0.2451 |
+| 64-core | 0.2335 |     0.0946 | 0.3441 | 0.1205 | 0.6000 | 1.3927 | 0.3301 |
+------------------------------------------------------------------------------
 
 ]}
 
@@ -195,15 +196,15 @@ those resources should be considered as part of the evaluation!
 
 {[
 
---------------------------------------------------------------------
-|             Utilization (%)                    |        |        |
-|   LUTs |  Registers |    DSP |   BRAM |   URAM | U_norm |  FOM   |
---------------------------------------------------------------------
-| 0.1232 |     0.0809 | 0.0437 | 0.1205 | 0.0750 | 0.4433 | 0.4229 |
-| 0.1463 |     0.0896 | 0.0867 | 0.1205 | 0.1500 | 0.5931 | 0.3132 |
-| 0.1912 |     0.1058 | 0.1727 | 0.1205 | 0.3000 | 0.8903 | 0.2829 |
-| 0.3049 |     0.1413 | 0.3448 | 0.1205 | 0.6000 | 1.5116 | 0.3583 |
---------------------------------------------------------------------
+------------------------------------------------------------------------------
+|         |             Utilization (%)                    |        |        |
+|  Build  |   LUTs |  Registers |    DSP |   BRAM |   URAM | U_norm |  FOM   |
+------------------------------------------------------------------------------
+| 8-core  | 0.1232 |     0.0809 | 0.0437 | 0.1205 | 0.0750 | 0.4433 | 0.4229 |
+| 16-core | 0.1463 |     0.0896 | 0.0867 | 0.1205 | 0.1500 | 0.5931 | 0.3132 |
+| 32-core | 0.1912 |     0.1058 | 0.1727 | 0.1205 | 0.3000 | 0.8903 | 0.2829 |
+| 64-core | 0.3049 |     0.1413 | 0.3448 | 0.1205 | 0.6000 | 1.5116 | 0.3583 |
+------------------------------------------------------------------------------
 
 ]}
 
@@ -217,16 +218,32 @@ Here is a detailed breakdown of a runtime sample of an optimized 64-core build:
 
 {[
 
+// Breakdown of a 2^24 optimized-layout 64-core evaluation
+
 ----------------------------------------------------
 |               Task                     |   Time  |
 ----------------------------------------------------
 | Preprocessing data rearrangement       | 0.0213s |
 | Copying input points to device         | 0.0414s |
-| Doing Actual NTT work                  | 0.0267s |
+| Doing Actual NTT work                  | 0.0267s |  (vs 0.3049s in normal layout)
 | Copying final result to host           | 0.0552s |
 | Copy from internal page-aligned buffer | 0.0231s |
 |----------------------------------------|---------|
 | Evaluate NTT                           | 0.1680s |
+-----------------------------------------|----------
+
+// Breakdown of a 2^24 optimized-layout 32-core evaluation
+
+----------------------------------------------------
+|               Task                     |   Time  |
+----------------------------------------------------
+| Preprocessing data rearrangement       | 0.0217s |
+| Copying input points to device         | 0.0416s |
+| Doing Actual NTT work                  | 0.0349s |  (vs 0.0691s in normal layout)
+| Copying final result to host           | 0.0554s |
+| Copy from internal page-aligned buffer | 0.0228s |
+|----------------------------------------|---------|
+| Evaluate NTT                           | 0.1770s |
 -----------------------------------------|----------
 
 ]}
@@ -236,12 +253,13 @@ evaluation time drops significantly compared to those of a 64-core build in
 a normal build (0.0267s vs 0.0450s). This comes at the cost of the host doing
 some data rearrangement.
 
-There are several bottlenecks in this result, all of which can be solved
-pretty easily:
+The bottleneck of our evaluation clear lies in the host and pcie latency in
+this result, both of which can be solved pretty easily:
 
 - {b preprocessing + postprocessing > latency} - We can run the preprocessing
   and post-processing in separate threads. We can setup the input and output
-  buffers such such that we don't run into cache coherency issues.
+  buffers such such that we don't run into cache coherency issues. We can also
+  mask some of the preprocessing latency with pcie latency.
 - {b The pcie latency is larger than the NTT evaluation} - This is because the
   vitis platform we are using only supports PCIe x4. With PCIe x16, we would have
   4 times the bandwidth and side-step this problem.
