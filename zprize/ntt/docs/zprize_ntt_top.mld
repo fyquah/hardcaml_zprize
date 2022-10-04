@@ -146,10 +146,10 @@ Latency and Power is used as report above in seconds and Watts respectively.
 We calculate [U_norm = U(LUTS) + U(Registers) + U(DSP) + U(BRAM) + U(URAM)].
 The max possible value of [U_norm] is hence 4.0, since 0 <= U(.) < 1.0
 
-{[
-
 These are FOM numbers assuming we don't include the platform (aka fixed resources)
 in our utlization
+
+{[
 
 --------------------------------------------------------------------
 |             Utilization (%)                    |        |        |
@@ -161,9 +161,16 @@ in our utlization
 | 0.2335 |     0.0946 | 0.3441 | 0.1205 | 0.6000 | 1.3927 | 0.3301 |
 --------------------------------------------------------------------
 
-These are FOM Numbers assuming we have to include the platform resources as
-part of our utilization. To stress this fact -- we don't think those resources
-should be considered as part of the evaluation!
+]}
+
+Our best-build for the evaluation criteria is the 32-core variant, with a {b
+FOM of 0.2451} 
+
+The following FOM Numbers assuming we have to include the vitis platform
+resources as part of our utilization. To stress this fact -- we don't think
+those resources should be considered as part of the evaluation!
+
+{[
 
 --------------------------------------------------------------------
 |             Utilization (%)                    |        |        |
@@ -177,8 +184,8 @@ should be considered as part of the evaluation!
 
 ]}
 
-Our best-build for the evaluation criteria is the 32-core variant, with a {b
-FOM of 0.2451} (or 0.2829 using the less desirable criteria)
+Using these criteria, our best build is also the 32-core variant with a FOM of
+0.2829
 
 {2 A note about Optimizing layout}
 
