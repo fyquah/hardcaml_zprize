@@ -351,16 +351,17 @@ class Driver {
     // add all the weierstrass points
     printf(" *** RAHUL: adding in non convertible points (batch %d)***\n", batch_num);
     if (__builtin_expect(!non_convertible_points.empty(), 0)) {
+      printf(" *** RAHUL: points.size() = %lu, scalars[%d].size() = %lu ***\n", non_convertible_points.size(), batch_num, non_convertible_scalars[batch_num].size());
       assert(non_convertible_points.size() ==
              non_convertible_scalars[batch_num].size());
-      printf(" *** RAHUL: points.size() = %lu, scalars.size() = %lu ***\n", non_convertible_points.size(), non_convertible_scalars[batch_num].size());
       for (size_t i = 0; i < non_convertible_points.size(); i++) {
-        const auto &point = non_convertible_points[i];
-        const auto &scalar = non_convertible_scalars[batch_num][i];
-        post_processing_values.final_result.weierstrassMultiplyAndAdd(point,
-                                                                      scalar);
+        printf(" *** RAHUL: point (%lu) ***\n", i);
+        weierstrassMultiplyAndAdd(post_processing_values.final_result, non_convertible_points[i],
+                                                                      non_convertible_scalars[batch_num][i]);
       }
     }
+printf("finished postProcess\n");
+fflush(stdout);
   }
 
   inline uint32_t *get_input_scalars_pointer() {
@@ -384,12 +385,13 @@ class Driver {
 
     // remove the non-convertible points and save them to buffer
     for (const auto &idx : non_convertible_indices) {
-      if ((scalars_start <= idx) && (idx < scalars_end)) {
-        memset(ptr_device_input_scalar + UINT32_PER_INPUT_SCALAR * idx, 0,
+printf("non convertible idx: %lu", idx);
+      if ((scalars_start - (batch_num * total_num_points) <= idx) && (idx < scalars_end - (batch_num * total_num_points))) {
+        memset(ptr_device_input_scalar + UINT32_PER_INPUT_SCALAR * (idx - scalars_start), 0,
                UINT32_PER_INPUT_SCALAR * sizeof(uint32_t));
-      }
 
       non_convertible_scalars[batch_num].push_back(scalars[idx]);
+      }
     }
   }
 
@@ -497,6 +499,7 @@ class Driver {
     cl_int err;
 
     auto do_postprocessing = [&]() {
+printf("doing postProcess(batch = %d)\n", processed_outputs);
       postProcess((processed_outputs % 2 == 0 ? source_kernel_output_a.data()
                                               : source_kernel_output_b.data()),
                   processed_outputs);
