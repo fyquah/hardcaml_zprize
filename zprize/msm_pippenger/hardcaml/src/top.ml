@@ -398,8 +398,9 @@ module Make (Config : Config.S) = struct
           ]
       ];
     (* Put the output points through a FIFO so that downstream can backpressure
-       and we hold off on reading points from RAM. *)
-    let fifo_capacity = 16 in
+       and we hold off on reading points from RAM. Using 512 as it is the native
+       BRAM block depth. *)
+    let fifo_capacity = 512 in
     let fifo_q =
       let wr =
         pipeline
@@ -416,8 +417,10 @@ module Make (Config : Config.S) = struct
         @: (port_a_q -- "fifo_d")
       in
       let rd = result_point_ready -- "fifo_rd" in
-      Fifo.create_showahead_with_extra_reg
+      Hardcaml_xilinx.Fifo_sync.create
+        ~build_mode
         ~overflow_check:true
+        ~showahead:true
         ~underflow_check:true
         ~scope
         ~capacity:fifo_capacity

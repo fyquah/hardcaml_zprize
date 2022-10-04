@@ -114,7 +114,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
     Scalar.Of_signal.mux2 load data.(0) (shift_regs 0)
   ;;
 
-  let create scope (i : _ I.t) =
+  let create ~build_mode scope (i : _ I.t) =
     let ( -- ) = Scope.naming scope in
     let stalled = Stalled_point_fifos.O.Of_signal.wires () in
     let tracker = Track_scalars.O.Of_signal.wires () in
@@ -239,6 +239,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
     Stalled_point_fifos.O.Of_signal.assign
       stalled
       (Stalled_point_fifos.hierarchy
+         ~build_mode
          scope
          { Stalled_point_fifos.I.clock = i.clock
          ; clear = i.clear
@@ -267,15 +268,18 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
     }
   ;;
 
-  let hierarchy scope =
+  let hierarchy ~build_mode scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
-    Hier.hierarchical ~name:"ctrl" ~scope create
+    Hier.hierarchical ~name:"ctrl" ~scope (create ~build_mode)
   ;;
 
   module For_synthesis = struct
     let create scope (i : _ I.t) =
       let spec = Reg_spec.create ~clock:i.clock ~clear:i.clear () in
-      hierarchy scope { (I.map i ~f:(reg spec)) with clock = i.clock; clear = i.clear }
+      hierarchy
+        ~build_mode:Synthesis
+        scope
+        { (I.map i ~f:(reg spec)) with clock = i.clock; clear = i.clear }
       |> O.map ~f:(reg spec)
     ;;
   end

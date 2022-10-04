@@ -111,30 +111,45 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
       (create_window ~window_index)
   ;;
 
-  let create scope (i : _ I.t) =
+  let create ~build_mode scope (i : _ I.t) =
     let stalled_windows =
       List.init num_windows ~f:(fun window_index ->
         hierarchy_window scope i ~window_index)
     in
     let current_stalled_window = O_window.Of_signal.mux i.window stalled_windows in
     let affine_point_out =
-      (Ram.create
-         ~collision_mode:Write_before_read
-         ~size:(num_windows * stall_fifo_depth)
-         ~write_ports:
-           [| { write_clock = i.clock
-              ; write_address = i.window @: current_stalled_window.write_address
-              ; write_data = i.affine_point
-              ; write_enable = i.push
-              }
-           |]
-         ~read_ports:
-           [| { read_clock = i.clock
-              ; read_address = i.window @: current_stalled_window.read_address
-              ; read_enable = vdd
-              }
-           |]
-         ()).(0)
+      let write_address = i.window @: current_stalled_window.write_address in
+      let read_address = i.window @: current_stalled_window.read_address in
+      let address = mux2 i.push write_address read_address in
+      let w = width i.affine_point in
+      let data_a, data_b =
+        let a, b = i.affine_point.:[w - 1, w / 2], i.affine_point.:[(w / 2) - 1, 0] in
+        if w % 2 = 0 then a, b else a, ue b
+      in
+      let qa, qb =
+        Hardcaml_xilinx.True_dual_port_ram.create
+          ~arch:(Blockram Write_before_read)
+          ~build_mode
+          ()
+          ~clock_a:i.clock
+          ~clock_b:i.clock
+          ~clear_a:gnd
+          ~clear_b:gnd
+          ~size:(num_windows * stall_fifo_depth * 2)
+          ~port_a:
+            { address = address @: gnd
+            ; data = data_a
+            ; read_enable = ~:(i.push)
+            ; write_enable = i.push
+            }
+          ~port_b:
+            { address = address @: vdd
+            ; data = data_b
+            ; read_enable = ~:(i.push)
+            ; write_enable = i.push
+            }
+      in
+      if w % 2 = 0 then qa @: qb else qa @: lsbs qb
     in
     let windows_with_stall = List.map stalled_windows ~f:(fun w -> w.not_empty) in
     { O.all_windows_have_stall = reduce ~f:( &: ) windows_with_stall
@@ -152,8 +167,8 @@ module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struc
     }
   ;;
 
-  let hierarchy scope =
+  let hierarchy ~build_mode scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
-    Hier.hierarchical ~name:"stalled_point_fifos" ~scope create
+    Hier.hierarchical ~name:"stalled_point_fifos" ~scope (create ~build_mode)
   ;;
 end
