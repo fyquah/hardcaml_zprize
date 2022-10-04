@@ -340,9 +340,9 @@ sudo fpga-describe-local-image -S 0 -M
 ```
 ```
 Power consumption (Vccint):
-   Last measured: 51 watts
-   Average: 50 watts
-   Max measured: 54 watts
+   Last measured: 52 watts
+   Average: 52 watts
+   Max measured: 56 watts
 ```
 
 ### Breakdown of individual host steps
