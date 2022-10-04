@@ -1,30 +1,81 @@
 # FPGA Implementation of the MSM pippengers algorithm
 
 We have implemented a FPGA design that runs on a AWS F1 instance and can compute
-the MSM of a large number of eliptic point and scalar pairs on the BLS12-377
+the MSM of a large number of elliptic point and scalar pairs on the BLS12-377
 curve.
 
-## Optimizations used
+## Overview of the architecture
 
-* Twisted edwards curve and extended projective points for a lower latency point
-  addition algorithm, and a high performance fully-pipelined adder on the FPGA
-* Mask PCIe latency by allowing MSM operations to start while points are being
-  streamed in batches from the host
-* Multiplier optimizations aimed at the Barret reduction algorithm and how they
-  map to the FPGA
-* Selecting a bucket size that allows for efficent usage of FPGA URAM, and
-  pblocking to avoid routing congestion
-* Scalars are converted into a signed form so that bucket memory gets a free bit
-  per window
-* Offloading the final triangle sum to the host
-* Using BRAM to store coefficents that can be used to reduce modulo adder and
-  subtractor latency
+We decided to implement a heavily optimized version of [pippengers
+algorithm](https://dl.acm.org/doi/abs/10.1137/0209022) in order to solve the MSM
+problem.
+
+We picked window sizes of between 12 and 13 bits, which allowed for efficient
+mapping to FPGA URAM resources which are naively 4096 elements deep. Points are
+transformed and pre-loaded into DDR-4, so that at run time only scalars are sent
+from the host to the FPGA via PCIe. We implemented a single fully-pipelined
+point adder on the FPGA which adds points to buckets as directed by the
+controller until there are no more points left. The controller automatically
+handles stalls (only accessing a bucket when it does not already have an
+addition in-flight). Once all points have been added into buckets, the FPGA
+streams back the result for the host to do the final (much smaller) triangle
+summation. This approach allows us to focus on implementing a very high
+performance adder on the FPGA (as these additions dominate pippengers
+algorithm), and then leaving smaller tasks for the host to perform.
+
+The above description overly simplifies the amount of optimizations and tricks we
+have implemented to get performance. A summary of the optimizations are listed
+out below.
+
+## Key optimizations
+
+ 1. Early on we decided rather than implementing all of pippengers algorithm on
+the LPG, it would be better to only implement point additions, and focus on as
+high throughput as possible. We implemented a fully pipelined adder which can
+take new inputs to add every clock cycle, with a result appearing on the output
+after 238 clock cycles in the final version.
+
+ 2. Implementing an adder on affine or projective coordinates requires more FPGA
+resources (DSPs, LUTs, carry chains, ...), so we investigated different
+transforms we could do in advance that would reduce the complexity on the FPGA.
+We ended up deciding to transform to a twisted edwards curve and extended
+projective coordinates. We also do a pre-transformation on the host that allows
+us to remove some of the constants required when calculating the point addition.
+
+ 3. We mask PCIe latency by allowing MSM operations to start while points are
+  being streamed in batches from the host. When a result is being processed we
+  are also able to start the MSM on the next batch.
+
+ 4. Multiplier optimizations in the Barret reduction algorithm so that constants
+    require less FPGA resources.
+
+ 5. Adder and subtractor use BRAMs as ROMs to store coefficients that can be used
+  to reduce modulo adder and subtractor latency.
+
+ 6. Selecting a bucket size that allows for efficient usage of FPGA URAM,
+  allowing non-uniform bucket sizes, and pblocking windows to separate SLRs in
+  the FPGA to avoid routing congestion.
+
+ 7. Scalars are converted into signed form and our twisted edwards adder is
+    modified to support point subtraction, which allows all bucket memory to be
+    reduced in half.
+
+ 8. Host code is optimized to allow for offloading the final triangle sum and
+    bucket doubling operations.
 
 ## Block diagram
+
+A high level block diagram showing the different data flows and modules used in
+our MSM implementation.
 
 ![Block diagram](docs/block_diagram.png)
 
 ## Resource utilization
+
+The AWS shell uses roughly 20% of the resources available on the FPGA. We tuned
+our MSM implementation to use the remaining resources as much as possible while
+still being able to successfully route in Vivado.
+
 ```
 +----------------------------+--------+--------+--------+--------+--------+--------+
 |          Site Type         |  SLR0  |  SLR1  |  SLR2  | SLR0 % | SLR1 % | SLR2 % |
@@ -63,13 +114,13 @@ curve.
 
 See the the test\_harness [README.md](test_fpga_harness/README.md) for
 instructions on benchmarking our solution to get the performance number required
-got the ZPrize competition.
+for the ZPrize competition. This section presents a summary of those results.
 
 ## AFI-ids and measured performance
 
 Currently our highest performance afi is:
 
-afi-0b83061a1938e28cb (FPGA MSM kernel running at 270MHz)
+afi-0938ad46413691732 (FPGA MSM kernel running at 278MHz)
 
 Note these tests take up to 30min each as we transform 2<sup>26</sup> affine
 points into their twisted edwards representation.
@@ -79,25 +130,29 @@ Running `cargo test` to verify the result for 4 rounds of 2<sup>26</sup> MSM:
 ```
 Running MSM of [67108864] input points (4 batches)
 Streaming input scalars across 4 chunks per batch (Mask IO and Post Processing)
-Running multi_scalar_mult took Ok(20.957301742s) (round = 0)
+Running multi_scalar_mult took Ok(20.504301742s) (round = 0)
 test msm_correctness ... ok
 ```
 
-The total time for 4 back to back MSMs, repeated 10 times (the output of cargo
-bench in the [test\_fpga\_harness](test_fpga_harness/README.md)). This allows us
-to mask the overhead of transfering data to the FPGA and various host processing
-steps on the scalar inputs that can happen in parallel. This is also the
-required measurement outlined in the ZPrize specs.
+We can then benchmark the result to eliminate noise and get a better measurement.
+Below is the total time for the same measurement as above but repeated 10 times
+(the output of cargo bench in the
+[test\_fpga\_harness](test_fpga_harness/README.md)). This allows us to mask the
+overhead of transferring data to the FPGA and various host processing steps on
+the scalar inputs that can happen in parallel. This is also the required
+measurement outlined in the ZPrize specs.
 
 ```
-FPGA-MSM/2**26x4        time:  [20.915 s 20.915 s 20.916 s]
+FPGA-MSM/2**26x4        time:  [20.404 s 20.504 s 20.621 s]
 ```
 
-We acheive a mean of 20.915s, which equates to **12.835** Mop/s
-((4*2^26)/1000000)/20.915).
+We achieve a mean of 20.504s, which equates to **13.092** Mop/s
+((4*2^26)/1000000)/20.504).
 
 ### Power
+
 AWS allows the average power to be measured during operation:
+
 ```
 sudo fpga-describe-local-image -S 0 -M
 ```
@@ -109,8 +164,16 @@ Power consumption (Vccint):
 ```
 
 The breakdown of how long each stage takes can be printed when changed the value
-of `mask_io` in `host/driver/driver.cpp` (this is not used in benchmarking as it
-has lower performance):
+of `mask_io` to `false` in `host/driver/driver.cpp` (this is not used in
+benchmarking as it has lower performance):
+
+```
+[memcpy-ing scalars to special memory region] 0.28928s
+[transferring scalars to gmem] 0.198263s
+[Doing FPGA Computation] 4.96781s
+[Copying results back from gmem] 0.00128217s
+[Doing on-host postprocessing] 0.469954s
+```
 
 ### Notes
  1. Because our solution offloads a non-trival amount of work to perform in
@@ -127,7 +190,7 @@ sudo fpga-load-local-image -S 0 -I <afig-...>
 
 ### Historical AFIs
 
-AFI-id | AFI-gid | Notes | 2^26 performance
+AFI-id | AFI-gid | git branch / Notes | 2^26 performance
 ------- | ------- | ----- | -----
  afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned. | n/a
  afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering | n/a
@@ -137,8 +200,8 @@ AFI-id | AFI-gid | Notes | 2^26 performance
  afi-071f40ea5e182fa8f | agfi-0e2c85bf4591270d3 | msm-halve-window-sizes-2 | [transferring scalars to gmem] 0.277229s, [Doing FPGA Computation] 8.10432s
  afi-0df5b1800bfbfdd54 | agfi-036994fb80202cb8d | mega-build-3-oct-1 | [transferring scalars to gmem] 0.182392s, [Doing FPGA Computation] 6.8731s
  afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 
- afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host code masking code | 4 rounds @ 20.957301742s
-
+ afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host masking code | 4 rounds @ 20.957301742s
+ afi-0938ad46413691732 | agfi-04dec9d922d689fad | mega-build-1-oct-3, timing optimizations, 280MHz, host masking code | 4 rounds @ 20.504s
 
 # Building the design from source
 
@@ -151,12 +214,20 @@ Run `cargo build` in `libs/rust/ark_bls12_377_g1` to compile the dynamic library
 exposing a reference implementation of the bls12-377 g1 curve. This is
 necessary for the expect tests to work expectedly.
 
-z3 should be installed to run tests.
+z3 should also be installed to run tests.
 
-## Simulating Hardcaml
+## Building and simulating in Hardcaml
+
+The Hardcaml code can be built by calling `dune build`, which will also cause
+the top level Verilog to be generated in
+`fpga/krnl_msm_pippenger/krnl_msm_pippenger.v`. We also provide a dune target
+for generating a md5sum `(fpga/krnl_msm_pippenger/rtl_checksum.md5)` of the
+Verilog expected, so that if changes to the Hardcaml source are made that modify
+the Verilog (which is not checked into the repo), the rtl-checksum would show a
+difference.
 
 We have various expect tests in the [test folders](hardcaml/test) which can be
-run by calling `dune runtest`. To run a longer simulation, we provided binaries
+run by calling `dune runtest`. To run a longer simulation, we added binaries
 that can be called and various arguments set. These run with the
 [Verilator](https://www.veripool.org/verilator/) backend which after a longer
 compile time, will provide much faster simulation time than the built-in
@@ -164,7 +235,7 @@ Hardcaml simulator. Make sure you have Verilator installed when running this
 binary. To simulate 128 random points, run the following command:
 
 ```
-./hardcaml/bin/simulate.exe -- kernel -num-points 128 -verilator -timeout 1000000
+dune exec ./hardcaml/bin/simulate.exe -- kernel -num-points 128 -verilator -timeout 1000000
 ```
 
 The `-waves` switch can be optionally provided to open the simulation in the
@@ -189,7 +260,8 @@ yum install libXtst.x86_64
 ```
 
 Cd into the `fpga` directory which contains the scripts to build an actual FPGA
-design (takes 6-8 hours), or a emulation module (takes 15 minutes).
+design (takes 6-8 hours), or a emulation module (takes 15 minutes). Both of
+these scripts below will build the Hardcaml to generate the required Verilog.
 
 ```
 cd fpga
@@ -203,9 +275,12 @@ Modify xrt.template.ini if you want to disable GUI.
 cd /test
 ./run_hw_emu.sh
 ```
+
 ### Creating the AWS AFI
 
-Once you have successfully called `compile_hw.sh` in the `fpga` folder:
+Once you have successfully called `compile_hw.sh` in the `fpga` folder you want
+to pass the results to the AWS script responsible for generating the AFI an
+end-user can run:
 
 ```
 ./compile_afi.sh
