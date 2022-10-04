@@ -256,7 +256,7 @@ download this from the s3 bucket or scp it over.
 
 # Benchmarking
 
-See the the test\_harness [README.md](test_fpga_harness/README.md) for
+See the the test\_harness [README.md](test_fpga_harness/README.md) for detailed
 instructions on benchmarking our solution against 2<sup>26</sup> to get the
 performance number required for the ZPrize competition. This section presents a
 summary of those results.
