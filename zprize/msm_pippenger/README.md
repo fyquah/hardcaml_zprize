@@ -1,4 +1,4 @@
-# FPGA Implementation of the MSM pippengers algorithm
+# FPGA Implementation of the MSM Pippengers algorithm
 
 We have implemented a FPGA design that runs on a AWS F1 instance and can compute
 the MSM of a large number of elliptic point and scalar pairs on the BLS12-377
@@ -7,6 +7,7 @@ curve.
 Performance is measured as per the ZPrize specs at 20.504s for 4 rounds of
 2<sup>26</sup> MSMs, which equates to **13.092** Mop/s. Measureuments are
 further detailed in the benchmarking section.
+
 
 ## Overview of the architecture
 
@@ -24,7 +25,7 @@ handles stalls (only accessing a bucket when it does not already have an
 addition in-flight). Once all points have been added into buckets, the FPGA
 streams back the result for the host to do the final (much smaller) triangle
 summation. This approach allows us to focus on implementing a very high
-performance adder on the FPGA (as these additions dominate pippengers
+performance adder on the FPGA (as these additions dominate Pippengers
 algorithm), and then leaving smaller tasks for the host to perform.
 
 The above description overly simplifies the amount of optimizations and tricks we
@@ -33,7 +34,7 @@ out below.
 
 ## Key optimizations
 
- 1. Early on we decided rather than implementing all of pippengers algorithm on
+ 1. Early on we decided rather than implementing all of Pippengers algorithm on
 the FPGA, it would be better to only implement point additions, and focus on as
 high throughput as possible. We implemented a fully pipelined adder which can
 take new inputs to add every clock cycle, with a result appearing on the output
@@ -42,9 +43,14 @@ after 238 clock cycles in the final version.
  2. Implementing an adder on affine or projective coordinates requires more FPGA
 resources (DSPs, LUTs, carry chains, ...), so we investigated different
 transforms we could do in advance that would reduce the complexity on the FPGA.
-We ended up deciding to transform to a twisted edwards curve and extended
+We ended up deciding to transform to a twisted Edwards curve and extended
 projective coordinates. We also do a pre-transformation on the host that allows
 us to remove some of the constants required when calculating the point addition.
+This requires special care as there are a sub-set of Weierstrass point that
+cannot map to our selected Edwards curve. These points are so rare that in
+generating 2<sup>26</sup> random points we never hit one, but we add a check in
+our driver to detect these and perform point multiplication on the host if
+needed. Corner case tests confirm this code works as expected.
 
  3. We mask PCIe latency by allowing MSM operations to start while points are
   being streamed in batches from the host. When a result is being processed we
@@ -60,7 +66,7 @@ us to remove some of the constants required when calculating the point addition.
   allowing non-uniform bucket sizes, and pblocking windows to separate SLRs in
   the FPGA to avoid routing congestion.
 
- 7. Scalars are converted into signed form and our twisted edwards adder is
+ 7. Scalars are converted into signed form and our twisted Edwards adder is
     modified to support point subtraction, which allows all bucket memory to be
     reduced in half.
 
@@ -127,7 +133,7 @@ Currently our highest performance afi is:
 afi-0938ad46413691732 (FPGA MSM kernel running at 278MHz)
 
 Note these tests take up to 30min each as we transform 2<sup>26</sup> affine
-points into their twisted edwards representation.
+points into their twisted Edwards representation.
 
 Running `cargo test` to verify the result for 4 rounds of 2<sup>26</sup> MSM:
 
@@ -211,6 +217,10 @@ AFI-id | AFI-gid | git branch / Notes | 2^26 performance
 
 Instructions are given below for building from source. A prerequisite is that
 OCaml has been setup (outlined in the main [README.md](../../README.md)).
+
+It is important you use the AMI version 1.10.5 and Vivado version 2020.2 to
+acheive the same results. The rtl_checksum expected of the Verilog when
+generated from the Hardcaml source is 1929f78e1e4bafd9cf88d507a3afa055.
 
 ## Compiling the bls12-377 reference
 
