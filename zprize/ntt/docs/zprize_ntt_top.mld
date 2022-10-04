@@ -7,27 +7,67 @@ build time. For the Zprize competition we target a transform of size 2{^24}.
 
 The design is based around the 4-step algorithm which decomoses the full 2{^24}
 NTT into multiple 2{^12} NTTs across columns and rows of a 2{^12} x 2{^12}
-matrix.
+matrix. The 4-step algorithm is described in section 7.1 of
+{{:https://arxiv.org/pdf/2011.11524.pdf} this paper}. Here's a summary of what
+it is:
 
-Overall complexity (in terms of butterly operations performed) is roughly
-equivalent to a single 2{^24} INNT, though an extra twiddle factor correction pass
-is required between the column and row phases.
+1. Layout the 2{^24} size input data as a 2{^12} X 2{^12} matrix in row-major
+order (ie: [mat[i][j] = data[i * 2^12 + j]]).
+
+2. Perform a length-2{^12} NTT along all columns and write the results back
+in place
+
+3. Multiply [mat[i][j]] by [x^{i * j}], where [x] is the N-th root of unity of
+the underling field, and N = 2{^24}
+
+4. Perform a length-2{^12} NTT along all rows and write the results back in place
+
+5. Tranpose the matrix
+
+The overall complexity (in terms of butterly operations performed) is roughly
+equivalent to a single 2{^24} INNT, though an extra twiddle factor correction
+pass (ie: step 3) is required between the column and row phases.
 
 On the otherhand, onchip memory usage is drastically reduce, and it becomes possible to
 implement multiple smaller INNT cores for improved performance through parallelism.
 
-{2 Code structure}
+{2 Our Implementation}
 
-The Xilins XRT Vitis framework is used to provides PCIe and HBM interfaces. As
-such the design is provided as Vitis kernels which are put together to provide
-the final architecture.
+We implemented our NTT core on top of the Vitis platform for Varium C1100. This
+platform provides us with the PCIe and HBM interfaces. As such the design is
+provided as Vitis kernels which are put together to provide the final
+architecture.
 
-There are 2 kernels involved:
+There are 2 vitis kernels involved in our implementation:
 
 - {{!page:zprize_ntt_hardcaml_kernel}Hardcaml RTL kernel} implementing the core NTT algorithm
 - {{!page:zprize_ntt_cpp_kernel}C++ HLS kernel} which sequences PCIe and HBM memory accesses
 
-{2 Memory bandwidth and streaming}
+Our implementation can be parameterized by the number of cores it supports -
+the only requirement is it has a power of 2 and there must be at least 8 cores
+(and subject to resource limits on the FPGA). 
+
+Where C is the number of coress.
+
+Our actual NTT implementation comprises of two phases
+
+Phase 1: Performs steps 1, 2 and 3 of the algorithm
+- The HLS kernel streams the first C columns via AXI Stream to the Hardcaml
+  kernel from a HBM bank
+- The Hardcaml RTL kernel accepts the NTT
+- The HLS kernel concurrently writes the results of the into a different HBM
+  Bank
+
+Phase 2: Performs step 4 and step 5 of the algorithm simultaneously.
+- The HLS kernel stream columns to the Hardcaml kernel via an Axi Stream interface
+- The Hardcaml RTL kernel perform the NTT
+- The HLS kernel concurrently writes to
+
+Some minor optimizations that are included in our implementation:
+- The NTT core double buffers the contents coming from memory, this means that
+  while its performing a NTT, it can start accepting input for the next NTT.
+
+{2 Memory Bandwidth and Streaming}
 
 THe 4 step algorithm requires both a coloumn and row transform, with transposes between phases.
 This is performed both by controlling the memory access pattern (normal layout build) or by
