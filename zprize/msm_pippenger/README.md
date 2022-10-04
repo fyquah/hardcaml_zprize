@@ -190,31 +190,6 @@ cd fpga
 ./compile_hw.sh
 ```
 
-### Running a hardware emulation simulation
-
-You can also optionally run a Vivado simulation of the design which includes the
-AWS shell and DDR-4 logic. This takes a lot longer than the Hardcaml simulation
-above but provides a more true-to-hardware test enviroment.
-
-```
-cd fpga
-./compile_hw_emu.sh
-```
-
-Once the emulation image is built run this command. You can optionally modify
-xrt.template.ini if you want to enable GUI:
-
-```
-cd /test
-./run_hw_emu.sh
-```
-
-If you want the Vivado GUI over the ssh to AWS, you need to install:
-
-```
-yum install libXtst.x86_64
-```
-
 ### Creating the AWS AFI
 
 Once you have successfully called `compile_hw.sh` in the `fpga` folder you want
@@ -310,7 +285,7 @@ CMAKE=cmake3 XCLBIN=~/afi-0938ad46413691732.awsxclbin TEST_LOAD_DATA_FROM=~/test
 Output to show the result of 10 runs of 4 rounds each:
 
 ```
-FPGA-MSM/2**26x4        time: [20.336 s 20.336 s 20.337 s] 
+FPGA-MSM/2**26x4 time: [20.336 s 20.336 s 20.337 s] 
 ```
 
 We achieve a mean of 20.336s, which equates to **13.200** Mop/s
