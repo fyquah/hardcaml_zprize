@@ -146,7 +146,7 @@ measurement outlined in the ZPrize specs.
 FPGA-MSM/2**26x4        time:  [20.404 s 20.504 s 20.621 s]
 ```
 
-We achieve a mean of 20.915s, which equates to **13.092** Mop/s
+We achieve a mean of 20.504s, which equates to **13.092** Mop/s
 ((4*2^26)/1000000)/20.504).
 
 ### Power
