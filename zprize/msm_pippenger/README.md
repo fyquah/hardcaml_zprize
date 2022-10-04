@@ -57,11 +57,11 @@ extended projective coordinates to our own coordinate system allows us to furthe
 decrease the computational complexity and remove all of the constants required when 
 calculating the point addition.
 
-This transformation requires special care as there are 5 points on the Weierstrass 
-curve that cannot map to our selected twisted Edwards curve. This is such a rare 
-edge case that in generating 2<sup>26</sup> random points we never hit one, but 
-we add a check in our driver to detect these and perform point multiplication on 
-the host if needed. Corner case tests confirm this code works as expected.
+    This transformation requires special care as there are 5 points on the Weierstrass 
+    curve that cannot map to our selected twisted Edwards curve. This is such a rare 
+    edge case that in generating 2<sup>26</sup> random points we never hit one, but 
+    we add a check in our driver to detect these and perform point multiplication on 
+    the host if needed. Corner case tests confirm this code works as expected.
 
  3. We mask PCIe latency by allowing MSM operations to start while points are
   being streamed in batches from the host. When a result is being processed we
