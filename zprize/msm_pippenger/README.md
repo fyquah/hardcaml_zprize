@@ -4,6 +4,15 @@ We have implemented a FPGA design that runs on a AWS F1 instance and can compute
 the MSM of a large number of eliptic point and scalar pairs on the BLS12-377
 curve.
 
+## Overview of the architecture
+
+We decided to implement a heavily optimized version of [pippengers
+algorithm](https://dl.acm.org/doi/abs/10.1137/0209022) in order to solve the MSM
+problem.
+
+We picked window sizes of between 12 and 13 bits, which allowed for efficent
+mapping to FPGA URAM resources which are natively 4096 elements deep.
+
 ## Optimizations used
 
 * Twisted edwards curve and extended projective points for a lower latency point
@@ -83,18 +92,19 @@ Running multi_scalar_mult took Ok(20.957301742s) (round = 0)
 test msm_correctness ... ok
 ```
 
-The total time for 4 back to back MSMs, repeated 10 times (the output of cargo
-bench in the [test\_fpga\_harness](test_fpga_harness/README.md)). This allows us
-to mask the overhead of transfering data to the FPGA and various host processing
-steps on the scalar inputs that can happen in parallel. This is also the
-required measurement outlined in the ZPrize specs.
-
+We can then benchmark the result to eliminate noise and get a better measurment.
+Below is the total time for the same measurement as above but repeated 10 times
+(the output of cargo bench in the
+[test\_fpga\_harness](test_fpga_harness/README.md)). This allows us to mask the
+overhead of transfering data to the FPGA and various host processing steps on
+the scalar inputs that can happen in parallel. This is also the required
+measurement outlined in the ZPrize specs.
 ```
-FPGA-MSM/2**26x4        time:  [20.915 s 20.915 s 20.916 s]
+FPGA-MSM/2**26x4        time:  [20.404 s 20.504 s 20.621 s]
 ```
 
-We acheive a mean of 20.915s, which equates to **12.835** Mop/s
-((4*2^26)/1000000)/20.915).
+We acheive a mean of 20.915s, which equates to **13.092** Mop/s
+((4*2^26)/1000000)/20.504).
 
 ### Power
 AWS allows the average power to be measured during operation:
@@ -135,7 +145,7 @@ sudo fpga-load-local-image -S 0 -I <afig-...>
 
 ### Historical AFIs
 
-AFI-id | AFI-gid | Notes | 2^26 performance
+AFI-id | AFI-gid | git branch / Notes | 2^26 performance
 ------- | ------- | ----- | -----
  afi-04f8603ed1582001a | | First build with single controller, inputs and outputs not aligned. | n/a
  afi-06740c40be3315e44 | agfi-0f79d721e3edefc64 | master-b86bfd8d65490545b4ace0aab3fbae19bf027652 Single controller with 64b aligned input and output, double buffering | n/a
@@ -145,10 +155,10 @@ AFI-id | AFI-gid | Notes | 2^26 performance
  afi-071f40ea5e182fa8f | agfi-0e2c85bf4591270d3 | msm-halve-window-sizes-2 | [transferring scalars to gmem] 0.277229s, [Doing FPGA Computation] 8.10432s
  afi-0df5b1800bfbfdd54 | agfi-036994fb80202cb8d | mega-build-3-oct-1 | [transferring scalars to gmem] 0.182392s, [Doing FPGA Computation] 6.8731s
  afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 
- afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host code masking code | 4 rounds @ 20.957301742s
- afi-0938ad46413691732 | agfi-04dec9d922d689fad
+ afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host masking code | 4 rounds @ 20.957301742s
+ afi-0938ad46413691732 | agfi-04dec9d922d689fad | mega-build-1-oct-3, timing optimizations, 280MHz, host masking code | 4 rounds @ 20.504s
 
-# Building the design from sourceagfi-04dec9d922d689fad
+# Building the design from source
 
 Instructions are given below for building from source. A prerequisite is that
 OCaml has been setup (outlined in the main [README.md](../../README.md)).
