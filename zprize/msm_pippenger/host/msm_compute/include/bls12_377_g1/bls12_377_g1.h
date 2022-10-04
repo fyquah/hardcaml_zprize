@@ -627,7 +627,7 @@ class Xyzt {
   bool copy_from_rust_type(const g1_affine_t &affine) {
     if (affine.infinity) {
       // Special representation for infinity in the twisted edwards curve
-      setToTwistedEdwardsInfinity();
+      setToTwistedEdwardsIdentity();
       return true;
     }
 
