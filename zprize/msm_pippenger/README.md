@@ -290,7 +290,21 @@ CMAKE=cmake3 XCLBIN=~/afi-0938ad46413691732.awsxclbin TEST_LOAD_DATA_FROM=~/test
 Output to show the latency of 4 rounds and correctness:
 
 ```
-GET FROM FU YONG
+Done internal format conversion!
+Loading XCLBIN=/home/55312.bsdevlin.gmail.com/afi-0938ad46413691732.awsxclbin and doing openCL setups:
+Found Platform
+Platform Name: Xilinx
+INFO: Reading /home/55312.bsdevlin.gmail.com/afi-0938ad46413691732.awsxclbin
+Loading: '/home/55312.bsdevlin.gmail.com/afi-0938ad46413691732.awsxclbin'
+Trying to program device[0]: xilinx_aws-vu9p-f1_shell-v04261818_201920_2
+Device[0]: program successful!
+[Copying input points to gmem] 1.4966s
+multi_scalar_mult_init took Ok(1167.977275761s)
+Running msm test for 1 rounds
+Running MSM of [67108864] input points (4 batches)
+Streaming input scalars across 4 chunks per batch (Mask IO and Post Processing)
+Running multi_scalar_mult took Ok(20.37390268s) (round = 0)
+test msm_correctness ... ok
 ```
 
 We also benchmark the result to eliminate noise and get a more accurate
