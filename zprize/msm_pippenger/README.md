@@ -39,9 +39,10 @@ out below.
 
  1. Early on we decided rather than implementing all of Pippenger's algorithm on
 the FPGA, it would be better to only implement point additions, and focus on as
-high throughput as possible. We implemented a fully pipelined adder which can
-take new inputs to add every clock cycle, with a result appearing on the output
-after 238 clock cycles in the final version.
+high throughput as possible. This decision also means the resource requirements
+of the adder is drastically reduced, as we only require a mixed adder.
+We implemented a fully pipelined adder which can take new inputs to add every clock
+cycle, with a result appearing on the output after 238 clock cycles in the final version.
 
  2. Implementing an adder on affine or projective coordinates requires more FPGA
 resources (DSPs, LUTs, carry chains, ...), so we investigated different
@@ -62,9 +63,10 @@ for scaled twisted edwards curve).
     we add a check in our driver to detect these and perform point multiplication on 
     the host if needed. Corner case tests confirm this code works as expected.
 
- 3. We mask PCIe latency by allowing MSM operations to start while points are
-  being streamed in batches from the host. When a result is being processed we
-  are also able to start the MSM on the next batch.
+ 3. We mask PCIe latency and host-post-processing by allowing MSM operations to start
+    while points are being streamed in batches from the host. When a result is being processed,
+    we are also able to start the MSM on the next batch. This masks out the host post-processing
+    latency for all but the last batch.
 
  4. Multiplier optimizations in the Barrett reduction algorithm so that constants
     require less FPGA resources.
