@@ -469,7 +469,7 @@ class Xyzt {
     t1.set_add(t1, weierstrass_params.a);
     t2.set_mul(two, y);
     if (t2 == 0) {  // result is infinity
-      z.set(ZERO_WORDS);
+      setToWeierstrassInfinity();
       return;
     }
     t3.set_div(t1, t2);  // (3 * x1^2 + a) / (2 * y1)
@@ -509,7 +509,7 @@ class Xyzt {
       t1.set_sub(other.y, y);
       t2.set_sub(other.x, x);
       if (t2 == 0) {
-        z.set(ZERO_WORDS);
+        setToWeierstrassInfinity();
         return;
       }
       t3.set_div(t1, t2);  // (y2 - y1) / (x2 - x1)
@@ -533,6 +533,7 @@ class Xyzt {
 
   void weierstrassMultiplication(const biginteger256_t &scalar) {
     Xyzt temp = *this;
+    setToWeierstrassInfinity();
     for (int i = 0; i < SCALAR_NUM_BITS; i++) {
       if (scalar.getBit(i)) {
         weierstrassAddition(temp);
