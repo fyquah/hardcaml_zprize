@@ -1,7 +1,41 @@
-(** A pipeline that transforms scalars into the form that is expected on the
-    FPGA. The main transform used currently is converting scalars from the range
-    1, 2^c-1 into the range 2^{c-1}, -2^{c-1} which allows for mapping negative
-    points into positive point buckets. *)
+(** Module to transform scalars to a signed-digit representation, which is expected
+    by the downstream FPGA logic.
+
+    {%html: <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.2/dist/katex.min.css" integrity="sha384-bYdxxUwYipFNohQlHt0bjN/LCpueqWz13HufFEV1SUatKs1cm4L6fFgCi1jT643X" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.2/dist/katex.min.js" integrity="sha384-Qsn9KnoKISj6dI8g7p1HBlNpVx0I8p1SvlwOldgi3IorMle61nQy4zEahWYtljaz" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.2/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"
+        onload="renderMathInElement(document.body);"></script> %}
+
+    The main transform currently implemented transforms the input scalar from unsigned digits
+    in the range {%html: \([0,2^b-1]\) %} to signed digits in the range {%html: \([-2^{b-1}, 2^{b-1}-1]\) %}.
+
+    It does this as follows: suppose we have a B-bit scalar {%html: \(k\)%}, split into {%html: \(N\) %}
+    windows of size {%html: \(b_i\) %}, where {%html: \(\sum_{i=0}^{N-1}{b_i} = B\) %}. Then, letting
+    {%html: \(o_i = \sum_{j=0}^{i-1}{b_i}\) %} be the offsets of each digit, we can write
+    {%html: $$ k = \sum_{i=0}^{N-1}{2^{o_i}d_i},\;\; d_i\in[0,2^b_i-1]\;\forall i  $$ %}
+    as a normal unsigned representation of {%html: \(k\) %} (derived by just directly windowing the bits in its
+    binary representation).
+
+    Then, we perform the following iterative transform from {%html: \(i = 0\) %} to {%html: \(N-2\) %}.
+
+    {%html: 
+    $$ 
+    \text{If } d_i \geq 2^{b_i-1}:
+    (d_i, d_{i+1}) \leftarrow (d_i - 2^{b_i}, d_{i+1} + 1)
+    $$
+    %}
+
+    After performing this transform, digits {%html: \(d_i\in[-2^{b_i-1}, 2^{b_i-1}-1]\) %} for {%html: \(i\in[0,N-2]\) %}.
+
+    The downstream point adder can exploit this new digit base because point negation is extremely cheap (on the Twisted Edwards
+    affine space, it just corresponds to negative the x-coordinate). So, for all but the final window,
+    we can halve the number of buckets and use point subtraction for all the negative buckets.
+
+    The module implements this transform as a fully unrolled (N-1)-stage pipeline, with optional skid buffers
+    in order to cut combinational ready signal paths. It is designed in a modular way so that the 
+    overall scalar transformation can be extended to include many further transforms using other 
+    scalars (i.e. 2, 3, etc.), if point multiples were precomputed and loaded in the FPGA.
+*)
 
 open Hardcaml
 module Axi512 = Hardcaml_axi.Axi512

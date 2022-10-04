@@ -19,9 +19,15 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo "Your current branch is $BRANCH, i will bring you back there when the deployment is done"
 
 dune build @doc
+cp -r docs/assets /tmp/foo-bar-baz
+
 git checkout gh-pages
-git rm -rf .
+git fetch
+git merge origin/gh-pages
+git rm -rf . --ignore-unmatch
 cp -r _build/default/_doc/_html/ docs
+mv /tmp/foo-bar-baz docs/assets/
+
 git add docs/
 git commit -m "Deploy gh-pages using deploy-docs-to-gh-pages-script" --allow-empty
 git push origin HEAD

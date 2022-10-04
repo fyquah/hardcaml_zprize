@@ -1,5 +1,5 @@
 (** Multistage fully-pipelined ripple-carry-adder (or subtractor).
-  
+
     This module computs [a OP b OP c OP d...] in fully-piipelined using
     the ripple-carry-add algorithm. Each of the OP are either (+) or (-)
     (they don't have to be the same)
@@ -8,14 +8,9 @@
     each to be added separately every clock cycles. Registers are placed
     at the inputs and outputs to align them to the same clock cycles.
 
-    Note that [stages = 0] or [stages = 1] is allowed, resulting in a
-    non-hierarchical combinational adder and a single-stage adder respectively.
-    For adding values of [stages], this module will instantiate a
-    a hierarchical module.
-
     If any but the first of the operands are constants, the module will
-    generate a specialized module that doesn't pipeline the constant throughout
-    the adder/subtractor.
+    generate a specialized module that uses the constant directly throughout
+    the adder/subtractor, rather than pipelining it.
 *)
 
 open Hardcaml
@@ -32,10 +27,11 @@ end
  
     When instantiating a pure adder, the [carry] will be the carry bits with
     width = [Int.ceil_log2 num_operands]. For a subtractor, it will the
-    [borrow] bits.
-
-    For a mixed adder/subtractor implementation, you can treat
+    [borrow] bits. For a mixed adder/subtractor implementation, you can treat
     [carry @: result] as your signed final result.
+
+    The width of result matches the input operands, the width of carry is
+    dependent on the exact operands and number of operands.
 *)
 module O : sig
   type 'a t =
@@ -79,10 +75,16 @@ val sub
   -> Signal.t list
   -> Signal.t O.t
 
-(** {2 no_carry functions}.
-  
-    These are similar to the [mixed], [add] and [sub] functions, but without
+(** {1 Functions without Carry/Borrow} *)
+
+(** These are similar to the [mixed], [add] and [sub] functions, but without
     the carry/borrow bits.
+
+    Note that [stages = 0] or [stages = 1] is allowed. It will result in a
+    non-hierarchical combinational adder and a single-stage adder respectively.
+    For adding values of [stages], this module will instantiate a
+    a hierarchical module. The rationale for this is we empirically observed
+    better synthesis results when we don't instantiate it hierarchically.
 *)
 val mixed_no_carry
   :  ?name:string

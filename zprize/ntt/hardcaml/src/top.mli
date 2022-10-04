@@ -1,4 +1,6 @@
-(** Top level for the NTT design. *)
+(** Instantiate the parallel NTT cores along with the load and store state machines.
+
+    Exposes AXI streaming interfaces. *)
 
 open! Base
 open Hardcaml
@@ -14,8 +16,11 @@ module Make (Config : Top_config.S) : sig
     type 'a t =
       { clock : 'a
       ; clear : 'a
-      ; start : 'a
+      ; start : 'a (** Begin processing a pass. *)
       ; first_4step_pass : 'a
+          (** If high we are performing the first pass of the 4 step algorithm. The
+              core will apply the twiddle correction factors and also stream in/out
+              data in the appropriate way. *)
       ; data_in : 'a Axi_stream.Source.t
       ; data_out_dest : 'a Axi_stream.Dest.t
       }
@@ -26,7 +31,7 @@ module Make (Config : Top_config.S) : sig
     type 'a t =
       { data_out : 'a Axi_stream.Source.t
       ; data_in_dest : 'a Axi_stream.Dest.t
-      ; done_ : 'a
+      ; done_ : 'a (** Low while a pass is running. *)
       }
     [@@deriving sexp_of, hardcaml]
   end

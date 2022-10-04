@@ -1,5 +1,5 @@
 (** Shadow Signal.reg and Signal.pipeline because we want ~enable to be a
- * non-optional argument.
+    non-optional argument.
 *)
 
 open Hardcaml

@@ -53,7 +53,7 @@ MemoryLayout memory_layout_from_string(std::string s)
   }
 
   if (s == "OPTIMIZED_LAYOUT") {
-    return MemoryLayout::NORMAL_LAYOUT;
+    return MemoryLayout::OPTIMIZED_LAYOUT;
   }
 
   std::string error_message;
@@ -82,8 +82,10 @@ public:
 
 NttFpgaDriverArg::NttFpgaDriverArg(CoreType core_type,
                                    MemoryLayout memory_layout,
-                                   uint64_t log_row_size)
-  : core_type(core_type), memory_layout(memory_layout), log_row_size(log_row_size)
+                                   uint64_t log_row_size,
+                                   uint64_t log_blocks)
+  : core_type(core_type), memory_layout(memory_layout), log_row_size(log_row_size),
+    log_blocks(log_blocks)
 {
 }
 
@@ -95,30 +97,36 @@ uint64_t NttFpgaDriverArg::num_elements() {
   return row_size() * row_size();
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_reverse(MemoryLayout memory_layout, uint64_t log_row_size)
+NttFpgaDriverArg NttFpgaDriverArg::create_reverse(MemoryLayout memory_layout,
+                                                  uint64_t log_row_size,
+                                                  uint64_t log_blocks)
 {
-  return NttFpgaDriverArg(CoreType::REVERSE, memory_layout, log_row_size);
+  return NttFpgaDriverArg(CoreType::REVERSE, memory_layout, log_row_size, log_blocks);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_24(MemoryLayout memory_layout)
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_24(MemoryLayout memory_layout,
+                                                   uint64_t log_blocks)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_24, memory_layout, 12);
+  return NttFpgaDriverArg(CoreType::NTT_2_24, memory_layout, 12, log_blocks);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_18(MemoryLayout memory_layout)
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_18(MemoryLayout memory_layout,
+                                                   uint64_t log_blocks)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_18, memory_layout, 9);
+  return NttFpgaDriverArg(CoreType::NTT_2_18, memory_layout, 9, log_blocks);
 }
 
-NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_12(MemoryLayout memory_layout)
+NttFpgaDriverArg NttFpgaDriverArg::create_ntt_2_12(MemoryLayout memory_layout,
+                                                   uint64_t log_blocks)
 {
-  return NttFpgaDriverArg(CoreType::NTT_2_12, memory_layout, 6);
+  return NttFpgaDriverArg(CoreType::NTT_2_12, memory_layout, 6, log_blocks);
 }
 
 NttFpgaDriver::NttFpgaDriver(NttFpgaDriverArg driver_arg) : 
     core_type(driver_arg.core_type),
     memory_layout(driver_arg.memory_layout),
     log_row_size(driver_arg.log_row_size),
+    log_blocks(driver_arg.log_blocks),
 	  row_size(1 << driver_arg.log_row_size),
 	  matrix_size(row_size * row_size),
     loaded_xclbin(false),
@@ -241,6 +249,33 @@ void NttFpgaDriver::wait_for_result(NttFpgaBuffer *buffer)
   OCL_CHECK(err, err = buffer->ev_transfer_data_from_fpga.wait());
 }
 
+void NttFpgaDriver::transfer_input_vector_to_user_buffer(NttFpgaBuffer *buffer,
+                                                         uint64_t *in)
+{
+  switch (memory_layout) {
+    case MemoryLayout::NORMAL_LAYOUT:
+      memcpy(buffer->input_data(), in, row_size * row_size * sizeof(uint64_t));
+      break;
+    case MemoryLayout::OPTIMIZED_LAYOUT:
+      ntt_preprocessing(buffer->input_data(), in, row_size);
+      break;
+  }
+}
+
+void NttFpgaDriver::transfer_user_buffer_to_output_vector(NttFpgaBuffer *buffer,
+                                                          uint64_t *out)
+{
+  switch (memory_layout) {
+    case MemoryLayout::NORMAL_LAYOUT:
+      memcpy(out, buffer->output_data(), row_size * row_size * sizeof(uint64_t));
+      break;
+    case MemoryLayout::OPTIMIZED_LAYOUT: {
+      ntt_postprocessing(out, buffer->output_data(), row_size, log_blocks);
+      break;
+    }
+  }
+}
+
 void NttFpgaDriver::enqueue_evaluation_async(NttFpgaBuffer *buffer)
 {
   set_args(buffer);
@@ -265,14 +300,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
 
   bench("Evaluate NTT", [&]() {
     bench("Copy to internal page-aligned buffer", [&](){
-        switch (memory_layout) {
-        case MemoryLayout::NORMAL_LAYOUT:
-          memcpy(buffer->input_data(), in, row_size * row_size * sizeof(uint64_t));
-          break;
-        case MemoryLayout::OPTIMIZED_LAYOUT:
-          ntt_preprocessing(buffer->input_data(), in, row_size);
-          break;
-        }
+        transfer_input_vector_to_user_buffer(buffer, (uint64_t*) in);
     });
 
     bench("Copying input points to device", [&]() {
@@ -285,7 +313,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
     });
 
     bench("Doing NTT (phase2)", [&]() {
-  enqueue_phase2_work(buffer);
+        enqueue_phase2_work(buffer);
         OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
     });
 
@@ -294,23 +322,7 @@ void NttFpgaDriver::simple_evaluate_slow_with_profilling(uint64_t *out, const ui
     });
 
     bench("Copy from internal page-aligned buffer", [&]() {
-        switch (memory_layout) {
-        case MemoryLayout::NORMAL_LAYOUT:
-          memcpy(out, buffer->output_data(), row_size * row_size * sizeof(uint64_t));
-          break;
-        case MemoryLayout::OPTIMIZED_LAYOUT: {
-          uint64_t logblocks;
-          if (row_size == (1 << 12)) {
-            logblocks = 3;
-          } else if (row_size == (1 << 6)) {
-            logblocks = 2;
-          } else {
-            assert(false);
-          }
-          ntt_postprocessing(out, buffer->output_data(), row_size, logblocks);
-          break;
-        }
-        }
+        transfer_user_buffer_to_output_vector(buffer, out);
     });
   });
 
@@ -332,10 +344,8 @@ void NttFpgaDriver::simple_evaluate(uint64_t *out, const uint64_t *in, uint64_t 
 }
 
 void NttFpgaDriver::expert__evaluate_on_fpga_blocking(UserBuffer* buffer) {
-  std::cout << "Enqueued phase1 work and waiting" << std::endl;
   enqueue_phase1_work(buffer);
   OCL_CHECK(err, err = buffer->ev_phase1_work.wait());
-  std::cout << "Enqueued phase2 work and waiting" << std::endl;
   enqueue_phase2_work(buffer);
   OCL_CHECK(err, err = buffer->ev_phase2_work.wait());
 }

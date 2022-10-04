@@ -1,3 +1,5 @@
+(** Presently unused module to compute modulo square of two numbers. *)
+
 open Base
 open Hardcaml
 

@@ -42,6 +42,7 @@ module Make (Config : Top_config.S) = struct
       ; tvalid : 'a
       ; rd_addr : 'a [@bits logn]
       ; rd_en : 'a [@bits blocks]
+      ; rd_any : 'a
       ; block : 'a [@bits max 1 Config.logblocks]
       }
     [@@deriving sexp_of, hardcaml]
@@ -115,6 +116,7 @@ module Make (Config : Top_config.S) = struct
     ; tvalid = tvalid.value
     ; rd_addr = addr
     ; rd_en = mask_by_block rd_en.value
+    ; rd_any = rd_en.value
     ; block
     }
   ;;

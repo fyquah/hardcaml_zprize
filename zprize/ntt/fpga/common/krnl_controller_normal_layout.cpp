@@ -21,8 +21,7 @@ void phase1(
     hls::stream<chunk_t>&   compute_to_controller,
     hls::stream<chunk_t>&   controller_to_compute,
     ap_uint<MEMORY_DWIDTH>* gmem_in,
-    ap_uint<MEMORY_DWIDTH>* gmem_out,
-    ap_uint<16>             row_size) {
+    ap_uint<MEMORY_DWIDTH>* gmem_out) {
 #pragma HLS INLINE off
 #pragma HLS dataflow
 
@@ -36,13 +35,13 @@ void phase1(
 
   // Phase 1: read transposed, writeback transposed.
 phase1_load:
-  for (ap_uint<16> i = 0; i < row_size / 8; i += NUM_BLOCKS) {
-    for (ap_uint<16> j = 0; j < row_size; j++) {
-      for (ap_uint<16> k = 0; k < NUM_BLOCKS; k++) {
+  for (ap_uint<32> i = 0; i < NUM_ROWS / 8; i += NUM_BLOCKS) {
+    for (ap_uint<32> j = 0; j < NUM_ROWS; j++) {
+      for (ap_uint<32> k = 0; k < NUM_BLOCKS; k++) {
 #pragma HLS pipeline II=1
         chunk_t v;
 
-        v.data = gmem_in[i + k + (j * (row_size / 8))];
+        v.data = gmem_in[i + k + (j * (NUM_ROWS / 8))];
         v.user = 0;
         controller_to_compute.write(v);
       }
@@ -62,8 +61,7 @@ void phase2(
     hls::stream<chunk_t>&   compute_to_controller,
     hls::stream<chunk_t>&   controller_to_compute,
     ap_uint<MEMORY_DWIDTH>* gmem_in,
-    ap_uint<MEMORY_DWIDTH>* gmem_out,
-    ap_uint<16>             row_size)
+    ap_uint<MEMORY_DWIDTH>* gmem_out)
 {
 #pragma HLS INLINE off
 #pragma HLS dataflow
@@ -88,12 +86,12 @@ phase2_load:
   }
 
 phase2_store:
-  for (ap_uint<16> i = 0; i < row_size / 8; i += NUM_BLOCKS) {
-    for (ap_uint<16> j = 0; j < row_size; j++) {
-      for (ap_uint<16> k = 0; k < NUM_BLOCKS; k++) {
+  for (ap_uint<32> i = 0; i < NUM_ROWS / 8; i += NUM_BLOCKS) {
+    for (ap_uint<32> j = 0; j < NUM_ROWS; j++) {
+      for (ap_uint<32> k = 0; k < NUM_BLOCKS; k++) {
 #pragma HLS pipeline II=1
         chunk_t v = compute_to_controller.read();
-        gmem_out[i + k + (j * (row_size / 8))] = v.data;
+        gmem_out[i + k + (j * (NUM_ROWS / 8))] = v.data;
       }
     }
   }
@@ -122,10 +120,10 @@ void krnl_controller(
 #pragma HLS INTERFACE s_axilite port = return
 
   if (phase(0, 0)) {
-    phase1(compute_to_controller, controller_to_compute_phase_1, gmem_a, gmem_b, row_size);
+    phase1(compute_to_controller, controller_to_compute_phase_1, gmem_a, gmem_b);
   }
 
   if (phase(1, 1)) {
-    phase2(compute_to_controller, controller_to_compute_phase_2, gmem_b, gmem_c, row_size);
+    phase2(compute_to_controller, controller_to_compute_phase_2, gmem_b, gmem_c);
   }
 }

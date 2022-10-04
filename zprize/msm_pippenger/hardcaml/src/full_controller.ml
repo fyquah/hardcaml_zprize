@@ -120,6 +120,7 @@ struct
     let ctrl0 =
       let scalar_width = width packed_scalar0 in
       Controller0.hierarchy
+        ~build_mode
         scope
         { Controller0.I.clock = i.clock
         ; clear = i.clear
@@ -139,6 +140,7 @@ struct
     let ctrl1 =
       let scalar_width = width packed_scalar1 in
       Controller1.hierarchy
+        ~build_mode
         scope
         { Controller1.I.clock = i.clock
         ; clear = i.clear

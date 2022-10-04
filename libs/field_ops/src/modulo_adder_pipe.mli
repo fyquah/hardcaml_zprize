@@ -1,4 +1,14 @@
-(** Computes ([a + b mod P]) over multiple pipeline stages.  *)
+(** Computes ([a + b mod P]) over multiple pipeline stages. 
+
+    This module requires a < P and b < P. Functionally, it implements the
+    following over multiple pipeline stages.
+
+    {[
+      mux2 ((a + b) >= P)
+        ((a + b) - P)
+        (a + b)
+    ]}
+*)
 
 open Hardcaml
 

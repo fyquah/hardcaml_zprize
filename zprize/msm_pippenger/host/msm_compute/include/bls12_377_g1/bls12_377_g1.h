@@ -309,6 +309,7 @@ class Xyzt {
     z.set(other.z);
     t.set(other.t);
   }
+
   void set_32b(const uint32_t words_x[], const uint32_t words_y[],
                const uint32_t words_z[], const uint32_t words_t[]) {
     x.set_32b(words_x);

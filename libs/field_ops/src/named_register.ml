@@ -1,3 +1,5 @@
+(** Special module to create a D FF hierarchically that can be pblocked easily.  *)
+
 open Core
 open Hardcaml
 open Signal

@@ -1,3 +1,5 @@
+(** Internal module. *)
+
 open Hardcaml
 
 type t =

@@ -1,3 +1,5 @@
+(* Test the Goldilocks field arithmetic. *)
+
 open! Core
 open Hardcaml
 module Gf = Hardcaml_ntt.Gf
