@@ -49,10 +49,11 @@ opam install . --deps-only
 ```
 
 You might need to install extra packages (m4 gmp-devep libffi-devel
-libgmp3-dev), especially on the AWS boxes. In ubuntu, you can run
+libgmp3-dev), especially on the AWS boxes. In ubuntu you can run the following
+command. For Centos on the AWS boxes, use `sudo yum install`.
 
 ```
-sudo apt-get install m4 gmp-devel libffi-devel libgmp3-dev z3
+sudo apt-get install m4 gmp-devel libffi-devel libgmp3-dev z3 cargo
 ```
 
 To check everything installed correctly
