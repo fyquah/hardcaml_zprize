@@ -282,7 +282,7 @@ twisted Edwards representation. A summary of the commands and their output is
 given here.
 
 The following command will time and verify the result for 4 rounds of
-2<sup>26</sup> MSM:
+2<sup>26</sup> MSM, and run some unit tests:
 
 ```
 cd test_fpga_harness
