@@ -63,6 +63,9 @@ opam exec -- dune build
 opam exec -- dune runtest
 ```
 
+Now please continue to the relevant section listed [above](#zprize-submissions)
+to build the top level designs from source.
+
 # Contributing
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
