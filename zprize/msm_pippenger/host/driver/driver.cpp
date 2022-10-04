@@ -348,17 +348,16 @@ class Driver {
     post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
 
     // add all the weierstrass points
-    printf(" *** RAHUL: adding in non convertible points (batch %d)***\n",
-           batch_num);
+    // printf(" *** RAHUL: adding in non convertible points (batch %d)***\n",
+    //       batch_num);
     if (__builtin_expect(!non_convertible_points.empty(), 0)) {
-      printf(" *** RAHUL: points.size() = %lu, indices.size() = %lu***\n", non_convertible_points.size(), non_convertible_indices.size(), batch_num);
-      assert(non_convertible_points.size() ==
-             non_convertible_indices.size());
+      // printf(" *** RAHUL: points.size() = %lu, indices.size() = %lu***\n", non_convertible_points.size(), non_convertible_indices.size(), batch_num);
+      assert(non_convertible_points.size() == non_convertible_indices.size());
       for (size_t i = 0; i < non_convertible_points.size(); i++) {
-uint64_t idx = non_convertible_indices[i];
-        printf(" *** RAHUL: point (%lu), index = %lu", i, idx);
-auto *scalar_ptr = (scalars + (batch_num * total_num_points) + idx);
-std::cout << *scalar_ptr << std::endl;
+        uint64_t idx = non_convertible_indices[i];
+        // printf(" *** RAHUL: point (%lu), index = %lu", i, idx);
+        auto *scalar_ptr = (scalars + (batch_num * total_num_points) + idx);
+        // std::cout << *scalar_ptr << std::endl;
 
         weierstrassMultiplyAndAdd(post_processing_values.final_result, non_convertible_points[i],
                                                                       *scalar_ptr);
@@ -366,8 +365,8 @@ std::cout << *scalar_ptr << std::endl;
     }
 
     post_processing_values.final_result.weistrassValuesInMontgomerySpace();
-    printf("finished postProcess\n");
-    fflush(stdout);
+    // printf("finished postProcess\n");
+    // fflush(stdout);
   }
 
   inline uint32_t *get_input_scalars_pointer() {
@@ -385,16 +384,16 @@ std::cout << *scalar_ptr << std::endl;
         get_input_scalars_pointer() + (buffer_start * UINT32_PER_INPUT_SCALAR);
     uint64_t scalars_end = scalars_start + scalars_size;
 
-std::cout << "FIRST SCALAR IN CHUNK: " << *(scalars + scalars_start) << std::endl;
+    // std::cout << "FIRST SCALAR IN CHUNK: " << *(scalars + scalars_start) << std::endl;
     // copy in all the points
     memcpy(ptr_device_input_scalar, (void *)(scalars + scalars_start),
            UINT32_PER_INPUT_SCALAR * sizeof(uint32_t) * scalars_size);
 
     // remove the non-convertible points and save them to buffer
     for (const auto &idx : non_convertible_indices) {
-uint64_t scalars_start_idx = scalars_start - (batch_num * total_num_points);
-uint64_t scalars_end_idx = scalars_end - (batch_num * total_num_points);
-printf("non convertible idx: %lu; start, end = %lu, %lu\n", idx, scalars_start_idx, scalars_end_idx);
+      uint64_t scalars_start_idx = scalars_start - (batch_num * total_num_points);
+      uint64_t scalars_end_idx = scalars_end - (batch_num * total_num_points);
+      // printf("non convertible idx: %lu; start, end = %lu, %lu\n", idx, scalars_start_idx, scalars_end_idx);
       if ((scalars_start_idx <= idx) && (idx < scalars_end_idx)) {
         memset(ptr_device_input_scalar + UINT32_PER_INPUT_SCALAR * (idx - scalars_start_idx), 0,
                UINT32_PER_INPUT_SCALAR * sizeof(uint32_t));
@@ -497,7 +496,7 @@ printf("non convertible idx: %lu; start, end = %lu, %lu\n", idx, scalars_start_i
     cl_int err;
 
     auto do_postprocessing = [&]() {
-      printf("doing postProcess(batch = %d)\n", processed_outputs);
+      // printf("doing postProcess(batch = %d)\n", processed_outputs);
       postProcess((processed_outputs % 2 == 0 ? source_kernel_output_a.data()
                                               : source_kernel_output_b.data()),
                   processed_outputs, scalars);
@@ -600,7 +599,7 @@ extern "C" Driver *msm_init(const char *xclbin, ssize_t xclbin_len,
                             g1_affine_t *rust_points, ssize_t npoints) {
   bls12_377_g1::init();
 
-  std::cout << "Instantiating msm driver for " << npoints << " points"
+  std::cout << "\n\nInstantiating msm driver for " << npoints << " points"
             << std::endl;
   auto *driver = new Driver(rust_points, npoints);
 

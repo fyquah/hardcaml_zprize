@@ -50,7 +50,7 @@ fn msm_correctness() {
 #[test]
 #[serial]
 fn msm_with_interemediate_infinity_when_adding_non_representable_points1() {
-    println!(" *** RAHUL DEBUG *** ");
+    // println!(" *** RAHUL DEBUG *** ");
     let batches = 1;
     let num_points = 4;
     let mut points = Vec::new();
@@ -276,7 +276,6 @@ fn msm_with_unrepresentable_points_at_chunk_boundaries() {
 #[serial]
 fn msm_one_unrepresentable_one_regular() {
     let batches = 1;
-    let num_points = 2;
     let mut scalars = Vec::new();
     let mut points = Vec::new();
     let mut arkworks_results = Vec::new();

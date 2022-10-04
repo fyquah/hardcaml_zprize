@@ -298,8 +298,8 @@ class Xyzt {
 
   Xyzt() : Xyzt(ZERO_WORDS, ONE_WORDS, ONE_WORDS, ZERO_WORDS) {}
   Xyzt(const Xyzt &other) : x(other.x), y(other.y), z(other.z), t(other.t) {
-    printf(" *** RAHUL: construct from another\n");
-    fflush(stdout);
+    // printf(" *** RAHUL: construct from another\n");
+    // fflush(stdout);
   }
 
   Xyzt &operator=(const Xyzt &) = delete;
@@ -390,7 +390,7 @@ class Xyzt {
     temp1.set_add(one, y);
     temp2.set_sub(one, y);
     if (((temp2 == 0) || (x == 0))) {
-      printf("Twisted Edwards -> Montgomery Undefined; Infinity!\n");
+      // printf("Twisted Edwards -> Montgomery Undefined; Infinity!\n");
       return false;
     }
     temp1.set_div(temp1, temp2);
@@ -650,8 +650,8 @@ class Xyzt {
   }
 
   void copy_to_rust_type(g1_projective_t &projective) {
-    printf("FINAL RESULT, COPYING TO RUST\n");
-    fflush(stdout);
+    // printf("FINAL RESULT, COPYING TO RUST\n");
+    // fflush(stdout);
     // println();
     // println_hex();
     // dump();
@@ -684,40 +684,46 @@ class Xyzt {
 };
 
 void weierstrassMultiplication(Xyzt &base, const biginteger256_t &scalar) {
-  printf("    ** RAHUL: doing multiplication: %p\n", &base);
-  fflush(stdout);
   Xyzt temp;
-  printf("    ** RAHUL: setting temp: %p\n", &base);
-  fflush(stdout);
   temp.set(base);
-  printf("    ** RAHUL: created multiplication temp\n");
-  fflush(stdout);
   base.setToWeierstrassInfinity();
+
+  // printf("    ** RAHUL: doing multiplication: %p\n", &base);
+  // fflush(stdout);
+  // printf("    ** RAHUL: setting temp: %p\n", &base);
+  // fflush(stdout);
+  // temp.set(base);
+  // printf("    ** RAHUL: created multiplication temp\n");
+  // fflush(stdout);
+
   for (int i = 0; i < SCALAR_NUM_BITS; i++) {
-    printf("%d ", i);
-    if (i % 32 == 0) printf("\n");
+    // printf("%d ", i);
+    // if (i % 32 == 0) printf("\n");
     if (scalar.getBit(i)) {
       base.weierstrassAddition(temp);
     }
     temp.weierstrassDoubleInPlace();
   }
-  printf("DONE \n");
-  fflush(stdout);
+  // printf("DONE \n");
+  // fflush(stdout);
 }
 
 void weierstrassMultiplyAndAdd(Xyzt &base, const Xyzt &point,
                                const biginteger256_t &scalar) {
   static Xyzt temp;
   temp.set(point);
-  printf(" ** RAHUL : MaA created temp: %p\n", &temp);
-  fflush(stdout);
-  temp.println();
+
+  // printf(" ** RAHUL : MaA created temp: %p\n", &temp);
+  // fflush(stdout);
+  // temp.println();
+
   weierstrassMultiplication(temp, scalar);
-  printf(" ** RAHUL : MaA did multiplication\n");
-  fflush(stdout);
+  // printf(" ** RAHUL : MaA did multiplication\n");
+  // fflush(stdout);
+
   base.weierstrassAddition(temp);
-  printf(" ** RAHUL : MaA completed\n");
-  fflush(stdout);
+  // printf(" ** RAHUL : MaA completed\n");
+  // fflush(stdout);
 }
 
 }  // namespace bls12_377_g1
