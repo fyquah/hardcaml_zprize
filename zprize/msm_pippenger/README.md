@@ -1,11 +1,11 @@
 # FPGA Implementation of the MSM Pippengers algorithm
 
-We have implemented a FPGA design that runs on a AWS F1 instance and can compute
-the MSM of a large number of elliptic point and scalar pairs on the BLS12-377
+We have implemented an FPGA design that runs on an AWS F1 instance and can compute
+the MSM of a large number of elliptic point and scalar pairs on the BLS12-377 G1
 curve. 
 
 Performance is measured as per the ZPrize specs at 20.504s for 4 rounds of
-2<sup>26</sup> MSMs, which equates to **13.092** Mop/s. Measureuments are
+2<sup>26</sup> MSMs, which equates to **13.092** Mop/s. Measurements are
 further detailed in the benchmarking section.
 
 Detailed instructions on re-creating these results from source are in the
@@ -15,12 +15,12 @@ Detailed instructions on re-creating these results from source are in the
 
 ## Overview of the architecture
 
-We decided to implement a heavily optimized version of [pippengers
+We decided to implement a heavily optimized version of [Pippenger's
 algorithm](https://dl.acm.org/doi/abs/10.1137/0209022) in order to solve the MSM
 problem.
 
 We picked window sizes of between 12 and 13 bits, which allowed for efficient
-mapping to FPGA URAM resources which are naively 4096 elements deep. Points are
+mapping to FPGA URAM resources which are natively 4096 elements deep. Points are
 transformed and pre-loaded into DDR-4, so that at run time only scalars are sent
 from the host to the FPGA via PCIe. We implemented a single fully-pipelined
 point adder on the FPGA which adds points to buckets as directed by the
@@ -29,7 +29,7 @@ handles stalls (only accessing a bucket when it does not already have an
 addition in-flight). Once all points have been added into buckets, the FPGA
 streams back the result for the host to do the final (much smaller) triangle
 summation. This approach allows us to focus on implementing a very high
-performance adder on the FPGA (as these additions dominate Pippengers
+performance adder on the FPGA (as these additions dominate Pippenger's
 algorithm), and then leaving smaller tasks for the host to perform.
 
 The above description overly simplifies the amount of optimizations and tricks we
@@ -38,7 +38,7 @@ out below.
 
 ## Key optimizations
 
- 1. Early on we decided rather than implementing all of Pippengers algorithm on
+ 1. Early on we decided rather than implementing all of Pippenger's algorithm on
 the FPGA, it would be better to only implement point additions, and focus on as
 high throughput as possible. We implemented a fully pipelined adder which can
 take new inputs to add every clock cycle, with a result appearing on the output
@@ -47,30 +47,39 @@ after 238 clock cycles in the final version.
  2. Implementing an adder on affine or projective coordinates requires more FPGA
 resources (DSPs, LUTs, carry chains, ...), so we investigated different
 transforms we could do in advance that would reduce the complexity on the FPGA.
-We ended up deciding to transform to a twisted Edwards curve and extended
-projective coordinates. We also do a pre-transformation on the host that allows
-us to remove some of the constants required when calculating the point addition.
-This requires special care as there are a sub-set of Weierstrass point that
-cannot map to our selected Edwards curve. These points are so rare that in
-generating 2<sup>26</sup> random points we never hit one, but we add a check in
-our driver to detect these and perform point multiplication on the host if
-needed. Corner case tests confirm this code works as expected.
+We ended up deciding to transform to a twisted Edwards curve and a modified version of
+extended projective coordinates (detailed 
+[here](https://fyquah.github.io/hardcaml_zprize/zprize/Twisted_edwards_lib/Mixed_add_precompute/index.html)). 
+The pre-transformation from affine points on a Weierstrass curve to extended 
+projective points on an equivalent twisted Edwards curve significantly decreases 
+the computational complexity of point addition. Further, our pre-transformation from 
+extended projective coordinates to our own coordinate system allows us to further 
+decrease the computational complexity and remove all of the constants required when 
+calculating the point addition.
+
+This transformation requires special care as there are 5 points on the Weierstrass 
+curve that cannot map to our selected twisted Edwards curve. This is such a rare 
+edge case that in generating 2<sup>26</sup> random points we never hit one, but 
+we add a check in our driver to detect these and perform point multiplication on 
+the host if needed. Corner case tests confirm this code works as expected.
 
  3. We mask PCIe latency by allowing MSM operations to start while points are
   being streamed in batches from the host. When a result is being processed we
   are also able to start the MSM on the next batch.
 
- 4. Multiplier optimizations in the Barret reduction algorithm so that constants
+ 4. Multiplier optimizations in the Barrett reduction algorithm so that constants
     require less FPGA resources.
 
- 5. Adder and subtractor use BRAMs as ROMs to store coefficients that can be used
-  to reduce modulo adder and subtractor latency.
+ 5. Instead of performing a full Barrett reduction or full modular addition/subtraction, we perform 
+ a coarse reduction and allow additive error to accumulate through our point adder. Then, we correct 
+ this error all at once using BRAMs as ROMs to store coefficients that can be used to reduce values
+ in the range $[0,512q]$ to their modular equivalents in $[0,q]$.
 
  6. Selecting a bucket size that allows for efficient usage of FPGA URAM,
   allowing non-uniform bucket sizes, and pblocking windows to separate SLRs in
   the FPGA to avoid routing congestion.
 
- 7. Scalars are converted into signed form and our twisted Edwards adder is
+ 7. Scalars are converted into signed form and our twisted Edwards point adder is
     modified to support point subtraction, which allows all bucket memory to be
     reduced in half.
 
@@ -126,7 +135,7 @@ still being able to successfully route in Vivado.
 
 # Benchmarking
 
-See the the test\_harness [README.md](test_fpga_harness/README.md) for
+See the test\_harness [README.md](test_fpga_harness/README.md) for
 instructions on benchmarking our solution against 2<sup>26</sup> to get the
 performance number required for the ZPrize competition. This section presents a
 summary of those results.
@@ -178,7 +187,7 @@ Power consumption (Vccint):
    Max measured: 54 watts
 ```
 
-The breakdown of how long each stage takes can be printed when changed the value
+The breakdown of how long each stage takes can be printed by changing the value
 of `mask_io` to `false` in `host/driver/driver.cpp` (this is not used in
 benchmarking as it has lower performance):
 
@@ -191,10 +200,10 @@ benchmarking as it has lower performance):
 ```
 
 ### Notes
- 1. Because our solution offloads a non-trival amount of work to perform in
-parallel to the host, you will see the best performance after a fresh reboot,
+ 1. Because our solution offloads a non-trival amount of work to the host 
+ to perform in parallel, you will see the best performance after a fresh reboot,
 and without other CPU-intensive tasks running at the same time.
- 2. When running the tests if you terminate the binary early by `ctrl-c`, it
+ 2. When running the tests, if you terminate the binary early by `ctrl-c`, it
 will leave the FPGA in a bad state which requires clearing and re-programming
 with these commands:
 
@@ -240,15 +249,15 @@ z3 should also be installed to run tests.
 The Hardcaml code can be built by calling `dune build`, which will also cause
 the top level Verilog to be generated in
 `fpga/krnl_msm_pippenger/krnl_msm_pippenger.v`. We also provide a dune target
-for generating a md5sum `(fpga/krnl_msm_pippenger/rtl_checksum.md5)` of the
+for generating an md5sum `(fpga/krnl_msm_pippenger/rtl_checksum.md5)` of the
 Verilog expected, so that if changes to the Hardcaml source are made that modify
-the Verilog (which is not checked into the repo), the rtl-checksum would show a
+the Verilog (which is not checked into the repo), the rtl-checksum will show a
 difference.
 
 We have various expect tests in the [test folders](hardcaml/test) which can be
 run by calling `dune runtest`. To run a longer simulation, we added binaries
 that can be called and various arguments set. These run with the
-[Verilator](https://www.veripool.org/verilator/) backend which after a longer
+[Verilator](https://www.veripool.org/verilator/) backend, which after a longer
 compile time, will provide much faster simulation time than the built-in
 Hardcaml simulator. Make sure you have Verilator installed when running this
 binary. To simulate 128 random points, run the following command:
@@ -297,7 +306,7 @@ cd /test
 
 ### Creating the AWS AFI
 
-Once you have successfully called `compile_hw.sh` in the `fpga` folder you want
+Once you have successfully called `compile_hw.sh` in the `fpga` folder, you want
 to pass the results to the AWS script responsible for generating the AFI an
 end-user can run:
 
@@ -317,7 +326,7 @@ Which will show up as "available" when the image is ready to use.
 
 ## Running on AWS
 
-You need to run these steps on a AWS F1 box with an FPGA. Make sure you have
+You need to run these steps on an AWS F1 box with an FPGA. Make sure you have
 cloned the aws-fpga repo and run:
 
 ```
@@ -330,14 +339,14 @@ Check the status of the FPGA:
 systemctl status mpd
 ```
 
-You need the .awsxclbin file from the build box, usually the easiest way is to
+You need the .awsxclbin file from the build box - usually the easiest way is to
 download this from the s3 bucket or scp it over.
 
 
 ## Running `host_buckets.exe` debug test
 
 `host_buckets.exe` is a debug application that pumps test vectors into the FPGA
-from a file, and compare against a reference file. Note this is NOT the
+from a file, and compares against a reference file. Note this is NOT the
 benchmarking program and has not been optimized in anyway. For actual runs and
 benchmarking, please look in [test_fpga_harness](test_fpga_harness) and/or see
 the benchmarking section above.
