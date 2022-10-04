@@ -15,10 +15,7 @@
 |       DSP |              5952 |                      4 |
 |    BRAM36 |              1344 |                      0 |
 |      URAM |               640 |                      0 |
-----------------------------------------------------------</code></pre><h4 id="fom-measurement"><a href="#fom-measurement" class="anchor"></a>FOM Measurement</h4><p>Here are our FOM numbers. As detailed in the evaluation criteria given to us, FOM is computed as <code>latency * sqrt(Power) * U_norm</code></p><p>Latency and Power is used as report above in seconds and Watts respectively. We calculate <code>U_norm = U(LUTS) + U(Registers) + U(DSP) + U(BRAM) + U(URAM)</code>. The max possible value of <code>U_norm</code> is hence 4.0, since 0 &lt;= U(.) &lt; 1.0</p><pre><code>These are FOM numbers assuming we don't include the platform (aka fixed resources)
-in our utlization
-
---------------------------------------------------------------------
+----------------------------------------------------------</code></pre><h4 id="fom-measurement"><a href="#fom-measurement" class="anchor"></a>FOM Measurement</h4><p>Here are our FOM numbers. As detailed in the evaluation criteria given to us, FOM is computed as <code>latency * sqrt(Power) * U_norm</code></p><p>Latency and Power is used as report above in seconds and Watts respectively. We calculate <code>U_norm = U(LUTS) + U(Registers) + U(DSP) + U(BRAM) + U(URAM)</code>. The max possible value of <code>U_norm</code> is hence 4.0, since 0 &lt;= U(.) &lt; 1.0</p><p>These are FOM numbers assuming we don't include the platform (aka fixed resources) in our utlization</p><pre><code>--------------------------------------------------------------------
 |             Utilization (%)                    |        |        |
 |   LUTs |  Registers |    DSP |   BRAM |   URAM | U_norm |  FOM   |
 --------------------------------------------------------------------
@@ -26,13 +23,7 @@ in our utlization
 | 0.0749 |     0.0428 | 0.0860 | 0.1205 | 0.1500 | 0.4743 | 0.2505 |
 | 0.1198 |     0.0590 | 0.1720 | 0.1205 | 0.3000 | 0.7714 | 0.2451 |
 | 0.2335 |     0.0946 | 0.3441 | 0.1205 | 0.6000 | 1.3927 | 0.3301 |
---------------------------------------------------------------------
-
-These are FOM Numbers assuming we have to include the platform resources as
-part of our utilization. To stress this fact -- we don't think those resources
-should be considered as part of the evaluation!
-
---------------------------------------------------------------------
+--------------------------------------------------------------------</code></pre><p>Our best-build for the evaluation criteria is the 32-core variant, with a <b>FOM of 0.2451</b></p><p>The following FOM Numbers assuming we have to include the vitis platform resources as part of our utilization. To stress this fact -- we don't think those resources should be considered as part of the evaluation!</p><pre><code>--------------------------------------------------------------------
 |             Utilization (%)                    |        |        |
 |   LUTs |  Registers |    DSP |   BRAM |   URAM | U_norm |  FOM   |
 --------------------------------------------------------------------
@@ -40,7 +31,7 @@ should be considered as part of the evaluation!
 | 0.1463 |     0.0896 | 0.0867 | 0.1205 | 0.1500 | 0.5931 | 0.3132 |
 | 0.1912 |     0.1058 | 0.1727 | 0.1205 | 0.3000 | 0.8903 | 0.2829 |
 | 0.3049 |     0.1413 | 0.3448 | 0.1205 | 0.6000 | 1.5116 | 0.3583 |
---------------------------------------------------------------------</code></pre><p>Our best-build for the evaluation criteria is the 32-core variant, with a <b>FOM of 0.2451</b> (or 0.2829 using the less desirable criteria)</p><h3 id="a-note-about-optimizing-layout"><a href="#a-note-about-optimizing-layout" class="anchor"></a>A note about Optimizing layout</h3><h3 id="throughput"><a href="#throughput" class="anchor"></a>Throughput</h3><p>We now show the result of 6 designs which target differing parallelism and memory architectures.</p><p>Note that each core instantiated has a throughput of approximately one INNT per second at our target 200 Mhz.</p>
+--------------------------------------------------------------------</code></pre><p>Using these criteria, our best build is also the 32-core variant with a FOM of 0.2829</p><h3 id="a-note-about-optimizing-layout"><a href="#a-note-about-optimizing-layout" class="anchor"></a>A note about Optimizing layout</h3><h3 id="throughput"><a href="#throughput" class="anchor"></a>Throughput</h3><p>We now show the result of 6 designs which target differing parallelism and memory architectures.</p><p>Note that each core instantiated has a throughput of approximately one INNT per second at our target 200 Mhz.</p>
 <table class="perf">
 <caption>Normal memory access pattern</caption>
   <tr>
