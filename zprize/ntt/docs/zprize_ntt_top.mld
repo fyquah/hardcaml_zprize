@@ -40,8 +40,8 @@ architecture.
 
 There are 2 vitis kernels involved in our implementation:
 
-- {{!page:zprize_ntt_hardcaml_kernel}Hardcaml RTL kernel} implementing the core NTT algorithm
-- {{!page:zprize_ntt_cpp_kernel}C++ HLS kernel} which sequences PCIe and HBM memory accesses
+- Hardcaml RTL Kernel implementing the core NTT algorithm
+- C++ HLS Kernel which sequences PCIe and HBM memory accesses
 
 Our implementation can be parameterized by the number of cores it supports -
 the only requirement is it has a power of 2 and there must be at least 8 cores
@@ -59,9 +59,10 @@ Phase 1: Performs steps 1, 2 and 3 of the algorithm
   Bank
 
 Phase 2: Performs step 4 and step 5 of the algorithm simultaneously.
-- The HLS kernel stream columns to the Hardcaml kernel via an Axi Stream interface
-- The Hardcaml RTL kernel perform the NTT
-- The HLS kernel concurrently writes to
+- The HLS kernel stream rows to the hardcaml kernel via Axi Stream
+- The Hardcaml RTL kernel perform the NTT and sends the results back via Axi stream
+- The HLS kernel concurrently writes it back in columns - this implicitly
+  performs a matrix transpose without the dedicated step
 
 Some minor optimizations that are included in our implementation:
 - The NTT core double buffers the contents coming from memory, this means that
@@ -86,6 +87,100 @@ We see tremendously improved through put of the core with this scheme, though we
 be judged harshly in this competition due to the extra pre/post processing step.  We include
 it none-the-less as it shows the potential performance we can get to with either a more optimised
 HBM structure, or different memory architecture (like DDR4).
+
+We will present the results for the normal layout (no data rearrangement) and
+optimized layout (ie: with preprocessing data arrangement separately)
+
+{2 Results}
+
+We have tested our design and ran builds on a 6-core
+Intel(R) Core(TM) i5-9600K CPU @ 3.70GHz machine with
+[Ubuntu 22.04 LTS (GNU/Linux 5.15.0-48-generic x86_64)]. We did not use
+any special kernel flags / boot parameters to obatain our results.
+
+We measure our latency by taking the fpga-only evaluation latency across 200
+NTT runs. Power measured by sampling [xbutil examaine --report electrical --device
+<device-pcie-id>] 10 times during latency benchmark
+
+{3 Latency, Power and Resource Utilization}
+
+The table below depicits our results for various builds
+
+{[
+
+|------------------------------------------------------------------------------|
+|   Build | Latency(s) | Power(W) | LUTS   | Registers |  DSP | BRAM36 | URAM  |
+|------------------------------------------------------------------------------|
+|  8 core |     0.2315 |    16.97 | 107291 |    141006 |  260 |    162 |   48  |
+| 16 core |     0.1238 |    18.19 | 126422 |    156149 |  512 |    162 |   96  |
+| 32 core |     0.0691 |    21.13 | 166488 |    184436 | 1028 |    162 |   192 |
+| 64 core |     0.0450 |    27.70 | 265523 |    246385 | 2052 |    162 |   384 |
+|------------------------------------------------------------------------------|
+
+]}
+
+Here are the available resources on the FPGA.  Note that as we are building on
+top of a vitis platform, it imposes a non-trivial fixed-cost that we don't
+control. The number is reported as "fixed" in the post_route_utilization.rpt
+
+{[
+
+----------------------------------------------------------
+| Resource  | Available on FPGA | Used by Vitis Platform |
+----------------------------------------------------------
+|     LUTS  |            870720 |                  62191 |
+| Registers |           1743360 |                  81502 |
+|       DSP |              5952 |                      4 |
+|    BRAM36 |              1344 |                      0 |
+|      URAM |               640 |                      0 |
+----------------------------------------------------------
+
+]}
+
+{3 FOM Measurement}
+
+Here are our FOM numbers. As detailed in the evaluation criteria given to us,
+FOM is computed as [latency * sqrt(Power) * U_norm]
+
+Latency and Power is used as report above in seconds and Watts respectively.
+We calculate [U_norm = U(LUTS) + U(Registers) + U(DSP) + U(BRAM) + U(URAM)].
+The max possible value of [U_norm] is hence 4.0, since 0 <= U(.) < 1.0
+
+{[
+
+These are FOM numbers assuming we don't include the platform (aka fixed resources)
+in our utlization
+
+--------------------------------------------------------------------
+|             Utilization (%)                    |        |        |
+|   LUTs |  Registers |    DSP |   BRAM |   URAM | U_norm |  FOM   |
+--------------------------------------------------------------------
+| 0.0518 |     0.0341 | 0.0430 | 0.1205 | 0.0750 | 0.3245 | 0.3095 |
+| 0.0749 |     0.0428 | 0.0860 | 0.1205 | 0.1500 | 0.4743 | 0.2505 |
+| 0.1198 |     0.0590 | 0.1720 | 0.1205 | 0.3000 | 0.7714 | 0.2451 |
+| 0.2335 |     0.0946 | 0.3441 | 0.1205 | 0.6000 | 1.3927 | 0.3301 |
+--------------------------------------------------------------------
+
+These are FOM Numbers assuming we have to include the platform resources as
+part of our utilization. To stress this fact -- we don't think those resources
+should be considered as part of the evaluation!
+
+--------------------------------------------------------------------
+|             Utilization (%)                    |        |        |
+|   LUTs |  Registers |    DSP |   BRAM |   URAM | U_norm |  FOM   |
+--------------------------------------------------------------------
+| 0.1232 |     0.0809 | 0.0437 | 0.1205 | 0.0750 | 0.4433 | 0.4229 |
+| 0.1463 |     0.0896 | 0.0867 | 0.1205 | 0.1500 | 0.5931 | 0.3132 |
+| 0.1912 |     0.1058 | 0.1727 | 0.1205 | 0.3000 | 0.8903 | 0.2829 |
+| 0.3049 |     0.1413 | 0.3448 | 0.1205 | 0.6000 | 1.5116 | 0.3583 |
+--------------------------------------------------------------------
+
+]}
+
+Our best-build for the evaluation criteria is the 32-core variant, with a {b
+FOM of 0.2451} (or 0.2829 using the less desirable criteria)
+
+{2 A note about Optimizing layout}
 
 {2 Throughput}
 
