@@ -1,4 +1,4 @@
-# Conversion to a Different Form
+# Optimizing Point Representation
 
 We chose to convert to the twisted edwards curve, rather than working in the
 weistrass form, to reduce resource usage of the pipelined mixed adder. With
@@ -68,3 +68,33 @@ B = 4 / (a - d)
 The linked wikipedia article above goes into detail on when these parameter
 transformations are valid. We validated that the required assumptions
 do hold in bls12-377, and hence can be represented as a twisted edwards curve.
+
+## Converting Points from Weistrass to Twisted Edwards
+
+The formulae for points conversion is detailed in the wikipedia article
+linked above. Here's a summary:
+
+```
+Given (x, y) on a curve in weistrass form:
+x_montgomery = s * (x - alpha)
+y_montgomery = s * y
+
+Given (x, y) on a montgomery curve:
+
+x_twisted_edwards = x / y
+y_twisted_edwards = (x - 1) / (x + 1)
+```
+
+The main catch here is the mapping for points from weistrass to twisted edwards
+is not always defined. The transformation for points from montgomery curve
+-> twisted edwards is undefined when `y = 0` or `x = -1` on the montgomery curve
+representation. This implies there is no twisted edwards curve representation
+for points where `y = 0` or `x = alpha - s^(-1)`. Indeed there are exactly 5 such
+points on the BLS12-377 curve.
+
+In practice however, this is not a problem.
+
+- The probability of these points occuring is very minisicue that we can fallback
+to a slow code path when handling these points. In our implementation, we simply
+offload these points to the CPU. 
+- It's unclear if it can occur from repeated addition of the G1 Generator, so it's not clear if it and occur at all!
