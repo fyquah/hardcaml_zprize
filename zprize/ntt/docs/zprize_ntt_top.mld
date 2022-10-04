@@ -1,18 +1,18 @@
 {1 Zprize_ntt}
 
 {{!Zprize_ntt}This library} provides a design which performs a single transform size configured at
-build time. For the Zprize competition we target a transform of size 2{^24}.
+build time. For the ZPrize competition we target a transform of size 2{^24}.
 
 {2 Algorithm}
 
-The design is based around the 4-step algorithm which decomoses the full 2{^24}
+The design is based around the 4-step algorithm which decomposes the full 2{^24}
 NTT into multiple 2{^12} NTTs across columns and rows of a 2{^12} x 2{^12}
 matrix. The 4-step algorithm is described in section 7.1 of
 {{:https://arxiv.org/pdf/2011.11524.pdf} this paper}. Here's a summary of what
 it is:
 
 1. Layout the 2{^24} size input data as a 2{^12} X 2{^12} matrix in row-major
-order (ie: [mat[i][j] = data[i * 2^12 + j]]).
+order (ie: [mat[i][j] = data[i * 2^12 + j]])
 
 2. Perform a length-2{^12} NTT along all columns and write the results back
 in place
@@ -24,11 +24,11 @@ the underling field, and N = 2{^24}
 
 5. Tranpose the matrix
 
-The overall complexity (in terms of butterly operations performed) is roughly
+The overall complexity (in terms of butterfly operations performed) is roughly
 equivalent to a single 2{^24} INNT, though an extra twiddle factor correction
 pass (ie: step 3) is required between the column and row phases.
 
-On the otherhand, onchip memory usage is drastically reduce, and it becomes possible to
+On the otherhand, onchip memory usage is drastically reduced, and it becomes possible to
 implement multiple smaller INNT cores for improved performance through parallelism.
 
 {2 Our Implementation}
@@ -38,7 +38,7 @@ platform provides us with the PCIe and HBM interfaces. As such the design is
 provided as Vitis kernels which are put together to provide the final
 architecture.
 
-There are 2 vitis kernels involved in our implementation:
+There are 2 Vitis kernels involved in our implementation:
 
 - Hardcaml RTL Kernel implementing the core NTT algorithm
 - C++ HLS Kernel which sequences PCIe and HBM memory accesses
@@ -80,30 +80,33 @@ THe 4 step algorithm requires both a coloumn and row transform, with transposes 
 This is performed both by controlling the memory access pattern (normal layout build) or by
 pre and post processing the input/output matrices (optimized layout builds).
 
-One significant issue we have faced with this project is the bandwidth performance of HBM.
-In normal layouts, we tend to burst 64 to 512 bytes before opening a new row.  The row open operation appears to be taking upto 200-250 HBM clock cycles (about 100 cycle at our internal 200 Mhz clock).
-We had expected significantly better performance from HBM than this and lacked time to try
-tuning varios HBM parameters to see if we could get better performance.
+One significant issue we have faced with this project is the bandwidth
+performance of HBM. In normal layouts, we tend to burst 64 to 512 bytes before
+opening a new row. The row open operation appears to be taking upto 200-250 HBM
+clock cycles (about 100 cycles at our internal 200 Mhz clock). We had expected
+significantly better performance from HBM than this and lacked time to try
+tuning various HBM parameters to see if we could get better performance.
 
 The optimized layouts use the host for pre/post processing and dramaticlly improve bandwidth
 efficiency - the smallest transfers are now 2048 - 4096 bytes (which is only for one read
 phase - the other read/write phases are completely linear).
 
-We see tremendously improved through put of the core with this scheme, though we expect it to
-be judged harshly in this competition due to the extra pre/post processing step.  We include
-it none-the-less as it shows the potential performance we can get to with either a more optimised
-HBM structure, or different memory architecture (like DDR4).
+We see tremendously improved throughput of the core with this scheme, though we
+expect it to be judged harshly in this competition due to the extra pre/post
+processing step. We include it none-the-less as it shows the potential
+performance we can get to with either a more optimised HBM structure, or
+different memory architecture (like DDR4).
 
 {2 Experiments}
 
-To evaluate our results, we perform 2 sets of experiments
+To evaluate our results, we perform 2 sets of experiments.
 
 {3 Normal-layout Builds}
 
-These are builds where the input and out vector to perform NTT on is laid out
+These are builds where the input and output vector to perform NTT on is laid out
 linearly in HBM (ie: the host doesn't perform any pre/post-processing). We run
 experiments with running the 8-core, 16-core, 32-core and 64-core variants,
-yeilding different level of parallelisms.
+yeilding different levels of parallelism.
 
 {3 Optimized-layout Builds}
 
@@ -117,16 +120,16 @@ in 2048-4096 byte bursts.
 We have tested our design and ran builds on a 6-core
 Intel(R) Core(TM) i5-9600K CPU @ 3.70GHz machine with
 [Ubuntu 22.04 LTS (GNU/Linux 5.15.0-48-generic x86_64)]. We did not use
-any special kernel flags / boot parameters to obatain our results. We run
-our designs using the vitis platform Xilinx has provided for the Varium C1100
+any special kernel flags / boot parameters to obtain our results. We run
+our designs using the Vitis platform Xilinx has provided for the Varium C1100
 card. The platform takes up some resources on the FPGA and comes with PCIe gen3
 x4 support
 
-We measure our latency by taking the fpga-only evaluation latency across 200
-NTT runs. Power measured by sampling [xbutil examaine --report electrical --device
-<device-pcie-id>] 10 times during latency benchmark
+We measured our latency by taking the FPGA-only evaluation latency across 200
+NTT runs. Power was measured by sampling [xbutil examaine --report electrical
+--device <device-pcie-id>] 10 times during the latency benchmark.
 
-In this normal Layout build, we do not perform any preprocessing or
+In this normal layout build, we do not perform any preprocessing or
 post-processing. Hence, latency below includes only the FPGA NTT evaluation
 latency.
 
@@ -147,8 +150,8 @@ The table below depicits our results for various builds
 
 ]}
 
-Here are the available resources on the FPGA.  Note that as we are building on
-top of a vitis platform, it imposes a non-trivial fixed-cost that we don't
+Here are the available resources on the FPGA. Note that as we are building on
+top of a Vitis platform, it imposes a non-trivial fixed-cost that we don't
 control. The number is reported as "fixed" in the post_route_utilization.rpt
 
 {[
@@ -195,7 +198,7 @@ in our utlization
 Our best-build for the evaluation criteria is the 32-core variant, with a {b
 FOM of 0.2451} 
 
-The following FOM Numbers assuming we have to include the vitis platform
+The following FOM numbers are assuming we have to include the Vitis platform
 resources as part of our utilization. To stress this fact -- we don't think
 those resources should be considered as part of the evaluation!
 
@@ -253,19 +256,19 @@ Here is a detailed breakdown of a runtime sample of an optimized 64-core build:
 
 ]}
 
-By rearrangeing the data in a much more memory-friendly layout, our NTT
+By rearranging the data in a much more memory-friendly layout, our NTT
 evaluation time drops significantly compared to those of a 64-core build in
 a normal build (0.0267s vs 0.0450s). This comes at the cost of the host doing
 some data rearrangement.
 
-The bottleneck of our evaluation clear lies in the host and pcie latency in
+The bottleneck of our evaluation clear lies in the host and PCIe latency in
 this result, both of which can be solved pretty easily:
 
 - {b preprocessing + postprocessing > latency} - We can run the preprocessing
   and post-processing in separate threads. We can setup the input and output
   buffers such such that we don't run into cache coherency issues. We can also
-  mask some of the preprocessing latency with pcie latency.
-- {b The pcie latency is larger than the NTT evaluation} - This is because the
+  mask some of the preprocessing latency with PCIe latency.
+- {b The PCIe latency is larger than the NTT evaluation} - This is because the
   vitis platform we are using only supports PCIe x4. With PCIe x16, we would have
   4 times the bandwidth and side-step this problem.
 

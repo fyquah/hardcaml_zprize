@@ -4,15 +4,15 @@ Note for judges:
 
 If you're primarily interested in running the benchmark, please skip straight
 to the "Running Randomized Tests" section further down. For convenience, in our
-zprize submission tar, we have included the [.xclbin] files, so your don't need
+ZPrize submission tar, we have included the [.xclbin] files, so your don't need
 to rebuild them.
 
 {2 Building the Verilog Files}
 
 We have done our RTL development in largely
 {{:https://github.com/janestreet/hardcaml} Hardcaml}, with bits of Vivado HLS
-for writing C++ kernels to integrate with vitis platform. Hardcaml generates
-verilog files that can be fed into traditional vendor tools.
+for writing C++ kernels to integrate with the Vitis platform. Hardcaml generates
+Verilog files that can be fed into traditional vendor tools.
 
 1. Follow the instructions in {:https://opam.ocaml.org/doc/Install.html} to install
 opam, the OCaml package manager
@@ -33,7 +33,7 @@ opam install . --deps-only
 
 4. Now, from the root directory of this repository, navigate to
    [zprize/ntt], and run [dune build @default]. This builds all the default
-   targets which includes verilog generation.
+   targets which includes Verilog generation.
 
 (If you see an error message that says [package foo_bar_baz not found], that's
 because we didn't specify the package list correctly. Please run
@@ -89,7 +89,7 @@ reverse
 
 3. cd into the directory with the build target you are interested in
 
-4. Run [./compile_hw.sh]. This will kick of a build with vitis. This takes
+4. Run [./compile_hw.sh]. This will kick of a build with Vitis. This takes
    awhile
 
 {2 Running Randomized Tests}
@@ -140,7 +140,7 @@ NTT TEST PASSED
 
 {2 Running Test against Test Files}
 
-1. Make sure you have installed xilinx runtime [path/to/xrt/setup.sh]
+1. Make sure you have installed Xilinx runtime [path/to/xrt/setup.sh]
 
 2. Navigate to [zprize/ntt/test] relative to the root of the repository. You
    will see a lot of shell scripts.
@@ -151,7 +151,7 @@ NTT TEST PASSED
 compilation of some host binary and run them with the appropriate flags.
 
 4. The test will reported if it suceeded or failed. Note that the correctness
-check is done using the [diff] command. Our test application write the output
+check is done using the [diff] command. Our test application writes the output
 file in the format similar to the testdata given at the start of the
 competition. We have verified that this command works with the provided
 testdata.
