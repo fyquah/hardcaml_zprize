@@ -28,15 +28,12 @@ Some modules with interesting implementation are (but not limited to!):
 
 {2 Inverse NTT}
 
-Perform 2{^24} inverse number theoretic transform over a 64 bit finite field.
+The main submission document for the NTT Acceleration contest is available in the
+{!page:zprize_ntt_top} page
 
-- {{!page:ntt}Hardcaml_ntt} implements the core components of for the NTT transform.
-- {{!page:zprize_ntt_top}Zprize_ntt} implements the top level design and dicsusses results.
+In this competition, we create a FPGA design that performs a 2{^24} inverse
+number theoretic transform over a 64 bit finite field.
 
-{2 Support libraries}
-
-- {!Hardcaml_axi}
-- {!Ark_bls12_377_g1}
-- {!Twisted_edwards_lib}
-- {!Field_ops_lib} - Library for operations in a Galois fields (eg:
-  large-bit-width multiplication)
+The associated documentation pages for this competition include:
+- {!Hardcaml_ntt} implements the core components of for the NTT transform.
+- {!Zprize_ntt} implements the top level design and dicsusses results.
