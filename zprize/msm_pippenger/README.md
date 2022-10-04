@@ -81,7 +81,7 @@ needed. Corner case tests confirm this code works as expected.
 A high level block diagram showing the different data flows and modules used in
 our MSM implementation.
 
-![Block diagram](docs/block_diagram.png)
+![Block diagram](docs/assets/block_diagram.png)
 
 ## Resource utilization
 
