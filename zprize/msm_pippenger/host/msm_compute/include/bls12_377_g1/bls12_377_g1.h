@@ -404,7 +404,7 @@ class Xyzt {
   void extendedTwistedEdwardsToWeierstrass() {
     twistedEdwardsExtendedToAffine();
     bool convertible = affineTwistedEdwardsToMontgomery();
-    if (convertible) {
+    if (!convertible) {
       setToWeierstrassInfinity();
     } else {
       affineMontgomeryToWeierstrass();
@@ -542,7 +542,8 @@ class Xyzt {
     }
   }
 
-  void weierstrassMultiplyAndAdd(const Xyzt &point, const biginteger256_t &scalar) {
+  void weierstrassMultiplyAndAdd(const Xyzt &point,
+                                 const biginteger256_t &scalar) {
     Xyzt temp(point);
     temp.weierstrassMultiplication(scalar);
     weierstrassAddition(temp);
