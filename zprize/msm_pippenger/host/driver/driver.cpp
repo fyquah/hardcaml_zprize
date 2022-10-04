@@ -349,9 +349,11 @@ class Driver {
     post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
 
     // add all the weierstrass points
+    printf(" *** RAHUL: adding in non convertible points (batch %d)***\n", batch_num);
     if (__builtin_expect(!non_convertible_points.empty(), 0)) {
       assert(non_convertible_points.size() ==
              non_convertible_scalars[batch_num].size());
+      printf(" *** RAHUL: points.size() = %lu, scalars.size() = %lu ***\n", non_convertible_points.size(), non_convertible_scalars[batch_num].size());
       for (size_t i = 0; i < non_convertible_points.size(); i++) {
         const auto &point = non_convertible_points[i];
         const auto &scalar = non_convertible_scalars[batch_num][i];
