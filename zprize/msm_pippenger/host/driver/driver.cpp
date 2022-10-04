@@ -348,7 +348,8 @@ class Driver {
     post_processing_values.final_result.extendedTwistedEdwardsToWeierstrass();
 
     // add all the weierstrass points
-    printf(" *** RAHUL: adding in non convertible points (batch %d)***\n", batch_num);
+    printf(" *** RAHUL: adding in non convertible points (batch %d)***\n",
+           batch_num);
     if (__builtin_expect(!non_convertible_points.empty(), 0)) {
       printf(" *** RAHUL: points.size() = %lu, indices.size() = %lu***\n", non_convertible_points.size(), non_convertible_indices.size(), batch_num);
       assert(non_convertible_points.size() ==
@@ -356,15 +357,15 @@ class Driver {
       for (size_t i = 0; i < non_convertible_points.size(); i++) {
 uint64_t idx = non_convertible_indices[i];
         printf(" *** RAHUL: point (%lu), index = %lu", i, idx);
-auto *scalar_ptr = (scalars + (batch_num * total_num_points) + i);
+auto *scalar_ptr = (scalars + (batch_num * total_num_points) + idx);
 std::cout << *scalar_ptr << std::endl;
 
         weierstrassMultiplyAndAdd(post_processing_values.final_result, non_convertible_points[i],
                                                                       *scalar_ptr);
       }
     }
-printf("finished postProcess\n");
-fflush(stdout);
+    printf("finished postProcess\n");
+    fflush(stdout);
   }
 
   inline uint32_t *get_input_scalars_pointer() {
@@ -494,7 +495,7 @@ printf("non convertible idx: %lu; start, end = %lu, %lu\n", idx, scalars_start_i
     cl_int err;
 
     auto do_postprocessing = [&]() {
-printf("doing postProcess(batch = %d)\n", processed_outputs);
+      printf("doing postProcess(batch = %d)\n", processed_outputs);
       postProcess((processed_outputs % 2 == 0 ? source_kernel_output_a.data()
                                               : source_kernel_output_b.data()),
                   processed_outputs, scalars);
