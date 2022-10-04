@@ -218,7 +218,7 @@ fn msm_with_infinity_result() {
 fn msm_with_unrepresentable_points_at_chunk_boundaries() {
     let batches = 4;
     let num_points = 1 << 12;
-    let (mut points, scalars) = util::generate_points_scalars(num_points, batches);
+    let (mut points, scalars) = util::generate_points_scalars::<G1Affine>(num_points, batches);
     let mut arkworks_results = Vec::new();
 
     // Sprinkle the unrepresentable points at the boundary of all but the third chunk.
@@ -265,6 +265,58 @@ fn msm_with_unrepresentable_points_at_chunk_boundaries() {
         assert_eq!(
             our_result,
             arkworks_result,
-            "msm_with_unrepresentable_points_at_chunk_boundaries test failed!");
+            "msm_with_unrepresentable_points_at_chunk_boundaries test failed when checking batch {}!",
+            b);
+    }
+}
+
+// MSM where the result is equal to infinity, without requiring to do special handling for non
+// representable points.
+#[test]
+#[serial]
+fn msm_one_unrepresentable_one_regular() {
+    let batches = 1;
+    let num_points = 2;
+    let mut scalars = Vec::new();
+    let mut points = Vec::new();
+    let mut arkworks_results = Vec::new();
+
+    for _i in 0..batches {
+        scalars.push(BigInteger256::from(1));
+        scalars.push(BigInteger256::from(2));
+    }
+
+    // One point that can be represented
+    points.push(G1Affine::prime_subgroup_generator());
+
+    // One point that can't be represented
+    points.push( 
+        util::create_g1_affine_from_string(
+            b"32D756062D349E59416ECE15CCBF8E86EF0D33183465A42FE2CB65FC1664272E6BB28F0E1C7A7C9C05824AD09ADC00",
+            b"6E4B66BB23EF4BEF715F597162D6662D8161CD062D6212D39392E17232444A0760B5DC479DB98123AB3887AA3CB34E"
+        ));
+
+    for b in 0..batches {
+        let start = b * points.len();
+        let end = (b + 1) * points.len();
+        arkworks_results.push(
+                VariableBaseMSM::multi_scalar_mul(points.as_slice(), unsafe {
+                    std::mem::transmute::<&[_], &[BigInteger256]>(&scalars[start..end])
+                    }).into_affine());
+    }
+
+    let mut context = multi_scalar_mult_init(points.as_slice());
+    let msm_results = multi_scalar_mult(&mut context, points.as_slice(), unsafe {
+        std::mem::transmute::<&[_], &[BigInteger256]>(scalars.as_slice())
+    });
+
+    for b in 0..batches {
+        let arkworks_result = arkworks_results[b];
+        let our_result = msm_results[b].into_affine();
+        assert_eq!(
+            our_result,
+            arkworks_result,
+            "msm_one_unrepresentable_one_regular test failed when checking batch {}!",
+            b);
     }
 }
