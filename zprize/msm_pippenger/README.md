@@ -69,7 +69,7 @@ got the ZPrize competition.
 
 Currently our highest performance afi is:
 
-afi-0b83061a1938e28cb (FPGA MSM kernel running at 270MHz)
+afi-0938ad46413691732 (FPGA MSM kernel running at 278MHz)
 
 Note these tests take up to 30min each as we transform 2<sup>26</sup> affine
 points into their twisted edwards representation.
@@ -112,6 +112,14 @@ The breakdown of how long each stage takes can be printed when changed the value
 of `mask_io` in `host/driver/driver.cpp` (this is not used in benchmarking as it
 has lower performance):
 
+```
+[memcpy-ing scalars to special memory region] 0.28928s
+[transferring scalars to gmem] 0.198263s
+[Doing FPGA Computation] 4.96781s
+[Copying results back from gmem] 0.00128217s
+[Doing on-host postprocessing] 0.469954s
+```
+
 ### Notes
  1. Because our solution offloads a non-trival amount of work to perform in
 parallel to the host, you will see the best performance after a fresh reboot,
@@ -138,9 +146,9 @@ AFI-id | AFI-gid | Notes | 2^26 performance
  afi-0df5b1800bfbfdd54 | agfi-036994fb80202cb8d | mega-build-3-oct-1 | [transferring scalars to gmem] 0.182392s, [Doing FPGA Computation] 6.8731s
  afi-066aeb84a7663930a | agfi-0ec73e4a50c84b9fc | mega-build-3-oct-1, various timing optimizations, 250MHz, Vivado 2021.2 | [Doing FPGA Computation] 5.40025s 
  afi-0b83061a1938e28cb | agfi-043b477d73479a018 | mega-build-1-oct-2, various timing optimizations, 270MHz, Vivado 2020.2, host code masking code | 4 rounds @ 20.957301742s
+ afi-0938ad46413691732 | agfi-04dec9d922d689fad
 
-
-# Building the design from source
+# Building the design from sourceagfi-04dec9d922d689fad
 
 Instructions are given below for building from source. A prerequisite is that
 OCaml has been setup (outlined in the main [README.md](../../README.md)).
