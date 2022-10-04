@@ -4,8 +4,8 @@ We have implemented an FPGA design that runs on an AWS F1 instance and can compu
 the MSM of a large number of elliptic point and scalar pairs on the BLS12-377 G1
 curve. 
 
-Performance is measured as per the ZPrize specs at 20.504s for 4 rounds of
-2<sup>26</sup> MSMs, which equates to **13.092** Mop/s.
+Performance is measured as per the ZPrize specs at 20.336s for 4 rounds of
+2<sup>26</sup> MSMs, which equates to **13.200** Mop/s.
 
 Detailed instructions on re-creating these results from source are in the
 [building from source](#building-the-design-from-source) and more detailed
@@ -190,37 +190,12 @@ source ~/aws-fpga/vitis_setup.sh
 ```
 
 Cd into the `fpga` directory which contains the scripts to build an actual FPGA
-design (takes 6-8 hours), or a emulation module (takes 15 minutes). Both of
-these scripts below will build the Hardcaml to generate the required Verilog.
+design (takes 6-8 hours). The compile script below will also build the Hardcaml
+to generate the required Verilog.
 
 ```
 cd fpga
 ./compile_hw.sh
-```
-
-### Running a hardware emulation simulation
-
-You can also optionally run a Vivado simulation of the design which includes the
-AWS shell and DDR-4 logic. This takes a lot longer than the Hardcaml simulation
-above but provides a more true-to-hardware test enviroment.
-
-```
-cd fpga
-./compile_hw_emu.sh
-```
-
-Once the emulation image is built run this command. You can optionally modify
-xrt.template.ini if you want to enable GUI:
-
-```
-cd /test
-./run_hw_emu.sh
-```
-
-If you want the Vivado GUI over the ssh to AWS, you need to install:
-
-```
-yum install libXtst.x86_64
 ```
 
 ### Creating the AWS AFI
@@ -281,6 +256,18 @@ have also provided this AFI we built and tested with in the home directory of
 the fpga (runner) box, as well as in the s3 bucket provided to us in a `/afis`
 folder.
 
+We have done repeated builds to make sure the image built from source is
+identical to what we tested. As a checkpoint, here are a few checksums that will
+be reported by Vivado:
+
+```
+Phase 1.1 Placer Initialization Netlist Sorting | Checksum: e1119738
+Ending Placer Task | Checksum: 1625c9702
+Phase 4.1 Global Iteration 0 | Checksum: 2d7b45461
+Phase 4.5 Global Iteration 4 | Checksum: 231df891e
+Phase 13 Route finalize | Checksum: 176e41d90
+```
+
 ## The test harness
 
 We took the test harness written in Rust for the GPU track and implemented
@@ -303,9 +290,20 @@ CMAKE=cmake3 XCLBIN=~/afi-0938ad46413691732.awsxclbin TEST_LOAD_DATA_FROM=~/test
 Output to show the latency of 4 rounds and correctness:
 
 ```
+Done internal format conversion!
+Loading XCLBIN=/home/55312.bsdevlin.gmail.com/afi-0938ad46413691732.awsxclbin and doing openCL setups:
+Found Platform
+Platform Name: Xilinx
+INFO: Reading /home/55312.bsdevlin.gmail.com/afi-0938ad46413691732.awsxclbin
+Loading: '/home/55312.bsdevlin.gmail.com/afi-0938ad46413691732.awsxclbin'
+Trying to program device[0]: xilinx_aws-vu9p-f1_shell-v04261818_201920_2
+Device[0]: program successful!
+[Copying input points to gmem] 1.4966s
+multi_scalar_mult_init took Ok(1167.977275761s)
+Running msm test for 1 rounds
 Running MSM of [67108864] input points (4 batches)
 Streaming input scalars across 4 chunks per batch (Mask IO and Post Processing)
-Running multi_scalar_mult took Ok(20.504301742s) (round = 0)
+Running multi_scalar_mult took Ok(20.37390268s) (round = 0)
 test msm_correctness ... ok
 ```
 
@@ -321,11 +319,11 @@ CMAKE=cmake3 XCLBIN=~/afi-0938ad46413691732.awsxclbin TEST_LOAD_DATA_FROM=~/test
 Output to show the result of 10 runs of 4 rounds each:
 
 ```
-FPGA-MSM/2**26x4        time:  [20.404 s 20.504 s 20.621 s]
+FPGA-MSM/2**26x4 time: [20.336 s 20.336 s 20.337 s] 
 ```
 
-We achieve a mean of 20.504s, which equates to **13.092** Mop/s
-((4*2^26)/1000000)/20.504).
+We achieve a mean of 20.336s, which equates to **13.200** Mop/s
+((4*2^26)/1000000)/20.336).
 
 ### Power
 
