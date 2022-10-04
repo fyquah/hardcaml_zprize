@@ -14,7 +14,7 @@ measurement results in the [benchmarking](#benchmarking) sections below.
 
 ## Overview of the architecture
 
-We decided to implement a heavily optimized version of [pippengers
+We have implemented a heavily optimized version of [pippengers
 algorithm](https://dl.acm.org/doi/abs/10.1137/0209022) in order to solve the MSM
 problem.
 
