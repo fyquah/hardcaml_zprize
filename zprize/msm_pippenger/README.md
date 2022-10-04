@@ -46,15 +46,15 @@ after 238 clock cycles in the final version.
  2. Implementing an adder on affine or projective coordinates requires more FPGA
 resources (DSPs, LUTs, carry chains, ...), so we investigated different
 transforms we could do in advance that would reduce the complexity on the FPGA.
-We ended up deciding to transform to a twisted Edwards curve and a modified version of
-extended projective coordinates (detailed 
-[here](https://fyquah.github.io/hardcaml_zprize/zprize/Twisted_edwards_lib/Mixed_add_precompute/index.html)). 
+We ended up deciding to transform to a scaled twisted Edwards curve and a
+coordinate system loosely based on extended coordinates, but with heavy
+precomputation. This [document describes the the details of the
+transformation](docs/optimizing_point_representation.md)
 The pre-transformation from affine points on a Weierstrass curve to extended 
 projective points on an equivalent twisted Edwards curve significantly decreases 
-the computational complexity of point addition. Further, our pre-transformation from 
-extended projective coordinates to our own coordinate system allows us to further 
-decrease the computational complexity and remove all of the constants required when 
-calculating the point addition.
+the computational complexity of point addition (removing some modulo adds and a
+modulo multiplication by constant, compared to the vanila mixed addition formulae
+for scaled twisted edwards curve).
 
     This transformation requires special care as there are 5 points on the Weierstrass 
     curve that cannot map to our selected twisted Edwards curve. This is such a rare 
