@@ -82,4 +82,4 @@ CMAKE=cmake3 \
 In our aws runner box, we have pregenerated a bunch of test cases and save them in `~/testdata`.
 We have found that loading them from disk is a lot faster than regenerating everytime for larger
 tests (even then, loading 2^26 points from disk on the runner box still took at least
-5 minuets!),
+5 minuets!).
