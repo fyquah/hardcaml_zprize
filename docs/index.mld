@@ -29,6 +29,10 @@ The main libraries that implements this include
 Some modules with interesting implementation are (but not limited to!):
 - {!Twisted_edwards_lib.Mixed_add_precompute} - A fully pipelined mixed adder
   for points in the scaled twisted edwards curve with heavy precomputation.
+- {!Field_ops_lib.Bram_reduce} - Perform the fine reduction stage of barrett
+  reduction using BRAMs.
+- {!Msm_pippenger.Scalar_transformation} - Transforms scalars into a signed
+  digit representation.
 
 {2 Inverse NTT}
 
