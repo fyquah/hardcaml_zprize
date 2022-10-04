@@ -91,16 +91,38 @@ HBM structure, or different memory architecture (like DDR4).
 We will present the results for the normal layout (no data rearrangement) and
 optimized layout (ie: with preprocessing data arrangement separately)
 
-{2 Results}
+{2 Experiments}
+
+To evaluate our results, we perform 2 sets of experiments
+
+{3 Normal-layout Builds}
+
+These are builds where the input and out vector to perform NTT on is laid out
+linearly in HBM (ie: the host doesn't perform any pre/post-processing). We run
+experiments with running the 8-core, 16-core, 32-core and 64-core variants,
+yeilding different level of parallelisms.
+
+{3 Optimized-layout Builds}
+
+We demonstrate the result for the 16-core variant ones
+
+{2 Results (For Competition Criteria)}
 
 We have tested our design and ran builds on a 6-core
 Intel(R) Core(TM) i5-9600K CPU @ 3.70GHz machine with
 [Ubuntu 22.04 LTS (GNU/Linux 5.15.0-48-generic x86_64)]. We did not use
-any special kernel flags / boot parameters to obatain our results.
+any special kernel flags / boot parameters to obatain our results. We run
+our designs using the vitis platform Xilinx has provided for the Varium C1100
+card. The platform takes up some resources on the FPGA and comes with PCIe gen3
+x4 support
 
 We measure our latency by taking the fpga-only evaluation latency across 200
 NTT runs. Power measured by sampling [xbutil examaine --report electrical --device
 <device-pcie-id>] 10 times during latency benchmark
+
+In this normal Layout build, we do not perform any preprocessing or
+post-processing. Hence, latency below includes only the FPGA NTT evaluation
+latency.
 
 {3 Latency, Power and Resource Utilization}
 
@@ -140,7 +162,8 @@ control. The number is reported as "fixed" in the post_route_utilization.rpt
 {3 FOM Measurement}
 
 Here are our FOM numbers. As detailed in the evaluation criteria given to us,
-FOM is computed as [latency * sqrt(Power) * U_norm]
+FOM is computed as [latency * sqrt(Power) * U_norm]. Note that [N_pipe = 1]
+for our design, since it can only support 1 evaluation at a time.
 
 Latency and Power is used as report above in seconds and Watts respectively.
 We calculate [U_norm = U(LUTS) + U(Registers) + U(DSP) + U(BRAM) + U(URAM)].
@@ -187,159 +210,46 @@ those resources should be considered as part of the evaluation!
 Using these criteria, our best build is also the 32-core variant with a FOM of
 0.2829
 
-{2 A note about Optimizing layout}
+{2 Result from Optimized-Layout Builds}
 
-{2 Throughput}
+Here is a detailed breakdown of a runtime sample of an optimized 64-core build:
+(The power and utilization is similar to the normal-layout builds)
 
-We now show the result of 6 designs which target differing parallelism and memory architectures.
+{[
 
-Note that each core instantiated has a throughput of approximately one INNT per second at
-our target 200 Mhz.
+----------------------------------------------------
+|               Task                     |   Time  |
+----------------------------------------------------
+| Preprocessing data rearrangement       | 0.0213s |
+| Copying input points to device         | 0.0414s |
+| Doing Actual NTT work                  | 0.0267s |
+| Copying final result to host           | 0.0552s |
+| Copy from internal page-aligned buffer | 0.0231s |
+|----------------------------------------|---------|
+| Evaluate NTT                           | 0.1680s |
+-----------------------------------------|----------
 
-{%html:
-<table class="perf">
-<caption>Normal memory access pattern</caption>
-  <tr>
-    <td>Cores</td>
-    <td>PCIe down</td>
-    <td>NTT processing</td>
-    <td>PCIe up</td>
-  </tr>
-  <tr>
-    <td>8</td>
-    <td>0.039</td>
-    <td>0.23</td>
-    <td>0.054</td>
-  </tr>
-  <tr>
-    <td>16</td>
-    <td>x0.0410</td>
-    <td>0.123</td>
-    <td>0.056</td>
-  </tr>
-  <tr>
-    <td>32</td>
-    <td>0.042</td>
-    <td>0.068</td>
-    <td>0.056</td>
-  </tr>
-  <tr>
-    <td>64</td>
-    <td>0.041</td>
-    <td>0.044</td>
-    <td>0.056</td>
-  </tr>
-</table>
-%}
+]}
 
-{%html:
-<table class="perf">
-<caption>Optimized memory access pattern</caption>
-  <tr>
-    <td>Cores</td>
-    <td>Preprocessing</td>
-    <td>PCIe down</td>
-    <td>NTT processing</td>
-    <td>PCIe up</td>
-    <td>Postprocessing</td>
-  </tr>
-  <tr>
-    <td>32</td>
-    <td>0.0218</td>
-    <td>0.0417</td>
-    <td>0.0348</td>
-    <td>0.0555</td>
-    <td>0.0228</td>
-  </tr>
-  <tr>
-    <td>64</td>
-    <td>0.0213</td>
-    <td>0.0414</td>
-    <td>0.0267</td>
-    <td>0.0552</td>
-    <td>0.0231</td>
-  </tr>
-</table>
-%}
+By rearrangeing the data in a much more memory-friendly layout, our NTT
+evaluation time drops significantly compared to those of a 64-core build in
+a normal build (0.0267s vs 0.0450s). This comes at the cost of the host doing
+some data rearrangement.
 
-{2 Resource usage}
+There are several bottlenecks in this result, all of which can be solved
+pretty easily:
 
-{%html:
-<table class="perf">
-<caption>Normal memory access pattern</caption>
-  <tr>
-    <td>Cores</td>
-    <td>LUTs</td>
-    <td>REGs</td>
-    <td>DSPs</td>
-    <td>BRAM</td>
-    <td>URAM</td>
-  </tr>
-  <tr>
-    <td>8</td>
-    <td>169482</td>
-    <td>222508</td>
-    <td>264</td>
-    <td>162</td>
-    <td>48</td>
-  </tr>
-  <tr>
-    <td>16</td>
-    <td>189613</td>
-    <td>237651</td>
-    <td>520</td>
-    <td>162</td>
-    <td>96</td>
-  </tr>
-  <tr>
-    <td>32</td>
-    <td>228679</td>
-    <td>265938</td>
-    <td>1032</td>
-    <td>162</td>
-    <td>192</td>
-  </tr>
-  <tr>
-    <td>64</td>
-    <td>327714</td>
-    <td>327887</td>
-    <td>2052</td>
-    <td>162</td>
-    <td>384</td>
-  </tr>
-</table>
-%}
+- {b preprocessing + postprocessing > latency} - We can run the preprocessing
+  and post-processing in separate threads. We can setup the input and output
+  buffers such such that we don't run into cache coherency issues.
+- {b The pcie latency is larger than the NTT evaluation} - This is because the
+  vitis platform we are using only supports PCIe x4. With PCIe x16, we would have
+  4 times the bandwidth and side-step this problem.
 
-{%html:
-<table class="perf">
-<caption>Optimized memory access pattern</caption>
-  <tr>
-    <td>Cores</td>
-    <td>LUTs</td>
-    <td>REGs</td>
-    <td>DSPs</td>
-    <td>BRAM</td>
-    <td>URAM</td>
-  </tr>
-  <tr>
-    <td>32</td>
-    <td>166270</td>
-    <td>183713</td>
-    <td>1028</td>
-    <td>162</td>
-    <td>192</td>
-  </tr>
-  <tr>
-    <td>64</td>
-    <td>265308</td>
-    <td>243870</td>
-    <td>2052</td>
-    <td>162</td>
-    <td>384</td>
-  </tr>
-</table>
-%}
+In practice, we believe this is the more scalable design that can achieve
+low-latency and high-throughput, at the cost of the host machine doing some
+data rearrangement.
 
 {2 Build and Testing Instructions}
 
-Please refer {{!page:zprize_ntt_build_instructions} Build Instructions}
+Please refer {{!page:zprize_ntt_build_instructions} this page}
