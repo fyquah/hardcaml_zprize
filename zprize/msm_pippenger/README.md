@@ -202,18 +202,18 @@ cd fpga
 
 ```
 
-If you want the Vivado GUI over the ssh to AWS, you need to install:
-
-```
-yum install libXtst.x86_64
-```
-
 Once the emulation image is built run this command. You can optionally modify
-xrt.template.ini if you want to disable GUI:
+xrt.template.ini if you want to enable GUI:
 
 ```
 cd /test
 ./run_hw_emu.sh
+```
+
+If you want the Vivado GUI over the ssh to AWS, you need to install:
+
+```
+yum install libXtst.x86_64
 ```
 
 ### Creating the AWS AFI
@@ -263,14 +263,33 @@ summary of those results.
 
 ## AFI-ids and measured performance
 
-Currently our highest performance afi is:
+### Notes for ZPrize judges
 
-afi-0938ad46413691732 (FPGA MSM kernel running at 278MHz)
+AFI used for benchmarking: afi-0938ad46413691732.
 
-Note each of these tests take up to 30min each as we transform 2<sup>26</sup>
-affine points into their twisted Edwards representation.
+The image built from at the source at the time of writing will produce an FPGA
+AFI that runs at 278MHz, automatically clocked down from 280MHz by Vitis. We
+have also provided this AFI we built and tested with in the home directory of
+the fpga (runner) box, as well as in the s3 bucket provided to us in a `/afis`
+folder.
 
-Running `cargo test` to verify the result for 4 rounds of 2<sup>26</sup> MSM:
+## Benchmarking test harness
+
+Detailed instructions for running the test harness can be found in
+[test\_fpga\_harness](test_fpga_harness/README.md). Note each of these tests
+take up to 30min each as we transform 2<sup>26</sup> affine points into their
+twisted Edwards representation. A summary of the commands and their output is
+given here.
+
+The following command will time and verify the result for 4 rounds of
+2<sup>26</sup> MSM:
+
+```
+cd test_fpga_harness
+CMAKE=cmake3 XCLBIN=~/afi-0938ad46413691732.awsxclbin TEST_LOAD_DATA_FROM=~/testdata/2_26 cargo test  --release -- --nocapture
+```
+
+Output to show the latency of 4 rounds and correctness:
 
 ```
 Running MSM of [67108864] input points (4 batches)
@@ -279,13 +298,16 @@ Running multi_scalar_mult took Ok(20.504301742s) (round = 0)
 test msm_correctness ... ok
 ```
 
-We can then benchmark the result to eliminate noise and get a better measurement.
-Below is the total time for the same measurement as above but repeated 10 times
-(the output of cargo bench in the
-[test\_fpga\_harness](test_fpga_harness/README.md)). This allows us to mask the
-overhead of transferring data to the FPGA and various host processing steps on
-the scalar inputs that can happen in parallel. This is also the required
-measurement outlined in the ZPrize specs.
+We also benchmark the result to eliminate noise and get a more accurate
+measurement. Below is the total time for the same measurement as above but
+repeated 10 times
+
+```
+cd test_fpga_harness
+CMAKE=cmake3 XCLBIN=~/afi-0938ad46413691732.awsxclbin TEST_LOAD_DATA_FROM=~/testdata/2_26 cargo bench
+```
+
+Output to show the result of 10 runs of 4 rounds each:
 
 ```
 FPGA-MSM/2**26x4        time:  [20.404 s 20.504 s 20.621 s]
@@ -307,6 +329,8 @@ Power consumption (Vccint):
    Average: 50 watts
    Max measured: 54 watts
 ```
+
+### Breakdown of individual host steps
 
 The breakdown of how long each stage takes can be printed when changed the value
 of `mask_io` to `false` in `host/driver/driver.cpp` (this is not used in
