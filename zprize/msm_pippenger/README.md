@@ -34,7 +34,7 @@ out below.
 ## Key optimizations
 
  1. Early on we decided rather than implementing all of pippengers algorithm on
-the LPG, it would be better to only implement point additions, and focus on as
+the FPGA, it would be better to only implement point additions, and focus on as
 high throughput as possible. We implemented a fully pipelined adder which can
 take new inputs to add every clock cycle, with a result appearing on the output
 after 238 clock cycles in the final version.
