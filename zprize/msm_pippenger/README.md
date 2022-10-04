@@ -27,7 +27,7 @@ The above description overly simplifies the amount of optimizations and tricks w
 have implemented to get performance. A summary of the optimizations are listed
 out below.
 
-## Optimizations
+## Key optimizations
 
  1. Early on we decided rather than implementing all of pippengers algorithm on
 the LPG, it would be better to only implement point additions, and focus on as
