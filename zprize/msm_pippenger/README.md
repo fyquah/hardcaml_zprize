@@ -124,11 +124,12 @@ still being able to successfully route in Vivado.
 +----------------------------+--------+--------+--------+--------+--------+--------+
 ```
 
-# Benchmarking 2<sup>26</sup> points
+# Benchmarking
 
 See the the test\_harness [README.md](test_fpga_harness/README.md) for
-instructions on benchmarking our solution to get the performance number required
-for the ZPrize competition. This section presents a summary of those results.
+instructions on benchmarking our solution against 2<sup>26</sup> to get the
+performance number required for the ZPrize competition. This section presents a
+summary of those results.
 
 ## AFI-ids and measured performance
 
@@ -136,8 +137,8 @@ Currently our highest performance afi is:
 
 afi-0938ad46413691732 (FPGA MSM kernel running at 278MHz)
 
-Note these tests take up to 30min each as we transform 2<sup>26</sup> affine
-points into their twisted Edwards representation.
+Note each of these tests take up to 30min each as we transform 2<sup>26</sup>
+affine points into their twisted Edwards representation.
 
 Running `cargo test` to verify the result for 4 rounds of 2<sup>26</sup> MSM:
 
