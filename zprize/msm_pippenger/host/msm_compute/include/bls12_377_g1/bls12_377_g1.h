@@ -2,12 +2,13 @@
 #ifndef BLS12_377_G1
 #define BLS12_377_G1
 
-#include <iostream>
-#include <stdio.h>
 #include <gmp.h>
-#include <cstdint>
+#include <stdio.h>
+
 #include <cassert>
+#include <cstdint>
 #include <cstring>
+#include <iostream>
 
 #include "rust_types.h"
 
@@ -20,40 +21,41 @@ const int NUM_32B_WORDS = (NUM_BITS + 31) / 32;
 
 const uint64_t ZERO_WORDS[NUM_64B_WORDS] = {0, 0, 0, 0, 0, 0};
 const uint64_t ONE_WORDS[NUM_64B_WORDS] = {1, 0, 0, 0, 0, 0};
-const uint64_t COFACTOR_WORDS[NUM_64B_WORDS] = {202099033278250856ULL,   5854854902718660529ULL,
-                                                11492539364873682930ULL, 8885205928937022213ULL,
-                                                5545221690922665192ULL,  39800542322357402ULL};
+const uint64_t COFACTOR_WORDS[NUM_64B_WORDS] = {
+    202099033278250856ULL,  5854854902718660529ULL, 11492539364873682930ULL,
+    8885205928937022213ULL, 5545221690922665192ULL, 39800542322357402ULL};
 const uint64_t TWO_WORDS[NUM_64B_WORDS] = {2, 0, 0, 0, 0, 0};
 const uint64_t FOUR_WORDS[NUM_64B_WORDS] = {4, 0, 0, 0, 0, 0};
 
 // parameters
-const uint64_t Q_WORDS[NUM_64B_WORDS] = {9586122913090633729ULL,  1660523435060625408ULL,
-                                         2230234197602682880ULL,  1883307231910630287ULL,
-                                         14284016967150029115ULL, 121098312706494698ULL};
+const uint64_t Q_WORDS[NUM_64B_WORDS] = {
+    9586122913090633729ULL, 1660523435060625408ULL,  2230234197602682880ULL,
+    1883307231910630287ULL, 14284016967150029115ULL, 121098312706494698ULL};
 const uint64_t TWISTED_SCALE_WORDS[NUM_64B_WORDS] = {
     13419307668111328635ULL, 8373674422391776204ULL, 5513249072146820840ULL,
     5149069653798344989ULL,  6811167148309021905ULL, 15264527973195840ULL};
-const uint64_t K_WORDS[NUM_64B_WORDS] = {11879560860523896839ULL, 11794303776563407899ULL,
-                                         11519371117816325830ULL, 16332990531524224621ULL,
-                                         18171900594119986374ULL, 6614206255950839ULL};
-const uint64_t S_WORDS[NUM_64B_WORDS] = {5838611145544196438ULL,  545535609814112044ULL,
-                                         1080052896469122035ULL,  4791220378608224003ULL,
-                                         12140169109060083382ULL, 116328141604388704ULL};
-const uint64_t A_WORDS[NUM_64B_WORDS] = {9586122913090633728ULL,  1660523435060625408ULL,
-                                         2230234197602682880ULL,  1883307231910630287ULL,
-                                         14284016967150029115ULL, 121098312706494698ULL};
-const uint64_t D_WORDS[NUM_64B_WORDS] = {1509469849952489476ULL, 6727413605812016654ULL,
-                                         6874802657709504355ULL, 18331520918572203262ULL,
-                                         7004586743780231936ULL, 63856259481222769ULL};
-const uint64_t C_A_WORDS[NUM_64B_WORDS] = {11242535302639311873ULL, 3344963475739540092ULL,
-                                           3450543903400682535ULL,  9723004633616770468ULL,
-                                           6431543574269837198ULL,  14310513306317982ULL};
-const uint64_t C_B_WORDS[NUM_64B_WORDS] = {5838611145544196438ULL,  545535609814112044ULL,
-                                           1080052896469122035ULL,  4791220378608224003ULL,
-                                           12140169109060083382ULL, 116328141604388704ULL};
+const uint64_t K_WORDS[NUM_64B_WORDS] = {
+    11879560860523896839ULL, 11794303776563407899ULL, 11519371117816325830ULL,
+    16332990531524224621ULL, 18171900594119986374ULL, 6614206255950839ULL};
+const uint64_t S_WORDS[NUM_64B_WORDS] = {
+    5838611145544196438ULL, 545535609814112044ULL,   1080052896469122035ULL,
+    4791220378608224003ULL, 12140169109060083382ULL, 116328141604388704ULL};
+const uint64_t A_WORDS[NUM_64B_WORDS] = {
+    9586122913090633728ULL, 1660523435060625408ULL,  2230234197602682880ULL,
+    1883307231910630287ULL, 14284016967150029115ULL, 121098312706494698ULL};
+const uint64_t D_WORDS[NUM_64B_WORDS] = {
+    1509469849952489476ULL,  6727413605812016654ULL, 6874802657709504355ULL,
+    18331520918572203262ULL, 7004586743780231936ULL, 63856259481222769ULL};
+const uint64_t C_A_WORDS[NUM_64B_WORDS] = {
+    11242535302639311873ULL, 3344963475739540092ULL, 3450543903400682535ULL,
+    9723004633616770468ULL,  6431543574269837198ULL, 14310513306317982ULL};
+const uint64_t C_B_WORDS[NUM_64B_WORDS] = {
+    5838611145544196438ULL, 545535609814112044ULL,   1080052896469122035ULL,
+    4791220378608224003ULL, 12140169109060083382ULL, 116328141604388704ULL};
 static void init_empty(mpz_t v) {
   mpz_init(v);
-  // mpz_init2(v, 384 + mp_bits_per_limb);  // https://gmplib.org/manual/Initializing-Integers
+  // mpz_init2(v, 384 + mp_bits_per_limb);  //
+  // https://gmplib.org/manual/Initializing-Integers
 }
 static const int WORDS_MOST_SIGNIFICANT = 1;
 static const int WORDS_LEAST_SIGNIFICANT = -1;
@@ -61,14 +63,14 @@ static const int BYTES_MOST_SIGNIFICANT = 1;
 static const int BYTES_LEAST_SIGNIFICANT = -1;
 static void set_words(mpz_t v, const uint64_t words[]) {
   assert(NUM_64B_WORDS == 6);
-  mpz_import(v, NUM_64B_WORDS, WORDS_LEAST_SIGNIFICANT, sizeof(uint64_t), BYTES_LEAST_SIGNIFICANT,
-             0, (uint64_t *)words);
+  mpz_import(v, NUM_64B_WORDS, WORDS_LEAST_SIGNIFICANT, sizeof(uint64_t),
+             BYTES_LEAST_SIGNIFICANT, 0, (uint64_t *)words);
 }
 
 static void set_32b_words(mpz_t v, const uint32_t words[]) {
   assert(NUM_32B_WORDS == 12);
-  mpz_import(v, NUM_32B_WORDS, WORDS_LEAST_SIGNIFICANT, sizeof(uint32_t), BYTES_LEAST_SIGNIFICANT,
-             0, (uint32_t *)words);
+  mpz_import(v, NUM_32B_WORDS, WORDS_LEAST_SIGNIFICANT, sizeof(uint32_t),
+             BYTES_LEAST_SIGNIFICANT, 0, (uint32_t *)words);
 }
 
 mpz_t q;
@@ -193,8 +195,8 @@ class GFq {
     assert(sizeof(words) == NUM_64B_WORDS * 8);
     memset(words, 0, sizeof(words));
 
-    mpz_export(words, &countp, WORDS_LEAST_SIGNIFICANT, sizeof(uint64_t), BYTES_LEAST_SIGNIFICANT,
-               0, v);
+    mpz_export(words, &countp, WORDS_LEAST_SIGNIFICANT, sizeof(uint64_t),
+               BYTES_LEAST_SIGNIFICANT, 0, v);
     assert(countp <= NUM_64B_WORDS);
     printf("const uint64_t %s_WORDS[NUM_64B_WORDS] = {", str);
     for (int i = 0; i < NUM_64B_WORDS; i++) {
@@ -222,24 +224,28 @@ const GFq COFACTOR(COFACTOR_WORDS);
 
 struct WeierstrassParams {
   GFq a, b, s, alpha;
-  WeierstrassParams(const uint64_t a_words[], const uint64_t b_words[], const uint64_t s_words[],
-                    const uint64_t alpha_words[])
+  WeierstrassParams(const uint64_t a_words[], const uint64_t b_words[],
+                    const uint64_t s_words[], const uint64_t alpha_words[])
       : a(a_words), b(b_words), s(s_words), alpha(alpha_words) {}
 
   void println() const {
-    gmp_printf("WeierstrassParams: {\n\ta = %#Zx,\n\tb = %#Zx,\n\ts = %#Zx,\n\talpha = %#Zx\n}\n",
-               a.v, b.v, s.v, alpha.v);
+    gmp_printf(
+        "WeierstrassParams: {\n\ta = %#Zx,\n\tb = %#Zx,\n\ts = %#Zx,\n\talpha "
+        "= %#Zx\n}\n",
+        a.v, b.v, s.v, alpha.v);
   }
 };
 // a = -1 in twisted edwards, so A_WORDS is -1
-const WeierstrassParams weierstrass_params(ZERO_WORDS, ONE_WORDS, S_WORDS, A_WORDS);
+const WeierstrassParams weierstrass_params(ZERO_WORDS, ONE_WORDS, S_WORDS,
+                                           A_WORDS);
 
 struct MontgomeryParams {
   GFq c_A, c_B;
   MontgomeryParams(const uint64_t c_A_words[], const uint64_t c_B_words[])
       : c_A(c_A_words), c_B(c_B_words) {}
   void println() const {
-    gmp_printf("MontgomeryParams: {\n\tc_A = %#Zx,\n\tc_B = %#Zx\n}\n", c_A.v, c_B.v);
+    gmp_printf("MontgomeryParams: {\n\tc_A = %#Zx,\n\tc_B = %#Zx\n}\n", c_A.v,
+               c_B.v);
   }
 };
 const MontgomeryParams montgomery_params(C_A_WORDS, C_B_WORDS);
@@ -249,7 +255,8 @@ struct TwistedEdwardsParams {
   TwistedEdwardsParams(const uint64_t a_words[], const uint64_t d_words[])
       : a(a_words), d(d_words) {}
   void println() const {
-    gmp_printf("TwistedEdwardsParams: {\n\ta = %#Zx,\n\td = %#Zx\n}\n", a.v, d.v);
+    gmp_printf("TwistedEdwardsParams: {\n\ta = %#Zx,\n\td = %#Zx\n}\n", a.v,
+               d.v);
   }
 };
 
@@ -259,7 +266,8 @@ void print_params() {
   weierstrass_params.println();
   montgomery_params.println();
   twisted_edwards_params.println();
-  gmp_printf("Other: {\n\tk = %#Zx, \n\ttwisted_scale = %#Zx\n}\n", k.v, twisted_scale.v);
+  gmp_printf("Other: {\n\tk = %#Zx, \n\ttwisted_scale = %#Zx\n}\n", k.v,
+             twisted_scale.v);
 }
 
 struct GeneralUnifiedAddIntoTemps {
@@ -279,15 +287,15 @@ class Xyzt {
  public:
   GFq x, y, z, t;
 
-  Xyzt(const uint64_t words_x[], const uint64_t words_y[], const uint64_t words_z[],
-       const uint64_t words_t[])
+  Xyzt(const uint64_t words_x[], const uint64_t words_y[],
+       const uint64_t words_z[], const uint64_t words_t[])
       : x(words_x), y(words_y), z(words_z), t(words_t) {}
 
   Xyzt() : Xyzt(ZERO_WORDS, ONE_WORDS, ONE_WORDS, ZERO_WORDS) {}
   Xyzt(const Xyzt &other) : x(other.x), y(other.y), z(other.z), t(other.t) {}
 
-  void set_32b(const uint32_t words_x[], const uint32_t words_y[], const uint32_t words_z[],
-               const uint32_t words_t[]) {
+  void set_32b(const uint32_t words_x[], const uint32_t words_y[],
+               const uint32_t words_z[], const uint32_t words_t[]) {
     x.set_32b(words_x);
     y.set_32b(words_y);
     z.set_32b(words_z);
@@ -372,16 +380,17 @@ class Xyzt {
     z.set(COFACTOR);
   }
 
-  void generalUnifiedAddInto(const Xyzt &other, GeneralUnifiedAddIntoTemps &temps) {
+  void generalUnifiedAddInto(const Xyzt &other,
+                             GeneralUnifiedAddIntoTemps &temps) {
     // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-    auto &A     = temps.A;
-    auto &B     = temps.B;
-    auto &C     = temps.C;
-    auto &D     = temps.D;
-    auto &E     = temps.E;
-    auto &F     = temps.F;
-    auto &G     = temps.G;
-    auto &H     = temps.H;
+    auto &A = temps.A;
+    auto &B = temps.B;
+    auto &C = temps.C;
+    auto &D = temps.D;
+    auto &E = temps.E;
+    auto &F = temps.F;
+    auto &G = temps.G;
+    auto &H = temps.H;
     auto &temp1 = temps.temp1;
     auto &temp2 = temps.temp2;
 
@@ -395,7 +404,8 @@ class Xyzt {
     temp2.set_add(other.y, other.x);
     B.set_mul(temp1, temp2);
 
-    // C - https://gmplib.org/manual/Efficiency (better to multiply out-of-place)
+    // C - https://gmplib.org/manual/Efficiency (better to multiply
+    // out-of-place)
     temp1.set_mul(t, k);
     C.set_mul(temp1, other.t);
 
@@ -471,13 +481,19 @@ class Xyzt {
     preComputeFPGA(temps);
   }
 
-  void print() { gmp_printf("(X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)", x.v, y.v, z.v, t.v); }
-  void println() { gmp_printf("(X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)\n", x.v, y.v, z.v, t.v); }
+  void print() {
+    gmp_printf("(X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)", x.v, y.v, z.v, t.v);
+  }
+  void println() {
+    gmp_printf("(X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)\n", x.v, y.v, z.v, t.v);
+  }
   void println_hex() {
-    gmp_printf("(X = %#Zx, Y = %#Zx, Z = %#Zx, T = %#Zx)\n", x.v, y.v, z.v, t.v);
+    gmp_printf("(X = %#Zx, Y = %#Zx, Z = %#Zx, T = %#Zx)\n", x.v, y.v, z.v,
+               t.v);
   }
   void println(const char *label) {
-    gmp_printf("%s: (X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)\n", label, x.v, y.v, z.v, t.v);
+    gmp_printf("%s: (X = %Zd, Y = %Zd, Z = %Zd, T = %Zd)\n", label, x.v, y.v,
+               z.v, t.v);
   }
   void dump() {
     x.dumpToWords("x");

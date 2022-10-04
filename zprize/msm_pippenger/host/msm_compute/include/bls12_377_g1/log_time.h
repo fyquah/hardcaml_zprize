@@ -11,7 +11,8 @@ class LogTimeTaken {
   std::chrono::time_point<std::chrono::steady_clock> start;
 
  public:
-  LogTimeTaken(const char *descr) : descr(descr), start(std::chrono::steady_clock::now()) {}
+  LogTimeTaken(const char *descr)
+      : descr(descr), start(std::chrono::steady_clock::now()) {}
 
   ~LogTimeTaken() {
     auto end = std::chrono::steady_clock::now();
