@@ -181,12 +181,6 @@ AMI](https://aws.amazon.com/marketplace/pp/prodview-gimv3gqbpe57k) installed.
 source ~/aws-fpga/vitis_setup.sh
 ```
 
-If you want the Vivado GUI over the ssh to AWS, you need to install:
-
-```
-yum install libXtst.x86_64
-```
-
 Cd into the `fpga` directory which contains the scripts to build an actual FPGA
 design (takes 6-8 hours), or a emulation module (takes 15 minutes). Both of
 these scripts below will build the Hardcaml to generate the required Verilog.
@@ -198,7 +192,13 @@ cd fpga
 
 ### Running a hardware emulation simulation
 
-Modify xrt.template.ini if you want to disable GUI.
+If you want the Vivado GUI over the ssh to AWS, you need to install:
+
+```
+yum install libXtst.x86_64
+```
+
+Modify xrt.template.ini if you want to disable GUI, and then run the following script:
 ```
 cd /test
 ./run_hw_emu.sh
