@@ -8,6 +8,10 @@ Performance is measured as per the ZPrize specs at 20.504s for 4 rounds of
 2<sup>26</sup> MSMs, which equates to **13.092** Mop/s. Measureuments are
 further detailed in the benchmarking section.
 
+Detailed instructions on re-creating these results from source are in the
+[building from source](#building-the-design-from-source) and
+[benchmarking](#benchmarking-2<sup>26</sup>-points) sections below.
+
 
 ## Overview of the architecture
 
@@ -222,10 +226,10 @@ It is important you use the AMI version 1.10.5 and Vivado version 2020.2 to
 acheive the same results. The rtl_checksum expected of the Verilog when
 generated from the Hardcaml source is 1929f78e1e4bafd9cf88d507a3afa055.
 
-## Compiling the bls12-377 reference
+## Compiling the BLS12-377 reference
 
 Run `cargo build` in `libs/rust/ark_bls12_377_g1` to compile the dynamic library
-exposing a reference implementation of the bls12-377 g1 curve. This is
+exposing a reference implementation of the BLS12-377 g1 curve. This is
 necessary for the expect tests to work expectedly.
 
 z3 should also be installed to run tests.
