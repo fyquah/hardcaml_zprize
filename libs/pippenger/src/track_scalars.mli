@@ -1,8 +1,8 @@
 open! Base
 open! Hardcaml
 
-module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) : sig
-  module Scalar : module type of Scalar.Make (Scalar_config)
+module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) : sig
+  module Scalar : module type of Scalar_element.Make (Scalar_config)
 
   module I : sig
     type 'a t =

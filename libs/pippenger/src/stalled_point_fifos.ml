@@ -2,9 +2,9 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struct
+module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = struct
   open Config
-  module Scalar = Scalar.Make (Scalar_config)
+  module Scalar = Scalar_element.Make (Scalar_config)
 
   let log_num_windows = Int.ceil_log2 num_windows
   let stall_fifo_depth = 1 lsl log_stall_fifo_depth

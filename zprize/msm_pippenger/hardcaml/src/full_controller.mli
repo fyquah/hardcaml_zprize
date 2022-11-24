@@ -9,8 +9,8 @@ module Make (Config : sig
   val pipeline_depth : int
   val input_point_bits : int
 end) : sig
-  module Scalar_config : Pippenger.Scalar.Scalar_config.S
-  module Scalar : module type of Pippenger.Scalar.Make (Scalar_config)
+  module Scalar_config : Pippenger.Scalar_element.Config.S
+  module Scalar : module type of Pippenger.Scalar_element.Make (Scalar_config)
 
   module I : sig
     type 'a t =

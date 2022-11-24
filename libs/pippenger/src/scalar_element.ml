@@ -1,4 +1,4 @@
-module Scalar_config = struct
+module Config = struct
   module type S = sig
     val window_size_bits : int
   end
@@ -8,7 +8,7 @@ module Scalar_config = struct
   end
 end
 
-module Make (Scalar_config : Scalar_config.S) = struct
+module Make (Scalar_config : Config.S) = struct
   type 'a t =
     { scalar : 'a [@bits Scalar_config.window_size_bits]
     ; negative : 'a

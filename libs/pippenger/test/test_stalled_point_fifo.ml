@@ -2,7 +2,7 @@ open! Core
 open Hardcaml
 open Hardcaml_waveterm
 module Config = Pippenger.Config.Zprize
-module Scalar_config = Pippenger.Scalar.Scalar_config.Zprize
+module Scalar_config = Pippenger.Scalar_element.Config.Zprize
 module Fifo = Pippenger.Stalled_point_fifos.Make (Config) (Scalar_config)
 module Sim = Cyclesim.With_interface (Fifo.I) (Fifo.O)
 

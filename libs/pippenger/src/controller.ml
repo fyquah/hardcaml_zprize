@@ -1,12 +1,12 @@
 open! Base
 open! Hardcaml
 
-module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struct
+module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = struct
   open Signal
   open Config
   module Stalled_point_fifos = Stalled_point_fifos.Make (Config) (Scalar_config)
   module Track_scalars = Track_scalars.Make (Config) (Scalar_config)
-  module Scalar = Scalar.Make (Scalar_config)
+  module Scalar = Scalar_element.Make (Scalar_config)
 
   let log_num_windows = Int.ceil_log2 num_windows
 

@@ -35,7 +35,7 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
       then (
         let cache_dir = Sys.getenv_exn "HOME" ^/ ".hardcaml-verilator-cache" in
         VSim.create
-          ~cache_dir
+          ~cache:(Hashed { cache_dir })
           ~verbose:true
           ~clock_names:[ "ap_clk" ]
           (Kernel.create

@@ -48,9 +48,9 @@ module Make (Config : Config.S) = struct
   let xyzt_to_aligned p =
     List.map2_exn
       Xyzt_aligned.(port_widths |> to_list)
-      (Xyzt.to_alist p)
+      (Xyzt.Unsafe_assoc_by_port_name.to_alist p)
       ~f:(fun w (n, s) -> n, uresize s w)
-    |> Xyzt_aligned.of_alist
+    |> Xyzt_aligned.Unsafe_assoc_by_port_name.of_alist
   ;;
 
   module Xyzt_aligned_with_valid = With_valid.Wrap.Make (Xyzt_aligned)

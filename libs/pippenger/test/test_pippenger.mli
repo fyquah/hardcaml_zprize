@@ -15,7 +15,7 @@ module Msm_input : sig
   [@@deriving sexp_of, hardcaml]
 end
 
-module Test (Config : Config) (Scalar_config : Pippenger.Scalar.Scalar_config.S) : sig
+module Test (Config : Config) (Scalar_config : Pippenger.Scalar_element.Config.S) : sig
   val random_inputs : int -> Bits.t Msm_input.t array
   val debug_inputs : int -> Bits.t Msm_input.t array
 
