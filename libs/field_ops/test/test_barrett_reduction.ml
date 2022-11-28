@@ -30,7 +30,7 @@ let compute_software_model ~p ~a =
 ;;
 
 let config = Barrett_reduction.Config.for_bls12_377
-let p = Ark_bls12_377_g1.modulus ()
+let p = Field_ops_model.Modulus.m
 let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((p - one) * (p - one))
 
 let test ~debug test_cases =
