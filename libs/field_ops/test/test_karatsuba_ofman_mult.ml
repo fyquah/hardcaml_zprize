@@ -160,9 +160,6 @@ let test config =
           ; b = Z.of_string "43905850405824043"
           }
         ; { a = Z.of_string "1"; b = Z.of_string "1" }
-        ; { a = Ark_bls12_377_g1.x (Ark_bls12_377_g1.subgroup_generator ())
-          ; b = Ark_bls12_377_g1.y (Ark_bls12_377_g1.subgroup_generator ())
-          }
         ; { a =
               Z.of_string
                 "0x1a317c1aef7ad5cea420c1e82e24340ab50cb36f3faab9b86f7b947029e3deac5d1d6d8dee18bb9a81f2fe9ebeaccb7"

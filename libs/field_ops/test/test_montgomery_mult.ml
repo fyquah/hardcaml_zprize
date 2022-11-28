@@ -64,7 +64,7 @@ let compute_expected ~logr ~p x y =
   Z.(x * y * r' mod p)
 ;;
 
-let p = Ark_bls12_377_g1.modulus ()
+let p = Field_ops_model.Modulus.m
 let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.(p - one)
 
 let%expect_test _ =
@@ -132,31 +132,29 @@ let%expect_test _ =
   in
   inputs.enable := Bits.vdd;
   List.iter test_cases ~f:(fun { x; y } ->
-      inputs.x := Bits.of_z ~width:Montgomery_mult377.bits x;
-      inputs.y := Bits.of_z ~width:Montgomery_mult377.bits y;
-      inputs.valid := Bits.vdd;
-      cycle ());
+    inputs.x := Bits.of_z ~width:Montgomery_mult377.bits x;
+    inputs.y := Bits.of_z ~width:Montgomery_mult377.bits y;
+    inputs.valid := Bits.vdd;
+    cycle ());
   inputs.valid := Bits.gnd;
   for _ = 1 to Montgomery_mult.Config.latency config do
     cycle ()
   done;
   cycle ();
   List.map2_exn test_cases (Queue.to_list results) ~f:(fun { x; y } obtained ->
-      let expected = compute_expected ~p ~logr:Montgomery_mult377.bits x y in
-      if Z.equal obtained expected
-      then Ok ()
-      else (
-        let software_model =
-          compute_software_model ~p ~logr:Montgomery_mult377.bits x y
-        in
-        Or_error.error_s
-          [%message
-            "Test case failed!"
-              (x : Utils.z)
-              (y : Utils.z)
-              (obtained : Utils.z)
-              (expected : Utils.z)
-              (software_model : Utils.z)]))
+    let expected = compute_expected ~p ~logr:Montgomery_mult377.bits x y in
+    if Z.equal obtained expected
+    then Ok ()
+    else (
+      let software_model = compute_software_model ~p ~logr:Montgomery_mult377.bits x y in
+      Or_error.error_s
+        [%message
+          "Test case failed!"
+            (x : Utils.z)
+            (y : Utils.z)
+            (obtained : Utils.z)
+            (expected : Utils.z)
+            (software_model : Utils.z)]))
   |> Or_error.combine_errors_unit
   |> [%sexp_of: unit Or_error.t]
   |> Stdio.print_s;

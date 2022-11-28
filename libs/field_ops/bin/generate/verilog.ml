@@ -75,25 +75,27 @@ let flag_multiplier_config =
     Karatsuba_ofman_mult.Config.generate
       ~ground_multiplier
       (List.init depth ~f:(fun _ ->
-           { Karatsuba_ofman_mult.Config.Level.radix = Radix_2
-           ; pre_adder_stages = 1
-           ; middle_adder_stages = 1
-           ; post_adder_stages = 1
-           }))
+         { Karatsuba_ofman_mult.Config.Level.radix = Radix_2
+         ; pre_adder_stages = 1
+         ; middle_adder_stages = 1
+         ; post_adder_stages = 1
+         }))
   in
   let half =
     { Half_width_multiplier.Config.levels =
         List.init depth ~f:(fun _ ->
-            { Karatsuba_ofman_mult.Config.Level.radix = Radix_2
-            ; pre_adder_stages = 1
-            ; middle_adder_stages = 1
-            ; post_adder_stages = 1
-            })
+          { Karatsuba_ofman_mult.Config.Level.radix = Radix_2
+          ; pre_adder_stages = 1
+          ; middle_adder_stages = 1
+          ; post_adder_stages = 1
+          })
     ; ground_multiplier
     }
   in
   half, full
 ;;
+
+let p = Field_ops_model.Modulus.m
 
 let command_specialized_43x43_multiplier =
   Command.basic
@@ -215,7 +217,7 @@ let command_montgomery_mult =
                         ]))
              ; montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
              }
-           ~p:(Ark_bls12_377_g1.modulus ())
+           ~p
            scope
          |> C.create_exn
               ~name:(if squarer then "montgomery_square" else "montgomery_mult")
@@ -233,10 +235,7 @@ let command_barrett_reduction =
        let scope = Scope.create ~flatten_design:false () in
        let database = Scope.circuit_database scope in
        let circuit =
-         B.create
-           ~config:Barrett_reduction.Config.for_bls12_377
-           ~p:(Ark_bls12_377_g1.modulus ())
-           scope
+         B.create ~config:Barrett_reduction.Config.for_bls12_377 ~p scope
          |> C.create_exn ~name:"barrett_reduction"
        in
        Rtl.output ~database ~output_mode:(To_file filename) Verilog circuit)
@@ -258,7 +257,7 @@ let command_barrett_mult =
                  Montgomery_reduction.Config.for_bls12_377.multiplier_config
              ; barrett_reduction_config = Barrett_reduction.Config.for_bls12_377
              }
-           ~p:(Ark_bls12_377_g1.modulus ())
+           ~p
            scope
          |> C.create_exn ~name:"barrett_mult"
        in
