@@ -1,0 +1,4 @@
+(executables
+ (names modulus)
+ (libraries core ark_bls12_377_g1)
+ )

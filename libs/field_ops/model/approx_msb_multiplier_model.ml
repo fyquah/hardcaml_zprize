@@ -1,7 +1,7 @@
 open Base
 open Core
 
-let p = Ark_bls12_377_g1.modulus ()
+let p = Modulus.m
 let k = 2 * 377
 let m = Z.((one lsl k) / p)
 let sel_bottom x bits = Z.(x land ((one lsl bits) - one))

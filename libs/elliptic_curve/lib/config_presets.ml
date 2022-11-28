@@ -3,7 +3,7 @@ open Hardcaml
 open Field_ops_lib
 
 module For_bls12_377 = struct
-  let p = Ark_bls12_377_g1.modulus ()
+  let p = Field_ops_model.Modulus.m
   let montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
   let barrett_reduction_config = Barrett_reduction.Config.for_bls12_377
 

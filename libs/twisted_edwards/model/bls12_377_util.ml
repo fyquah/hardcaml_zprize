@@ -5,7 +5,7 @@ type z = Z.t [@@deriving equal]
 
 let sexp_of_z z = Sexp.Atom ("0x" ^ Z.format "x" z)
 let half x = Z.div x (Z.of_int 2)
-let p = Ark_bls12_377_g1.modulus ()
+let p = Field_ops_model.Modulus.m
 let modulo_mult a b = Z.(a * b mod p)
 let modulo_neg a = Z.((neg a + p) mod p)
 
