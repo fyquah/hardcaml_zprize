@@ -1,6 +1,6 @@
 (library
  (name hardcaml_ntt_test)
  (public_name zprize.hardcaml_ntt_test)
- (libraries expect_test_helpers_core core hardcaml_waveterm hardcaml_ntt)
- (inline_tests)
+ (libraries expect_test_helpers_core core hardcaml_waveterm hardcaml_ntt zarith_stubs_js)
+ (inline_tests (modes best js))
  (preprocess (pps ppx_jane ppx_deriving_hardcaml)))
