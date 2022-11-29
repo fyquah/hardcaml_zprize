@@ -3,7 +3,86 @@ open! Hardcaml
 open! Field_ops_lib
 open! Bits
 
-module Barrett_reduction377 = Barrett_reduction.With_interface (struct
+let compute_software_model ~p ~a =
+  let k = 2 * Z.log2up p in
+  let m = Z.((one lsl k) / p) in
+  let q = Z.((a * m) asr k) in
+  let qp = Z.(q * p) in
+  let a_minus_qp = Z.(a - qp) in
+  if Z.gt a_minus_qp Z.(p - one) then Z.(a_minus_qp - p) else a_minus_qp
+;;
+
+let p = Field_ops_model.Modulus.m
+
+module Make (X : sig
+  val bits : int
+  val output_bits : int
+end) =
+struct
+  include Barrett_reduction.With_interface (X)
+  module Sim = Cyclesim.With_interface (I) (O)
+
+  let test ~debug ~test_cases ~config ~(sim : Sim.t) =
+    let internal_ports = Cyclesim.internal_ports sim in
+    let dump_stage_if_valid prefix =
+      if debug
+      then (
+        let valid_port_name = prefix ^ "$valid" in
+        let valid =
+          List.Assoc.find ~equal:String.equal internal_ports valid_port_name
+          |> Option.map ~f:(fun a -> Bits.is_vdd !a)
+          |> Option.value ~default:false
+        in
+        if valid
+        then
+          List.filter internal_ports ~f:(fun (key, _) ->
+            String.is_prefix ~prefix key && not (String.equal valid_port_name key))
+          |> List.iter ~f:(fun (port_name, value) ->
+               Stdio.printf
+                 "%s: 0x%s\n"
+                 port_name
+                 (Z.format "x" (Bits.to_z ~signedness:Unsigned !value))))
+    in
+    let inputs = Cyclesim.inputs sim in
+    let outputs = Cyclesim.outputs sim in
+    let queue = Queue.create () in
+    inputs.enable := vdd;
+    let cycle () =
+      Cyclesim.cycle sim;
+      if is_vdd !(outputs.valid)
+      then Queue.enqueue queue (Bits.to_z ~signedness:Unsigned !(outputs.a_mod_p));
+      dump_stage_if_valid "stage1";
+      dump_stage_if_valid "stage2";
+      dump_stage_if_valid "stage3";
+      dump_stage_if_valid "stage4"
+    in
+    List.iter test_cases ~f:(fun test_case ->
+      inputs.valid := vdd;
+      inputs.a := Bits.of_z ~width:754 test_case;
+      cycle ());
+    inputs.valid := gnd;
+    for _ = 1 to Barrett_reduction.Config.latency config + 1 do
+      cycle ()
+    done;
+    List.map2_exn test_cases (Queue.to_list queue) ~f:(fun a obtained ->
+      let expected = Z.(a mod p) in
+      let from_software_model = compute_software_model ~p ~a in
+      if Z.equal obtained expected
+      then Ok ()
+      else
+        Or_error.error_s
+          [%message
+            (a : Utils.z)
+              (obtained : Utils.z)
+              (expected : Utils.z)
+              (from_software_model : Utils.z)])
+    |> Or_error.combine_errors_unit
+    |> [%sexp_of: unit Or_error.t]
+    |> Stdio.print_s
+  ;;
+end
+
+module Barrett_reduction377 = Make (struct
   let bits = 377
   let output_bits = 377
 end)
@@ -20,75 +99,12 @@ let create_sim ~p ~config =
     (Barrett_reduction377.create ~config ~p scope)
 ;;
 
-let compute_software_model ~p ~a =
-  let k = 2 * Z.log2up p in
-  let m = Z.((one lsl k) / p) in
-  let q = Z.((a * m) asr k) in
-  let qp = Z.(q * p) in
-  let a_minus_qp = Z.(a - qp) in
-  if Z.gt a_minus_qp Z.(p - one) then Z.(a_minus_qp - p) else a_minus_qp
-;;
-
 let config = Barrett_reduction.Config.for_bls12_377
-let p = Field_ops_model.Modulus.m
 let random_bigint () = Utils.random_z ~lo_incl:Z.zero ~hi_incl:Z.((p - one) * (p - one))
 
 let test ~debug test_cases =
   let sim = create_sim ~p ~config in
-  let internal_ports = Cyclesim.internal_ports sim in
-  let dump_stage_if_valid prefix =
-    if debug
-    then (
-      let valid_port_name = prefix ^ "$valid" in
-      let valid =
-        List.Assoc.find_exn ~equal:String.equal internal_ports valid_port_name
-      in
-      if Bits.is_vdd !valid
-      then
-        List.filter internal_ports ~f:(fun (key, _) ->
-          String.is_prefix ~prefix key && not (String.equal valid_port_name key))
-        |> List.iter ~f:(fun (port_name, value) ->
-             Stdio.printf
-               "%s: 0x%s\n"
-               port_name
-               (Z.format "x" (Bits.to_z ~signedness:Unsigned !value))))
-  in
-  let inputs = Cyclesim.inputs sim in
-  let outputs = Cyclesim.outputs sim in
-  let queue = Queue.create () in
-  inputs.enable := vdd;
-  let cycle () =
-    Cyclesim.cycle sim;
-    if is_vdd !(outputs.valid)
-    then Queue.enqueue queue (Bits.to_z ~signedness:Unsigned !(outputs.a_mod_p));
-    dump_stage_if_valid "stage1";
-    dump_stage_if_valid "stage2";
-    dump_stage_if_valid "stage3";
-    dump_stage_if_valid "stage4"
-  in
-  List.iter test_cases ~f:(fun test_case ->
-    inputs.valid := vdd;
-    inputs.a := Bits.of_z ~width:754 test_case;
-    cycle ());
-  inputs.valid := gnd;
-  for _ = 1 to Config.latency config + 1 do
-    cycle ()
-  done;
-  List.map2_exn test_cases (Queue.to_list queue) ~f:(fun a obtained ->
-    let expected = Z.(a mod p) in
-    let from_software_model = compute_software_model ~p ~a in
-    if Z.equal obtained expected
-    then Ok ()
-    else
-      Or_error.error_s
-        [%message
-          (a : Utils.z)
-            (obtained : Utils.z)
-            (expected : Utils.z)
-            (from_software_model : Utils.z)])
-  |> Or_error.combine_errors_unit
-  |> [%sexp_of: unit Or_error.t]
-  |> Stdio.print_s
+  Barrett_reduction377.test ~debug ~test_cases ~sim ~config
 ;;
 
 let%expect_test "Randomized test" =
