@@ -1,32 +1,11 @@
-# ZPrize submissions
+# Hardcaml ZPrize
+
+In 2022, we, the team who develops Hardcaml ([Andy Ray](https://github.com/andrewray), [Ben Devlin](https://github.com/bsdevlin), [Fu Yong Quah](https://github.com/fyquah), and [Rahul Yesantharao](https://github.com/rahulyesantharao)) participated in the [ZPrize competition](https://www.zprize.io/). We competed in the Multi-Scalar Multiplication (MSM) and Number Theoretic Transform (NTT) tracks.
+
+See [https://zprize.hardcaml.com](https://zprize.hardcaml.com) for a detailed write up on
+our design, results and build instructions!
 
 This repo has submissions to two of the ZPrize tracks, in the `zprize` folder.
-
-## Accelerating MSM Operations on FPGA
-
-We have implemented an optimized version of Pippengers algorithm for calculating
-MSM, see the [README.md](zprize/msm_pippenger/README.md) for more details and
-instructions on building from source.
-
-The top level code for compiling an FPGA image and Verilog (using Hardcaml)
-resides in `zprize/msm_pippenger`. Underlying controller and field operations
-are taken from the libraries in:
-- `libs/pippenger`
-- `libs/twisted_edwards`
-- `libs/field_ops`
-
-
-## Accelerating NTT Operations on FPGA
-
-Click [here for the writeup for our NTT submission](https://fyquah.github.io/hardcaml_zprize/zprize/zprize_ntt_top.html).
-
-The code in this repository that concerns NTT primarily resides in
-- `zprize/ntt`
-- `libs/hardcaml_ntt`
-
-While the code does use other support libraries (eg: `libs/hardcaml_ntt` and
-`libs/vits_infrastructure`), they are not part of the core functionality of the
-NTT core.
 
 # Compiling OCaml and Hardcaml code
 
