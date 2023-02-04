@@ -1,5 +1,5 @@
 (executables
- (names ntt simulate generate)
+ (names search_strategies)
  (promote)
  (libraries
   core
@@ -7,8 +7,6 @@
   async
   async_unix
   core_unix.command_unix
-  hardcaml_waveterm.interactive
-  hardcaml_ntt_test
-  zprize_ntt_test)
+  msm_pippenger)
  (preprocess
   (pps ppx_jane)))

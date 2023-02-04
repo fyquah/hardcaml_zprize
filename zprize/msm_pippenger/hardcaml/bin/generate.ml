@@ -111,7 +111,9 @@ let command_linker_config =
     ~summary:"Generate the golden linker config for vitis"
     (let%map_open.Command () = return () in
      fun () ->
-       Vitis_util.write_linker_config golden_vitis_linker_config Stdio.Out_channel.stdout)
+       Vitis_util.write_linker_config
+         golden_vitis_linker_config
+         ~output_string:Stdio.Out_channel.print_string)
 ;;
 
 let commands =

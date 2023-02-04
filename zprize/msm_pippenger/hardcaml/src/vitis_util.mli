@@ -100,4 +100,4 @@ module Linker_config_args : sig
     }
 end
 
-val write_linker_config : Linker_config_args.t -> Stdio.Out_channel.t -> unit
+val write_linker_config : Linker_config_args.t -> output_string:(string -> unit) -> unit

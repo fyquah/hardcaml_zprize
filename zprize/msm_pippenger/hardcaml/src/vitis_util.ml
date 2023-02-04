@@ -123,10 +123,9 @@ let write_linker_config
   ; post_route_phys_opt_design_directive
   ; route_design_tns_cleanup
   }
-  oc
+  ~output_string
   =
-  Stdio.Out_channel.output_string
-    oc
+  output_string
     [%string
       {|kernel_frequency=%{kernel_frequency#Int}
 report_dir=./reports
@@ -144,25 +143,20 @@ prop=fileset.sim_1.xsim.elaborate.debug_level=all
 prop=run.impl_1.STEPS.PLACE_DESIGN.TCL.PRE=pre_place.tcl
 |}];
   Option.iter synthesis_strategy ~f:(fun synthesis_strategy ->
-    Stdio.Out_channel.output_lines
-      oc
-      [ [%string "prop=run.synth_1.STRATEGY=%{synthesis_strategy#Synthesis_strategy}"] ]);
+    output_string
+      [%string "prop=run.synth_1.STRATEGY=%{synthesis_strategy#Synthesis_strategy}\n"]);
   Option.iter implementation_strategy ~f:(fun implementation_strategy ->
-    Stdio.Out_channel.output_lines
-      oc
-      [ [%string
-          "prop=run.impl_1.STRATEGY=%{implementation_strategy#Implementation_strategy}"]
-      ]);
+    output_string
+      [%string
+        "prop=run.impl_1.STRATEGY=%{implementation_strategy#Implementation_strategy}\n"]);
   if route_design_tns_cleanup
   then
-    Stdio.Out_channel.output_lines
-      oc
-      [ [%string "prop=run.impl_1.{STEPS.ROUTE_DESIGN.ARGS.MORE OPTIONS}=-tns_cleanup"] ];
+    output_string
+      [%string "prop=run.impl_1.{STEPS.ROUTE_DESIGN.ARGS.MORE OPTIONS}=-tns_cleanup\n"];
   let write_impl_directive name to_string directive =
     Option.iter directive ~f:(fun x ->
-      Stdio.Out_channel.output_lines
-        oc
-        [ [%string "prop=run.impl_1.STEPS.%{name}.ARGS.DIRECTIVE=%{to_string x}"] ])
+      output_string
+        [%string "prop=run.impl_1.STEPS.%{name}.ARGS.DIRECTIVE=%{to_string x}\n"])
   in
   write_impl_directive "OPT_DESIGN" Opt_design_directive.to_string opt_design_directive;
   write_impl_directive
@@ -195,7 +189,7 @@ let%expect_test "Demo linker config output" =
     ; post_route_phys_opt_design_directive = Some AggressiveExplore
     ; route_design_tns_cleanup = true
     }
-    Stdio.Out_channel.stdout;
+    ~output_string:Stdio.print_string;
   [%expect
     {|
     kernel_frequency=420
@@ -220,4 +214,55 @@ let%expect_test "Demo linker config output" =
     prop=run.impl_1.STEPS.PHYS_OPT_DESIGN.ARGS.DIRECTIVE=AggressiveExplore
     prop=run.impl_1.STEPS.ROUTE_DESIGN.ARGS.DIRECTIVE=AlternateCLBRouting
     prop=run.impl_1.STEPS.POST_ROUTE_PHYS_OPT_DESIGN.ARGS.DIRECTIVE=AggressiveExplore |}]
+;;
+
+let timing_summary_pattern =
+  lazy
+    (Re.Perl.compile
+       (Re.Perl.re
+          "Timing Summary \\| WNS=(-?\\d+(?:\\.\\d+)) \\| TNS=(-?\\d+(?:\\.\\d+)) \\| \
+           WHS=(-?\\d+(?:\\.\\d+)) \\| THS=(-?\\d+(?:\\.\\d+)) |\s*$"))
+;;
+
+module Timing_summary = struct
+  type t =
+    { wns : Bignum.t
+    ; tns : Bignum.t
+    ; whs : Bignum.t
+    ; ths : Bignum.t
+    }
+  [@@deriving sexp_of]
+end
+
+let parse_vivado_logs_for_timing_summary ~vivado_log_lines =
+  List.find_map (List.rev vivado_log_lines) ~f:(fun line ->
+    let matches = Re.exec (Lazy.force timing_summary_pattern) (String.strip line) in
+    let matches = Re.Group.all matches in
+    if String.is_empty matches.(0)
+    then None
+    else (
+      let wns = Bignum.of_string matches.(1) in
+      let tns = Bignum.of_string matches.(2) in
+      let whs = Bignum.of_string matches.(3) in
+      let ths = Bignum.of_string matches.(4) in
+      Some { Timing_summary.wns; tns; whs; ths }))
+;;
+
+let%expect_test "Parse some timing summaries" =
+  Stdio.print_s
+    ([%sexp_of: Timing_summary.t option]
+       (parse_vivado_logs_for_timing_summary
+          ~vivado_log_lines:
+            [ "INFO: [Physopt 32-668] Current Timing Summary | WNS=-0.025 | TNS=-1.456 | \
+               WHS=0.004 | THS=0.000 |"
+            ; "INFO: [Physopt 32-669] Post Physical Optimization Timing Summary | \
+               WNS=-0.025 | TNS=-1.456 | WHS=0.004 | THS=0.000 |"
+            ; "INFO: [Route 35-253] TNS is the sum of the worst slack violation on every \
+               endpoint in the design. Review the paths with the biggest WNS violations \
+               in the timing reports and modify your constraints or your design to \
+               improve both WNS and TNS."
+            ; "| Pass |  WNS   |  TNS   |  WHS   |  THS   | Status | Elapsed Time | \
+               Solution Selected"
+            ]));
+  [%expect {| (((wns -0.025) (tns -1.456) (whs 0.004) (ths 0))) |}]
 ;;

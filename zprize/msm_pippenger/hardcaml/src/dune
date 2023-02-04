@@ -3,6 +3,7 @@
  (public_name zprize.msm_pippenger)
  (libraries
   base
+  re2
   field_ops_lib
   hardcaml
   hardcaml_axi
