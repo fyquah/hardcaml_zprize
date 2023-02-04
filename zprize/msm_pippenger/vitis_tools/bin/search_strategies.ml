@@ -14,9 +14,19 @@ module Which_experiment = struct
         ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
         ; opt_design_directive = Some Explore
         ; route_design_directive = Some AlternateCLBRouting
-        ; place_design_directive = Some Explore
+        ; place_design_directive = Some SSI_SpreadLogic_high
         ; phys_opt_design_directive = Some AggressiveExplore
-        ; kernel_frequency = 310
+        ; kernel_frequency = 300
+        ; post_route_phys_opt_design_directive = Some AggressiveExplore
+        ; route_design_tns_cleanup = true
+        }
+      ; { Vitis_utils.Linker_config_args.synthesis_strategy = Some Flow_PerfOptimized_high
+        ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+        ; opt_design_directive = Some Explore
+        ; route_design_directive = Some AlternateCLBRouting
+        ; place_design_directive = Some SSI_SpreadLogic_high
+        ; phys_opt_design_directive = Some AggressiveExplore
+        ; kernel_frequency = 300
         ; post_route_phys_opt_design_directive = Some AggressiveExplore
         ; route_design_tns_cleanup = true
         }
