@@ -30,6 +30,27 @@ module Which_experiment = struct
         ; post_route_phys_opt_design_directive = Some AggressiveExplore
         ; route_design_tns_cleanup = true
         }
+      ; { Vitis_utils.Linker_config_args.synthesis_strategy =
+            Some Flow_AlternateRoutability
+        ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+        ; opt_design_directive = Some Explore
+        ; route_design_directive = Some AggressiveExplore
+        ; place_design_directive = Some Explore
+        ; phys_opt_design_directive = Some AggressiveExplore
+        ; kernel_frequency = 300
+        ; post_route_phys_opt_design_directive = Some AggressiveExplore
+        ; route_design_tns_cleanup = true
+        }
+      ; { Vitis_utils.Linker_config_args.synthesis_strategy = Some Flow_PerfOptimized_high
+        ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+        ; opt_design_directive = Some Explore
+        ; route_design_directive = Some AggressiveExplore
+        ; place_design_directive = Some Explore
+        ; phys_opt_design_directive = Some AggressiveExplore
+        ; kernel_frequency = 300
+        ; post_route_phys_opt_design_directive = Some AggressiveExplore
+        ; route_design_tns_cleanup = true
+        }
       ]
   ;;
 end
