@@ -128,8 +128,7 @@ let write_linker_config
   Stdio.Out_channel.output_string
     oc
     [%string
-      {|
-kernel_frequency=%{kernel_frequency#Int}
+      {|kernel_frequency=%{kernel_frequency#Int}
 report_dir=./reports
 log_dir=./logs
 
@@ -152,7 +151,8 @@ prop=run.impl_1.STEPS.PLACE_DESIGN.TCL.PRE=pre_place.tcl
     Stdio.Out_channel.output_lines
       oc
       [ [%string
-        "prop=run.impl_1.STRATEGY=%{implementation_strategy#Implementation_strategy}"] ]);
+          "prop=run.impl_1.STRATEGY=%{implementation_strategy#Implementation_strategy}"]
+      ]);
   if route_design_tns_cleanup
   then
     Stdio.Out_channel.output_lines
@@ -184,19 +184,20 @@ prop=run.impl_1.STEPS.PLACE_DESIGN.TCL.PRE=pre_place.tcl
 ;;
 
 let%expect_test "Demo linker config output" =
-write_linker_config
-  { synthesis_strategy = Some Flow_AlternateRoutability
-  ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
-  ; opt_design_directive = Some Explore
-  ; route_design_directive = Some AlternateCLBRouting
-  ; place_design_directive = Some Explore
-  ; phys_opt_design_directive = Some AggressiveExplore
-  ; kernel_frequency = 420
-  ; post_route_phys_opt_design_directive = Some AggressiveExplore
-  ; route_design_tns_cleanup = true
-  }
-  Stdio.Out_channel.stdout;
-  [%expect {|
+  write_linker_config
+    { synthesis_strategy = Some Flow_AlternateRoutability
+    ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+    ; opt_design_directive = Some Explore
+    ; route_design_directive = Some AlternateCLBRouting
+    ; place_design_directive = Some Explore
+    ; phys_opt_design_directive = Some AggressiveExplore
+    ; kernel_frequency = 420
+    ; post_route_phys_opt_design_directive = Some AggressiveExplore
+    ; route_design_tns_cleanup = true
+    }
+    Stdio.Out_channel.stdout;
+  [%expect
+    {|
     kernel_frequency=420
     report_dir=./reports
     log_dir=./logs

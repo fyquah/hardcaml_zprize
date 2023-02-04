@@ -92,10 +92,36 @@ let command_rtl_checksum =
         print_string (Md5.to_hex digest)]
 ;;
 
+(* TODO(fyquah): There should be a better place for this .. *)
+let golden_vitis_linker_config =
+  { Vitis_util.Linker_config_args.synthesis_strategy = None
+  ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+  ; opt_design_directive = None
+  ; route_design_directive = None
+  ; place_design_directive = None
+  ; phys_opt_design_directive = None
+  ; kernel_frequency = 280
+  ; post_route_phys_opt_design_directive = None
+  ; route_design_tns_cleanup = false
+  }
+;;
+
+let command_linker_config =
+  Command.basic
+    ~summary:"Generate the golden linker config for vitis"
+    (let%map_open.Command () = return () in
+     fun () ->
+       Vitis_util.write_linker_config golden_vitis_linker_config Stdio.Out_channel.stdout)
+;;
+
 let commands =
   Command.group
     ~summary:"Generate RTL"
-    [ "top", command_top; "kernel", command_kernel; "rtl-checksum", command_rtl_checksum ]
+    [ "top", command_top
+    ; "kernel", command_kernel
+    ; "rtl-checksum", command_rtl_checksum
+    ; "linker-config", command_linker_config
+    ]
 ;;
 
 let () = Command_unix.run commands

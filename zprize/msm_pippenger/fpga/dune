@@ -1,0 +1,6 @@
+(rule
+ (mode promote)
+ (action
+  (with-stdout-to
+   msm_pippenger.cfg
+   (run ../hardcaml/bin/generate.exe linker-config))))
