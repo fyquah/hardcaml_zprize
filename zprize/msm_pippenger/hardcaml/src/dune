@@ -9,5 +9,6 @@
   hardcaml_xilinx
   pippenger
   twisted_edwards_lib)
+ (inline_tests)
  (preprocess
   (pps ppx_jane ppx_deriving_hardcaml)))
