@@ -128,6 +128,13 @@ let command_build =
      fun () ->
        if not (Sys_unix.file_exists_exn template_dir)
        then raise_s [%message "Template does not exist!" (template_dir : string)];
+       let%bind (_ : string) =
+         printf "Building @default in the template_dir %s...\n" template_dir;
+         Process.run_exn
+           ~prog:"dune"
+           ~args:[ "build"; "@" ^ template_dir ^/ "default" ]
+           ()
+       in
        (* TOOO(fyquah): Dump some summary? *)
        let%bind _results =
          run_all_builds_for_experiment
