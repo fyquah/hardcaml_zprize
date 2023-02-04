@@ -98,6 +98,7 @@ module Linker_config_args : sig
     ; route_design_tns_cleanup : bool
     ; post_route_phys_opt_design_directive : Phys_opt_design_directive.t option
     }
+  [@@deriving sexp_of]
 end
 
 val write_linker_config : Linker_config_args.t -> output_string:(string -> unit) -> unit

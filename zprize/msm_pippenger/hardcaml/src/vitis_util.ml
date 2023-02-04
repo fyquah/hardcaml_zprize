@@ -110,6 +110,7 @@ module Linker_config_args = struct
     ; route_design_tns_cleanup : bool
     ; post_route_phys_opt_design_directive : Phys_opt_design_directive.t option
     }
+  [@@deriving sexp_of]
 end
 
 let write_linker_config

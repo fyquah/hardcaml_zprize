@@ -74,6 +74,11 @@ let run_build ~template_dir ~build_dir ~build_id ~linker_config =
   (* TOOO(fyquah): Reuse dir from last good build rather than the template *)
   printf "Starting build with build id = %s\n" build_id;
   let build_dir = build_dir ^/ build_id in
+  print_s
+    [%message
+      (build_id : string)
+        (build_dir : string)
+        (linker_config : Vitis_utils.Linker_config_args.t)];
   let%bind.Deferred.Or_error () =
     match%map Async_unix.Sys.file_exists build_dir with
     | `Yes ->
@@ -92,10 +97,11 @@ let run_build ~template_dir ~build_dir ~build_id ~linker_config =
   in
   (* Generate the linker config into msm_pippenger.cfg *)
   let%bind () =
-    let%bind wrt = Writer.open_file (build_dir ^/ "msm_pippenger.cfg") in
-    Msm_pippenger.Vitis_util.write_linker_config
-      linker_config
-      ~output_string:(Writer.write wrt);
+    let linker_filename = build_dir ^/ "msm_pippenger.cfg" in
+    printf "Overriding config file in %s\n" linker_filename;
+    let%bind wrt = Writer.open_file linker_filename in
+    Msm_pippenger.Vitis_util.write_linker_config linker_config ~output_string:(fun line ->
+      Writer.write wrt line);
     Writer.close wrt
   in
   (* Run ./compile_hw.sh from build_dir/build_id *)
