@@ -221,7 +221,7 @@ let timing_summary_pattern =
     (Re.Perl.compile
        (Re.Perl.re
           "Timing Summary \\| WNS=(-?\\d+(?:\\.\\d+)) \\| TNS=(-?\\d+(?:\\.\\d+)) \\| \
-           WHS=(-?\\d+(?:\\.\\d+)) \\| THS=(-?\\d+(?:\\.\\d+)) |\s*$"))
+           WHS=(-?\\d+(?:\\.\\d+)) \\| THS=(-?\\d+(?:\\.\\d+)) |\\s*$"))
 ;;
 
 module Timing_summary = struct
