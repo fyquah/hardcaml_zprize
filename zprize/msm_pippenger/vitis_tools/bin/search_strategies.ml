@@ -109,11 +109,11 @@ let run_all_builds_for_experiment ~max_jobs ~template_dir ~build_dir ~which_expe
     (Which_experiment.linker_config_args which_experiment)
     ~how:(`Max_concurrent_jobs max_jobs)
     ~f:(fun i linker_config ->
-    run_build
-      ~template_dir
-      ~build_dir
-      ~build_id:("build-" ^ Int.to_string i)
-      ~linker_config)
+    let build_id = "build-" ^ Int.to_string i in
+    let%map result = run_build ~template_dir ~build_dir ~build_id ~linker_config in
+    match result with
+    | Ok _ -> ()
+    | Error e -> print_s [%message "Build failed" (build_id : string) (e : Error.t)])
 ;;
 
 let command_build =
