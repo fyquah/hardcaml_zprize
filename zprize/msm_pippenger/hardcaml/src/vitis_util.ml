@@ -232,6 +232,17 @@ module Timing_summary = struct
     ; ths : Bignum.t
     }
   [@@deriving sexp_of]
+
+  let achieved_frequency ~compile_frequency_in_mhz t =
+    if Bignum.(t.wns >= zero)
+    then compile_frequency_in_mhz
+    else (
+      let compile_period_in_nanos =
+        Bignum.(inverse compile_frequency_in_mhz * of_int 1_000)
+      in
+      let period_in_nanos = Bignum.(compile_period_in_nanos + neg t.wns) in
+      Bignum.(inverse (period_in_nanos / of_int 1_000)))
+  ;;
 end
 
 let parse_vivado_logs_for_timing_summary ~vivado_log_lines =
@@ -265,4 +276,30 @@ let%expect_test "Parse some timing summaries" =
                Solution Selected"
             ]));
   [%expect {| (((wns -0.025) (tns -1.456) (whs 0.004) (ths 0))) |}]
+;;
+
+let%expect_test "Achieved frequency when failing timing" =
+  Stdio.print_string
+    (Bignum.to_string_hum
+       (Timing_summary.achieved_frequency
+          ~compile_frequency_in_mhz:(Bignum.of_int 280)
+          { wns = Bignum.of_string "-0.025"
+          ; tns = Bignum.of_string "-1.456"
+          ; whs = Bignum.of_string "0.004"
+          ; ths = Bignum.of_string "0"
+          }));
+  [%expect {| 278.053624628 |}]
+;;
+
+let%expect_test "Achieved frequency when passing timing" =
+  Stdio.print_string
+    (Bignum.to_string_hum
+       (Timing_summary.achieved_frequency
+          ~compile_frequency_in_mhz:(Bignum.of_int 280)
+          { wns = Bignum.of_string "0.2"
+          ; tns = Bignum.of_string "0"
+          ; whs = Bignum.of_string "0.004"
+          ; ths = Bignum.of_string "0"
+          }));
+  [%expect {| 280 |}]
 ;;

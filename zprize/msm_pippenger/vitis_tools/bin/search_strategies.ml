@@ -1,29 +1,47 @@
 open Core
 open Async
+module Vitis_utils = Msm_pippenger.Vitis_util
 
-module Build_result = struct
-  type t =
-    { wns : int
-    ; whs : int
-    }
+module Which_experiment = struct
+  type t = A [@@deriving sexp]
+
+  let arg_type = Command.Arg_type.create (fun x -> t_of_sexp (Atom x))
+
+  let linker_config_args = function
+    | A ->
+      [ { Vitis_utils.Linker_config_args.synthesis_strategy =
+            Some Flow_AlternateRoutability
+        ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+        ; opt_design_directive = Some Explore
+        ; route_design_directive = Some AlternateCLBRouting
+        ; place_design_directive = Some Explore
+        ; phys_opt_design_directive = Some AggressiveExplore
+        ; kernel_frequency = 310
+        ; post_route_phys_opt_design_directive = Some AggressiveExplore
+        ; route_design_tns_cleanup = true
+        }
+      ]
+  ;;
 end
 
-let experiments =
-  let open Msm_pippenger.Vitis_util.Linker_config_args in
-  [ { synthesis_strategy = Some Flow_AlternateRoutability
-    ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
-    ; opt_design_directive = Some Explore
-    ; route_design_directive = Some AlternateCLBRouting
-    ; place_design_directive = Some Explore
-    ; phys_opt_design_directive = Some AggressiveExplore
-    ; kernel_frequency = 310
-    ; post_route_phys_opt_design_directive = Some AggressiveExplore
-    ; route_design_tns_cleanup = true
-    }
-  ]
+let search_for_vivado_log_filename ~build_dir =
+  let%bind.Deferred.Or_error lines =
+    Process.run_lines ~prog:"find" ~args:[ build_dir; "-name"; "vivado.log" ] ()
+  in
+  match
+    List.find_map lines ~f:(fun line ->
+      let line = String.strip line in
+      if Core.String.is_substring ~substring:"link/vivado/vpl/vivado.log" line
+      then Some line
+      else None)
+  with
+  | None -> return (Or_error.error_s [%message "Cannot find linker vpl vivado.log"])
+  | Some x -> return (Ok x)
 ;;
 
 let run_build ~template_dir ~build_dir ~build_id ~linker_config =
+  (* TOOO(fyquah): Reuse dir from last good build rather than the template *)
+  printf "Starting build with build id = %s\n" build_id;
   let build_dir = build_dir ^/ build_id in
   let%bind.Deferred.Or_error () =
     match%map Async_unix.Sys.file_exists build_dir with
@@ -53,8 +71,39 @@ let run_build ~template_dir ~build_dir ~build_id ~linker_config =
   let%bind.Deferred.Or_error (_ : string) =
     Process.run ~working_dir:build_dir ~prog:"./compile_hw.sh" ~args:[] ()
   in
+  (* Guess the vivado.log in vpl/ *)
+  let%bind.Deferred.Or_error vivado_log_filename =
+    search_for_vivado_log_filename ~build_dir
+  in
   (* Parse vivado.log to load the WNS or something? *)
-  return (Ok ())
+  let%bind.Deferred.Or_error timing_summary =
+    let%map vivado_log_lines = Async.Reader.file_lines vivado_log_filename in
+    match Vitis_utils.parse_vivado_logs_for_timing_summary ~vivado_log_lines with
+    | None ->
+      Or_error.errorf
+        "Failed to find timing summary in the vivado log file %s"
+        vivado_log_filename
+    | Some x -> Ok x
+  in
+  printf
+    !"Completed build (build id: %s) - performance: %{Bignum.to_string_hum}MHz\n"
+    build_id
+    (Vitis_utils.Timing_summary.achieved_frequency
+       timing_summary
+       ~compile_frequency_in_mhz:(Bignum.of_int linker_config.kernel_frequency));
+  return (Ok timing_summary)
+;;
+
+let run_all_builds_for_experiment ~max_jobs ~template_dir ~build_dir ~which_experiment =
+  Deferred.List.mapi
+    (Which_experiment.linker_config_args which_experiment)
+    ~how:(`Max_concurrent_jobs max_jobs)
+    ~f:(fun i linker_config ->
+    run_build
+      ~template_dir
+      ~build_dir
+      ~build_id:("build-" ^ Int.to_string i)
+      ~linker_config)
 ;;
 
 let command_build =
@@ -65,6 +114,11 @@ let command_build =
     (let%map_open.Command build_dir =
        flag "build-dir" (required string) ~doc:" Directory to perform builds in"
      and template_dir = flag "template-dir" (required string) ~doc:" Template directory"
+     and which_experiment =
+       flag
+         "which-experiment"
+         (required Which_experiment.arg_type)
+         ~doc:" Which experiment to run"
      and max_jobs =
        flag
          "max-jobs"
@@ -74,16 +128,13 @@ let command_build =
      fun () ->
        if not (Sys_unix.file_exists_exn template_dir)
        then raise_s [%message "Template does not exist!" (template_dir : string)];
-       let%bind results =
-         Deferred.List.mapi
-           experiments
-           ~how:(`Max_concurrent_jobs max_jobs)
-           ~f:(fun i linker_config ->
-           run_build
-             ~template_dir
-             ~build_dir
-             ~build_id:("build-" ^ Int.to_string i)
-             ~linker_config)
+       (* TOOO(fyquah): Dump some summary? *)
+       let%bind _results =
+         run_all_builds_for_experiment
+           ~template_dir
+           ~build_dir
+           ~max_jobs
+           ~which_experiment
        in
        return ())
 ;;

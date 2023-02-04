@@ -101,3 +101,19 @@ module Linker_config_args : sig
 end
 
 val write_linker_config : Linker_config_args.t -> output_string:(string -> unit) -> unit
+
+module Timing_summary : sig
+  type t =
+    { wns : Bignum.t
+    ; tns : Bignum.t
+    ; whs : Bignum.t
+    ; ths : Bignum.t
+    }
+  [@@deriving sexp_of]
+
+  val achieved_frequency : compile_frequency_in_mhz:Bignum.t -> t -> Bignum.t
+end
+
+val parse_vivado_logs_for_timing_summary
+  :  vivado_log_lines:string list
+  -> Timing_summary.t option
