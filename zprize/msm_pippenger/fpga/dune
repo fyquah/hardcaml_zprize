@@ -3,4 +3,4 @@
  (action
   (with-stdout-to
    msm_pippenger.cfg
-   (run ../hardcaml/bin/generate.exe linker-config))))
+   (run %{workspace_root}/zprize/msm_pippenger/hardcaml/bin/generate.exe linker-config))))

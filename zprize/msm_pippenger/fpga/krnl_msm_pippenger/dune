@@ -1,10 +1,10 @@
 (rule
  (mode promote)
- (action (with-stdout-to krnl_msm_pippenger.v (run ../../hardcaml/bin/generate.exe kernel -scalar-bits 253))))
+ (action (with-stdout-to krnl_msm_pippenger.v (run %{workspace_root}/zprize/msm_pippenger/hardcaml/bin/generate.exe kernel -scalar-bits 253))))
 
 (rule
  (mode promote)
- (action (with-stdout-to rtl_checksum.md5 (run ../../hardcaml/bin/generate.exe rtl-checksum))))
+ (action (with-stdout-to rtl_checksum.md5 (run %{workspace_root}/zprize/msm_pippenger/hardcaml/bin/generate.exe rtl-checksum))))
 
 (rule (target stub.sv) (action (write-file %{target} "")))
 
