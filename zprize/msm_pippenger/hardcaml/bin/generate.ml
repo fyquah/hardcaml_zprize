@@ -97,11 +97,14 @@ let golden_vitis_linker_config =
   { Vitis_util.Linker_config_args.synthesis_strategy = None
   ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
   ; opt_design_directive = None
+  ; opt_design_is_enabled = None
   ; route_design_directive = None
   ; place_design_directive = None
   ; phys_opt_design_directive = None
+  ; phys_opt_design_is_enabled = None
   ; kernel_frequency = 280
   ; post_route_phys_opt_design_directive = None
+  ; post_route_phys_opt_design_is_enabled = None
   ; route_design_tns_cleanup = false
   }
 ;;

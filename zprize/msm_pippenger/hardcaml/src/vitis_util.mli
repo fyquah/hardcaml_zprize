@@ -92,11 +92,14 @@ module Linker_config_args : sig
     ; synthesis_strategy : Synthesis_strategy.t option
     ; implementation_strategy : Implementation_strategy.t option
     ; opt_design_directive : Opt_design_directive.t option
+    ; opt_design_is_enabled : bool option
     ; place_design_directive : Place_design_directive.t option
     ; phys_opt_design_directive : Phys_opt_design_directive.t option
+    ; phys_opt_design_is_enabled : bool option
     ; route_design_directive : Route_design_directive.t option
     ; route_design_tns_cleanup : bool
     ; post_route_phys_opt_design_directive : Phys_opt_design_directive.t option
+    ; post_route_phys_opt_design_is_enabled : bool option
     }
   [@@deriving sexp_of]
 end

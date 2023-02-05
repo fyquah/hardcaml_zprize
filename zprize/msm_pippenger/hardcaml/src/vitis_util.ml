@@ -104,11 +104,14 @@ module Linker_config_args = struct
     ; synthesis_strategy : Synthesis_strategy.t option
     ; implementation_strategy : Implementation_strategy.t option
     ; opt_design_directive : Opt_design_directive.t option
+    ; opt_design_is_enabled : bool option
     ; place_design_directive : Place_design_directive.t option
     ; phys_opt_design_directive : Phys_opt_design_directive.t option
+    ; phys_opt_design_is_enabled : bool option
     ; route_design_directive : Route_design_directive.t option
     ; route_design_tns_cleanup : bool
     ; post_route_phys_opt_design_directive : Phys_opt_design_directive.t option
+    ; post_route_phys_opt_design_is_enabled : bool option
     }
   [@@deriving sexp_of]
 end
@@ -117,11 +120,14 @@ let write_linker_config
   { Linker_config_args.synthesis_strategy
   ; implementation_strategy
   ; opt_design_directive
+  ; opt_design_is_enabled
   ; route_design_directive
   ; place_design_directive
   ; phys_opt_design_directive
+  ; phys_opt_design_is_enabled
   ; kernel_frequency
   ; post_route_phys_opt_design_directive
+  ; post_route_phys_opt_design_is_enabled
   ; route_design_tns_cleanup
   }
   ~output_string
@@ -159,11 +165,18 @@ prop=run.impl_1.STEPS.PLACE_DESIGN.TCL.PRE=pre_place.tcl
       output_string
         [%string "prop=run.impl_1.STEPS.%{name}.ARGS.DIRECTIVE=%{to_string x}\n"])
   in
+  let write_is_enabled name tf =
+    Option.iter tf ~f:(fun tf ->
+      let tf = if tf then "true" else "false" in
+      output_string [%string "prop=run.impl_1.STEPS.%{name}.IS_ENABLED=%{tf}\n"])
+  in
+  write_is_enabled "OPT_DESIGN" opt_design_is_enabled;
   write_impl_directive "OPT_DESIGN" Opt_design_directive.to_string opt_design_directive;
   write_impl_directive
     "PLACE_DESIGN"
     Place_design_directive.to_string
     place_design_directive;
+  write_is_enabled "PHYS_OPT_DESIGN" phys_opt_design_is_enabled;
   write_impl_directive
     "PHYS_OPT_DESIGN"
     Phys_opt_design_directive.to_string
@@ -172,6 +185,7 @@ prop=run.impl_1.STEPS.PLACE_DESIGN.TCL.PRE=pre_place.tcl
     "ROUTE_DESIGN"
     Route_design_directive.to_string
     route_design_directive;
+  write_is_enabled "POST_ROUTE_PHYS_OPT_DESIGN" post_route_phys_opt_design_is_enabled;
   write_impl_directive
     "POST_ROUTE_PHYS_OPT_DESIGN"
     Phys_opt_design_directive.to_string
@@ -189,6 +203,9 @@ let%expect_test "Demo linker config output" =
     ; kernel_frequency = 420
     ; post_route_phys_opt_design_directive = Some AggressiveExplore
     ; route_design_tns_cleanup = true
+    ; opt_design_is_enabled = Some true
+    ; phys_opt_design_is_enabled = None
+    ; post_route_phys_opt_design_is_enabled = None
     }
     ~output_string:Stdio.print_string;
   [%expect
@@ -210,6 +227,7 @@ let%expect_test "Demo linker config output" =
     prop=run.synth_1.STRATEGY=Flow_AlternateRoutability
     prop=run.impl_1.STRATEGY=Congestion_SSI_SpreadLogic_high
     prop=run.impl_1.{STEPS.ROUTE_DESIGN.ARGS.MORE OPTIONS}=-tns_cleanup
+    prop=run.impl_1.STEPS.OPT_DESIGN.IS_ENABLED=true
     prop=run.impl_1.STEPS.OPT_DESIGN.ARGS.DIRECTIVE=Explore
     prop=run.impl_1.STEPS.PLACE_DESIGN.ARGS.DIRECTIVE=Explore
     prop=run.impl_1.STEPS.PHYS_OPT_DESIGN.ARGS.DIRECTIVE=AggressiveExplore

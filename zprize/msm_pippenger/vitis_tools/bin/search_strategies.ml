@@ -9,49 +9,53 @@ module Which_experiment = struct
 
   let linker_config_args = function
     | A ->
-      [ { Vitis_utils.Linker_config_args.synthesis_strategy =
-            Some Flow_AlternateRoutability
-        ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
-        ; opt_design_directive = Some Explore
-        ; route_design_directive = Some AlternateCLBRouting
-        ; place_design_directive = Some SSI_SpreadLogic_high
-        ; phys_opt_design_directive = Some AggressiveExplore
-        ; kernel_frequency = 300
-        ; post_route_phys_opt_design_directive = Some AggressiveExplore
-        ; route_design_tns_cleanup = true
-        }
-      ; { Vitis_utils.Linker_config_args.synthesis_strategy = Some Flow_PerfOptimized_high
-        ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
-        ; opt_design_directive = Some Explore
-        ; route_design_directive = Some AlternateCLBRouting
-        ; place_design_directive = Some SSI_SpreadLogic_high
-        ; phys_opt_design_directive = Some AggressiveExplore
-        ; kernel_frequency = 300
-        ; post_route_phys_opt_design_directive = Some AggressiveExplore
-        ; route_design_tns_cleanup = true
-        }
-      ; { Vitis_utils.Linker_config_args.synthesis_strategy =
-            Some Flow_AlternateRoutability
-        ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
-        ; opt_design_directive = Some Explore
-        ; route_design_directive = Some AggressiveExplore
-        ; place_design_directive = Some Explore
-        ; phys_opt_design_directive = Some AggressiveExplore
-        ; kernel_frequency = 300
-        ; post_route_phys_opt_design_directive = Some AggressiveExplore
-        ; route_design_tns_cleanup = true
-        }
-      ; { Vitis_utils.Linker_config_args.synthesis_strategy = Some Flow_PerfOptimized_high
-        ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
-        ; opt_design_directive = Some Explore
-        ; route_design_directive = Some AggressiveExplore
-        ; place_design_directive = Some Explore
-        ; phys_opt_design_directive = Some AggressiveExplore
-        ; kernel_frequency = 300
-        ; post_route_phys_opt_design_directive = Some AggressiveExplore
-        ; route_design_tns_cleanup = true
-        }
-      ]
+      let synthesis_strategies =
+        [ Some Vitis_utils.Synthesis_strategy.Flow_AlternateRoutability
+        ; Some Flow_PerfOptimized_high
+        ; None
+        ]
+      in
+      List.concat_map synthesis_strategies ~f:(fun synthesis_strategy ->
+        [ { Vitis_utils.Linker_config_args.synthesis_strategy
+          ; kernel_frequency = 310
+          ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+          ; opt_design_is_enabled = Some true
+          ; opt_design_directive = Some Explore
+          ; place_design_directive = Some ExtraNetDelay_high
+          ; phys_opt_design_is_enabled = Some true
+          ; phys_opt_design_directive = Some AggressiveExplore
+          ; route_design_directive = Some HigherDelayCost
+          ; route_design_tns_cleanup = true
+          ; post_route_phys_opt_design_directive = Some AggressiveExplore
+          ; post_route_phys_opt_design_is_enabled = Some true
+          }
+        ; { Vitis_utils.Linker_config_args.synthesis_strategy
+          ; kernel_frequency = 310
+          ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+          ; opt_design_is_enabled = Some true
+          ; opt_design_directive = Some Explore
+          ; place_design_directive = Some SSI_SpreadLogic_high
+          ; phys_opt_design_is_enabled = Some true
+          ; phys_opt_design_directive = Some AggressiveExplore
+          ; route_design_directive = Some AlternateCLBRouting
+          ; route_design_tns_cleanup = true
+          ; post_route_phys_opt_design_directive = Some AggressiveExplore
+          ; post_route_phys_opt_design_is_enabled = Some true
+          }
+        ; { Vitis_utils.Linker_config_args.synthesis_strategy
+          ; kernel_frequency = 310
+          ; implementation_strategy = Some Performance_ExplorePostRoutePhysOpt
+          ; opt_design_is_enabled = Some true
+          ; opt_design_directive = Some Explore
+          ; route_design_directive = Some AggressiveExplore
+          ; place_design_directive = Some Explore
+          ; phys_opt_design_is_enabled = Some true
+          ; phys_opt_design_directive = Some AggressiveExplore
+          ; route_design_tns_cleanup = true
+          ; post_route_phys_opt_design_is_enabled = Some true
+          ; post_route_phys_opt_design_directive = Some AggressiveExplore
+          }
+        ])
   ;;
 end
 
