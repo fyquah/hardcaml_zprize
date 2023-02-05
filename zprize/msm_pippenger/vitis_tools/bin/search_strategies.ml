@@ -59,6 +59,20 @@ module Which_experiment = struct
   ;;
 end
 
+module Build_result = struct
+  type t =
+    { build_id : string
+    ; linker_config_args : Vitis_utils.Linker_config_args.t
+    ; timing_summary : Vitis_utils.Timing_summary.t
+    }
+
+  let achieved_frequency t =
+    Vitis_utils.Timing_summary.achieved_frequency
+      ~compile_frequency_in_mhz:(Bignum.of_int t.linker_config_args.kernel_frequency)
+      t.timing_summary
+  ;;
+end
+
 let search_for_vivado_log_filename ~build_dir =
   let%bind.Deferred.Or_error lines =
     Process.run_lines ~prog:"find" ~args:[ build_dir; "-name"; "vivado.log" ] ()
@@ -109,8 +123,26 @@ let run_build ~template_dir ~build_dir ~build_id ~linker_config =
     Writer.close wrt
   in
   (* Run ./compile_hw.sh from build_dir/build_id *)
-  let%bind.Deferred.Or_error (_ : string) =
-    Process.run ~working_dir:build_dir ~prog:"./compile_hw.sh" ~args:[] ()
+  let%bind.Deferred.Or_error p =
+    Process.create ~working_dir:build_dir ~prog:"./compile_hw.sh" ~args:[] ()
+  in
+  let pid = Process.pid p in
+  printf "Build %s running with pid %s\n" build_id (Pid.to_string pid);
+  let%bind output = Process.collect_output_and_wait p in
+  let%bind.Deferred.Or_error () =
+    match output.exit_status with
+    | Ok () -> return (Ok ())
+    | Error process_error ->
+      let stdout = output.stdout in
+      let stderr = output.stderr in
+      return
+        (Or_error.error_s
+           [%message
+             "Build failed!"
+               (process_error : Core_unix.Exit_or_signal.error)
+               (build_id : string)
+               (stdout : string)
+               (stderr : string)])
   in
   (* Guess the vivado.log in vpl/ *)
   let%bind.Deferred.Or_error vivado_log_filename =
@@ -132,7 +164,8 @@ let run_build ~template_dir ~build_dir ~build_id ~linker_config =
     (Vitis_utils.Timing_summary.achieved_frequency
        timing_summary
        ~compile_frequency_in_mhz:(Bignum.of_int linker_config.kernel_frequency));
-  return (Ok timing_summary)
+  return
+    (Ok { Build_result.build_id; linker_config_args = linker_config; timing_summary })
 ;;
 
 let run_all_builds_for_experiment ~max_jobs ~template_dir ~build_dir ~which_experiment =
@@ -142,9 +175,10 @@ let run_all_builds_for_experiment ~max_jobs ~template_dir ~build_dir ~which_expe
     ~f:(fun i linker_config ->
     let build_id = "build-" ^ Int.to_string i in
     let%map result = run_build ~template_dir ~build_dir ~build_id ~linker_config in
-    match result with
-    | Ok _ -> ()
-    | Error e -> print_s [%message "Build failed" (build_id : string) (e : Error.t)])
+    (match result with
+     | Ok _ -> ()
+     | Error e -> print_s [%message "Build failed" (build_id : string) (e : Error.t)]);
+    result)
 ;;
 
 let command_build =
@@ -177,13 +211,28 @@ let command_build =
            ()
        in
        (* TOOO(fyquah): Dump some summary? *)
-       let%bind _results =
+       let%bind results =
          run_all_builds_for_experiment
            ~template_dir
            ~build_dir
            ~max_jobs
            ~which_experiment
        in
+       let best =
+         List.filter_map results ~f:(fun res ->
+           match res with
+           | Ok res -> Some res
+           | Error _ -> None)
+         |> List.max_elt ~compare:(fun a b ->
+              Bignum.compare
+                (Build_result.achieved_frequency a)
+                (Build_result.achieved_frequency b))
+       in
+       Option.iter best ~f:(fun build_result ->
+         printf
+           !"Best result: %{Bignum.to_string_hum}MHz from build %s\n"
+           (Build_result.achieved_frequency build_result)
+           build_result.build_id);
        return ())
 ;;
 

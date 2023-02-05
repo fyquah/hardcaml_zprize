@@ -6,6 +6,7 @@
   core_unix
   async
   async_unix
+  textutils.ascii_table
   core_unix.command_unix
   msm_pippenger)
  (preprocess
