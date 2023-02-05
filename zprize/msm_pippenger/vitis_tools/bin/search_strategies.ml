@@ -3,7 +3,10 @@ open Async
 module Vitis_utils = Msm_pippenger.Vitis_util
 
 module Which_experiment = struct
-  type t = A [@@deriving sexp]
+  type t =
+    | A
+    | B_290
+  [@@deriving sexp]
 
   let arg_type = Command.Arg_type.create (fun x -> t_of_sexp (Atom x))
 
@@ -56,6 +59,32 @@ module Which_experiment = struct
           ; post_route_phys_opt_design_directive = Some AggressiveExplore
           }
         ])
+    | B_290 ->
+      let synthesis_strategy =
+        Some Vitis_utils.Synthesis_strategy.Flow_PerfOptimized_high
+      in
+      let kernel_frequency = 290 in
+      let%bind.List route_design_directive =
+        let open Vitis_utils.Route_design_directive in
+        [ Some HigherDelayCost; Some AlternateCLBRouting; Some AggressiveExplore ]
+      in
+      let%map.List place_design_directive =
+        let open Vitis_utils.Place_design_directive in
+        [ Some SSI_SpreadLogic_high; Some AltSpreadLogic_medium ]
+      in
+      { Vitis_utils.Linker_config_args.synthesis_strategy
+      ; kernel_frequency
+      ; implementation_strategy = Some Congestion_SSI_SpreadLogic_high
+      ; opt_design_is_enabled = Some true
+      ; opt_design_directive = Some Explore
+      ; place_design_directive
+      ; phys_opt_design_is_enabled = Some true
+      ; phys_opt_design_directive = Some AggressiveExplore
+      ; route_design_directive
+      ; route_design_tns_cleanup = true
+      ; post_route_phys_opt_design_directive = Some AggressiveExplore
+      ; post_route_phys_opt_design_is_enabled = Some true
+      }
   ;;
 end
 
