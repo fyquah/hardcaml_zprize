@@ -75,11 +75,14 @@ module Z = struct
   let pp fmt z = Caml.Format.fprintf fmt "%s" (sexp_of_t z |> Sexplib.Sexp.to_string)
 
   let rec random =
-    let p = Z.(two ** 32) in
+    let p = Z.(two ** 30) in
+    let q = Z.(two ** 60) in
     fun () ->
-      let a = Random.int (1 lsl 32) |> Z.of_int in
-      let b = Random.int (1 lsl 32) |> Z.of_int in
-      let c = Z.(a + (b * p)) in
+      (* 30+30+4 bits *)
+      let a = Random.bits () |> Z.of_int in
+      let b = Random.bits () |> Z.of_int in
+      let c = Random.bits () land 15 |> Z.of_int in
+      let c = Z.(a + (b * p) + (c * q)) in
       if Z.compare c modulus < 0 then c else random ()
   ;;
 end
@@ -110,7 +113,7 @@ module Make (Bits : Comb.S) = struct
   let zero = of_int ~width:num_bits 0
   let one = of_int ~width:num_bits 1
   let two = of_int ~width:num_bits 2
-  let epsilon = of_int ~width:num_bits ((1 lsl 32) - 1)
+  let epsilon = Bits.uresize (Bits.ones 32) num_bits
   let modulus_z = Z.to_z Z.modulus
   let modulus = of_z ~width:num_bits modulus_z
   let is_normalized x = Uop.(x <: modulus)

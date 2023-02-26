@@ -3,7 +3,7 @@ open Hardcaml
 open Field_ops_lib
 
 module For_bls12_377 = struct
-  let p = Ark_bls12_377_g1.modulus ()
+  let p = Field_ops_model.Modulus.m
   let montgomery_reduction_config = Montgomery_reduction.Config.for_bls12_377
   let barrett_reduction_config = Barrett_reduction.Config.for_bls12_377
 
@@ -42,58 +42,60 @@ module For_bls12_377 = struct
     { impl; latency }
   ;;
 
+  let karatsuba_ofman_mult_config =
+    match Which_config.t with
+    | Heavy_pipelining ->
+      Karatsuba_ofman_mult.Config.generate
+        [ { radix = Radix_2
+          ; pre_adder_stages = 2
+          ; middle_adder_stages = 4
+          ; post_adder_stages = 10
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; middle_adder_stages = 2
+          ; post_adder_stages = 5
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; middle_adder_stages = 1
+          ; post_adder_stages = 1
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; middle_adder_stages = 0
+          ; post_adder_stages = 1
+          }
+        ]
+        ~ground_multiplier:(Verilog_multiply { latency = 2 })
+    | Medium_pipelining ->
+      Karatsuba_ofman_mult.Config.generate
+        [ { radix = Radix_2
+          ; pre_adder_stages = 2
+          ; middle_adder_stages = 3
+          ; post_adder_stages = 6
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; middle_adder_stages = 2
+          ; post_adder_stages = 3
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; middle_adder_stages = 0
+          ; post_adder_stages = 1
+          }
+        ; { radix = Radix_2
+          ; pre_adder_stages = 1
+          ; middle_adder_stages = 0
+          ; post_adder_stages = 1
+          }
+        ]
+        ~ground_multiplier:(Verilog_multiply { latency = 2 })
+  ;;
+
   let multiply : Ec_fpn_ops_config.fn =
-    let config =
-      match Which_config.t with
-      | Heavy_pipelining ->
-        Karatsuba_ofman_mult.Config.generate
-          [ { radix = Radix_2
-            ; pre_adder_stages = 2
-            ; middle_adder_stages = 4
-            ; post_adder_stages = 10
-            }
-          ; { radix = Radix_2
-            ; pre_adder_stages = 1
-            ; middle_adder_stages = 2
-            ; post_adder_stages = 5
-            }
-          ; { radix = Radix_2
-            ; pre_adder_stages = 1
-            ; middle_adder_stages = 1
-            ; post_adder_stages = 1
-            }
-          ; { radix = Radix_2
-            ; pre_adder_stages = 1
-            ; middle_adder_stages = 0
-            ; post_adder_stages = 1
-            }
-          ]
-          ~ground_multiplier:(Verilog_multiply { latency = 2 })
-      | Medium_pipelining ->
-        Karatsuba_ofman_mult.Config.generate
-          [ { radix = Radix_2
-            ; pre_adder_stages = 2
-            ; middle_adder_stages = 3
-            ; post_adder_stages = 6
-            }
-          ; { radix = Radix_2
-            ; pre_adder_stages = 1
-            ; middle_adder_stages = 2
-            ; post_adder_stages = 3
-            }
-          ; { radix = Radix_2
-            ; pre_adder_stages = 1
-            ; middle_adder_stages = 0
-            ; post_adder_stages = 1
-            }
-          ; { radix = Radix_2
-            ; pre_adder_stages = 1
-            ; middle_adder_stages = 0
-            ; post_adder_stages = 1
-            }
-          ]
-          ~ground_multiplier:(Verilog_multiply { latency = 2 })
-    in
+    let config = karatsuba_ofman_mult_config in
     let latency = Karatsuba_ofman_mult.Config.latency config in
     let impl ~scope ~clock ~enable x y =
       Karatsuba_ofman_mult.hierarchical

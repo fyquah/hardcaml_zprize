@@ -1,8 +1,8 @@
 open! Core
 open Hardcaml
 open Hardcaml_waveterm
-module Scalar = Pippenger.Scalar
-module Scalar_config = Scalar.Scalar_config
+module Scalar = Pippenger.Scalar_element
+module Scalar_config = Scalar.Config
 
 module type Config = sig
   include Pippenger.Config.S

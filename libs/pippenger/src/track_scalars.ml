@@ -1,10 +1,10 @@
 open! Base
 open! Hardcaml
 
-module Make (Config : Config.S) (Scalar_config : Scalar.Scalar_config.S) = struct
+module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = struct
   open Config
   open Signal
-  module Scalar = Scalar.Make (Scalar_config)
+  module Scalar = Scalar_element.Make (Scalar_config)
 
   module I = struct
     type 'a t =

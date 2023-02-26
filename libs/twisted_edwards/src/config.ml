@@ -101,7 +101,7 @@ module For_bls12_377 = struct
     ; adder_stages = 3
     ; subtractor_stages = 3
     ; doubler_stages = 3
-    ; p = Ark_bls12_377_g1.modulus ()
+    ; p = Field_ops_model.Modulus.m
     ; a
     ; d
     ; output_pipeline_stages = 1
@@ -121,7 +121,7 @@ module For_bls12_377 = struct
     ; adder_stages = 3
     ; subtractor_stages = 3
     ; doubler_stages = 3
-    ; p = Ark_bls12_377_g1.modulus ()
+    ; p = Field_ops_model.Modulus.m
     ; a
     ; d
     ; output_pipeline_stages = 1

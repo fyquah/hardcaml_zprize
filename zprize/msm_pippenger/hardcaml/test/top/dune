@@ -1,6 +1,7 @@
 (library
  (name msm_pippenger_test_top)
  (libraries
+  ark_bls12_377_g1
   core
   expect_test_helpers_core
   hardcaml_step_testbench

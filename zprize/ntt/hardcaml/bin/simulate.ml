@@ -72,11 +72,6 @@ let command_kernel_for_vitis =
           ~doc:" Memory layout"
       and waves = flag "-waves" no_arg ~doc:" Display interactive waveform"
       and seed = flag "-seed" (optional_with_default 100 int) ~doc:" Random seed"
-      and verilator =
-        flag
-          "verilator"
-          no_arg
-          ~doc:" Use verilator (rather than the hardcaml simulator) for simulation"
       and wiggle_prob =
         flag "-wiggle-probability-true" (optional float) ~doc:" Wiggle testing"
       in
@@ -101,7 +96,7 @@ let command_kernel_for_vitis =
               Array.init (1 lsl logn) ~f:(fun col ->
                 Z.of_string coefs.((row * (1 lsl logn)) + col)))
         in
-        let waves = Test.run ~verilator ~verbose ~waves ?wiggle_prob input_coefs in
+        let waves = Test.run ~verbose ~waves ?wiggle_prob input_coefs in
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 

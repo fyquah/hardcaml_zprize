@@ -1,5 +1,13 @@
 # Hardcaml ZPrize
 
+> The current dev version of this repo is using some more update Hardcaml packages 
+> which as of early 2023 need to be pinned.  See `.github/workflow/main.yml for 
+> details.
+> 
+> The branch `zprize-2022-submission` is a version of the repo which should
+> work with the Hardcaml packages released on opam.
+
+
 In 2022, we, the team who develops Hardcaml ([Andy Ray](https://github.com/andrewray), [Ben Devlin](https://github.com/bsdevlin), [Fu Yong Quah](https://github.com/fyquah), and [Rahul Yesantharao](https://github.com/rahulyesantharao)) participated in the [ZPrize competition](https://www.zprize.io/). We competed in the Multi-Scalar Multiplication (MSM) and Number Theoretic Transform (NTT) tracks.
 
 See [https://zprize.hardcaml.com](https://zprize.hardcaml.com) for a detailed write up on

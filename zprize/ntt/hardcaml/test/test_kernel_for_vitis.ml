@@ -9,7 +9,6 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
   module Reference_model = Hardcaml_ntt.Reference_model.Make (Gf.Z)
   module Test_top = Test_top.Make (Config)
   module Sim = Cyclesim.With_interface (Kernel.I) (Kernel.O)
-  module VSim = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O)
 
   (* Derived parameters *)
   let n = 1 lsl logn
@@ -29,24 +28,13 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
   let random_bool ~p_true = Float.(Random.float 1.0 < p_true)
   let get_second_pass_results = get_first_pass_results
 
-  let create_sim ~verilator waves =
+  let create_sim waves =
     let sim =
-      if verilator
-      then (
-        let cache_dir = Sys.getenv_exn "HOME" ^/ ".hardcaml-verilator-cache" in
-        VSim.create
-          ~cache_dir
-          ~verbose:true
-          ~clock_names:[ "ap_clk" ]
-          (Kernel.create
-             ~build_mode:Simulation
-             (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ())))
-      else
-        Sim.create
-          ~config:Cyclesim.Config.trace_all
-          (Kernel.create
-             ~build_mode:Simulation
-             (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
+      Sim.create
+        ~config:Cyclesim.Config.trace_all
+        (Kernel.create
+           ~build_mode:Simulation
+           (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
     in
     let inputs = Cyclesim.inputs sim in
     let outputs = Cyclesim.outputs sim in
@@ -199,14 +187,14 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
     get_second_pass_results !results
   ;;
 
-  let run
-    ?(verbose = false)
-    ?(waves = false)
-    ?(verilator = false)
-    ?(wiggle_prob = 1.)
-    (input_coefs : Z.t array array)
+  let run_with_sim
+        ?(verbose = false)
+        ?(wiggle_prob = 1.)
+        sim
+        (inputs : _ Kernel.I.t)
+        (outputs : _ Kernel.O.t)
+        input_coefs
     =
-    let sim, waves, inputs, outputs = create_sim ~verilator waves in
     let input_coefs = Array.map input_coefs ~f:(Array.map ~f:Gf.Z.of_z) in
     let results = ref [] in
     let num_results = ref 0 in
@@ -251,7 +239,17 @@ module Make (Config : Zprize_ntt.Top_config.S) = struct
        cycle ~n:4 ();
        check_second_pass_output ~verbose input_coefs pass2
      with
-     | e -> print_s [%message "RAISED :(" (e : exn)]);
+     | e -> print_s [%message "RAISED :(" (e : exn)])
+  ;;
+
+  let run
+    ?verbose
+    ?(waves = false)
+    ?wiggle_prob
+    (input_coefs : Z.t array array)
+    =
+    let sim, waves, inputs, outputs = create_sim waves in
+    run_with_sim ?verbose ?wiggle_prob sim inputs outputs input_coefs;
     waves
   ;;
 end
@@ -268,7 +266,7 @@ let%expect_test "vitis kernel test" =
   let module Test = Make (Config) in
   let input_coefs = Test.random_input_coef_matrix () in
   ignore
-    (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
+    (Test.run ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
   [%expect
     {|
@@ -288,7 +286,7 @@ let%expect_test "2 blocks" =
   let module Test = Make (Config) in
   let input_coefs = Test.random_input_coef_matrix () in
   ignore
-    (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
+    (Test.run ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
   [%expect
     {|
@@ -308,7 +306,7 @@ let%expect_test "normal layout" =
   let module Test = Make (Config) in
   let input_coefs = Test.random_input_coef_matrix () in
   ignore
-    (Test.run ~verilator:false ~verbose:false ~waves:false input_coefs
+    (Test.run ~verbose:false ~waves:false input_coefs
       : Waveform.t option);
   [%expect
     {|

@@ -100,29 +100,108 @@ let compare_results ~logn ~row ~support_4step_twiddle ~first_4step_pass coefs si
           (sim_result : Gf.Hex.t array)]
 ;;
 
+module Test (Config : Hardcaml_ntt.Core_config.S) = struct
+  include Config
+  module Single_core = Hardcaml_ntt.Single_core.With_rams (Config)
+  module Sim = Cyclesim.With_interface (Single_core.I) (Single_core.O)
+
+  let inverse_ntt_test_of_sim
+    ?(num_runs = 1)
+    ?(first_4step_pass = false)
+    ~row
+    (sim : Sim.t)
+    input_coefs
+    =
+    let n = 1 lsl logn in
+    let inputs = Cyclesim.inputs sim in
+    let outputs = Cyclesim.outputs sim in
+    let result = Array.create ~len:n Gf.zero in
+    inputs.clear := Bits.vdd;
+    Cyclesim.cycle sim;
+    inputs.clear := Bits.gnd;
+    for _ = 0 to num_runs - 1 do
+      Cyclesim.cycle sim;
+      (* load the ram *)
+      inputs.wr_en <-- 1;
+      Array.iteri input_coefs ~f:(fun addr coef ->
+        inputs.wr_addr <-- addr;
+        inputs.wr_d := Gf.to_bits coef;
+        Cyclesim.cycle sim);
+      inputs.wr_en <-- 0;
+      (* flip rams *)
+      inputs.flip <-- 1;
+      Cyclesim.cycle sim;
+      inputs.flip <-- 0;
+      Cyclesim.cycle sim;
+      (* start the core *)
+      inputs.start <-- 1;
+      inputs.first_iter <-- 1;
+      inputs.first_4step_pass := Bits.of_bool first_4step_pass;
+      Cyclesim.cycle sim;
+      inputs.first_iter <-- 0;
+      inputs.start <-- 0;
+      (* poll for done *)
+      while not (Bits.to_bool !(outputs.done_)) do
+        Cyclesim.cycle sim
+      done;
+      (* flush *)
+      for _ = 1 to 20 do
+        Cyclesim.cycle sim
+      done;
+      (* flip rams *)
+      inputs.flip <-- 1;
+      Cyclesim.cycle sim;
+      inputs.flip <-- 0;
+      Cyclesim.cycle sim;
+      (* Read results *)
+      inputs.rd_en <-- 1;
+      inputs.rd_addr <-- 0;
+      let ram_latency = Hardcaml_ntt.Core_config.ram_latency in
+      Cyclesim.cycle sim;
+      for i = 1 to n + ram_latency - 1 do
+        inputs.rd_addr <-- i;
+        if i >= ram_latency then result.(i - ram_latency) <- Gf.of_bits !(outputs.rd_q);
+        if i >= n then inputs.rd_en <-- 0;
+        Cyclesim.cycle sim
+      done;
+      inputs.rd_en <-- 0;
+      for _ = 0 to 20 do
+        Cyclesim.cycle sim
+      done;
+      compare_results
+        ~logn
+        ~row
+        ~support_4step_twiddle
+        ~first_4step_pass
+        input_coefs
+        result
+    done;
+    result
+  ;;
+end
+
 let inverse_ntt_test
   ?(support_4step_twiddle = false)
   ?(row = 0)
-  ?(first_4step_pass = false)
-  ?(num_runs = 1)
+  ?first_4step_pass
+  ?num_runs
   ~waves
   input_coefs
   =
   let n = Array.length input_coefs in
   let logn = Int.ceil_log2 n in
-  let module Single_core =
-    Hardcaml_ntt.Single_core.With_rams (struct
+  let module Test =
+    Test (struct
       let logn = logn
       let support_4step_twiddle = support_4step_twiddle
       let logcores = 0
       let logblocks = 0
     end)
   in
-  let module Sim = Cyclesim.With_interface (Single_core.I) (Single_core.O) in
   let sim =
-    Sim.create
+    Test.Sim.create
       ~config:Cyclesim.Config.trace_all
-      (Single_core.create
+      (Test.Single_core.create
          ~row
          ~build_mode:Simulation
          (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
@@ -134,63 +213,9 @@ let inverse_ntt_test
       Some waves, sim)
     else None, sim
   in
-  let inputs = Cyclesim.inputs sim in
-  let outputs = Cyclesim.outputs sim in
-  let result = Array.create ~len:n Gf.zero in
-  inputs.clear := Bits.vdd;
-  Cyclesim.cycle sim;
-  inputs.clear := Bits.gnd;
-  for _ = 0 to num_runs - 1 do
-    Cyclesim.cycle sim;
-    (* load the ram *)
-    inputs.wr_en <-- 1;
-    Array.iteri input_coefs ~f:(fun addr coef ->
-      inputs.wr_addr <-- addr;
-      inputs.wr_d := Gf.to_bits coef;
-      Cyclesim.cycle sim);
-    inputs.wr_en <-- 0;
-    (* flip rams *)
-    inputs.flip <-- 1;
-    Cyclesim.cycle sim;
-    inputs.flip <-- 0;
-    Cyclesim.cycle sim;
-    (* start the core *)
-    inputs.start <-- 1;
-    inputs.first_iter <-- 1;
-    inputs.first_4step_pass := Bits.of_bool first_4step_pass;
-    Cyclesim.cycle sim;
-    inputs.first_iter <-- 0;
-    inputs.start <-- 0;
-    (* poll for done *)
-    while not (Bits.to_bool !(outputs.done_)) do
-      Cyclesim.cycle sim
-    done;
-    (* flush *)
-    for _ = 0 to 1 do
-      Cyclesim.cycle sim
-    done;
-    (* flip rams *)
-    inputs.flip <-- 1;
-    Cyclesim.cycle sim;
-    inputs.flip <-- 0;
-    Cyclesim.cycle sim;
-    (* Read results *)
-    inputs.rd_en <-- 1;
-    inputs.rd_addr <-- 0;
-    let ram_latency = Hardcaml_ntt.Core_config.ram_latency in
-    Cyclesim.cycle sim;
-    for i = 1 to n + ram_latency - 1 do
-      inputs.rd_addr <-- i;
-      if i >= ram_latency then result.(i - ram_latency) <- Gf.of_bits !(outputs.rd_q);
-      if i >= n then inputs.rd_en <-- 0;
-      Cyclesim.cycle sim
-    done;
-    inputs.rd_en <-- 0;
-    for _ = 0 to 11 do
-      Cyclesim.cycle sim
-    done;
-    compare_results ~logn ~row ~support_4step_twiddle ~first_4step_pass input_coefs result
-  done;
+  let result =
+    Test.inverse_ntt_test_of_sim ?num_runs ?first_4step_pass ~row sim input_coefs
+  in
   waves, result
 ;;
 
@@ -303,4 +328,55 @@ let%expect_test "8pt random - multiple runs of first pass with twiddling" =
       ca17468b67bdb086
       36049566b67040bc
       674f8c9b46dad24c)) |}]
+;;
+
+let%expect_test "32pt random, no twiddles" =
+  let waves, result =
+    inverse_ntt_test
+      ~support_4step_twiddle:false
+      ~first_4step_pass:false
+      ~num_runs:1
+      ~waves:false
+      (Array.init 32 ~f:Hardcaml_ntt.(fun i -> Gf.Bits.of_z (Z.of_int (i + 1))))
+  in
+  let result =
+    Array.map result ~f:(fun b ->
+      Gf.to_bits b |> Bits.to_constant |> Constant.to_hex_string ~signedness:Unsigned)
+  in
+  print_s [%message (result : string array)];
+  Option.iter waves ~f:print_waves;
+  [%expect {|
+    (result (
+      0000000000000210
+      baebd14450c2ebb0
+      fef0110010feeff0
+      3b0bcf42d0c2f3b1
+      fff00fff0fffeff1
+      baebaeba30c30c32
+      ff100efe10feeff2
+      3b13b144b13b13af
+      ffeffffefffffff1
+      3cf3cf42cf3cf3b1
+      feefeefdf0ff0ff2
+      bd0bd0bc4ec4ec30
+      001010000fffeff0
+      3cebb144aec513af
+      ff0ff0fff0ff0ff0
+      bd0baf422ec50bb2
+      fffffffefffffff1
+      42f450bcd13af42f
+      00f00eff0f00eff1
+      c3144eba513aec32
+      ffefeffef0000ff1
+      42f42f42b13b13b1
+      011011010f00efef
+      c30c30bc30c30c30
+      000ffffffffffff0
+      c4ec4eba4ec4ec32
+      00eff100ef010fef
+      45145144cf3cf3af
+      000feffff0000ff0
+      c4f430bc2f3d0c30
+      010feefeef010ff1
+      45142ebaaf3d1431)) |}]
 ;;

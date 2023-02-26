@@ -2,7 +2,6 @@
  (name twisted_edwards_lib)
  (public_name zprize.twisted_edwards_lib)
  (libraries
-  ark_bls12_377_g1
   base
   hardcaml
   elliptic_curve_lib

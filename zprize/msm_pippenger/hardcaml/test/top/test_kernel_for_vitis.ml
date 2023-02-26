@@ -30,7 +30,7 @@ module Make (Config : Msm_pippenger.Config.S) = struct
       let module V = Hardcaml_verilator.With_interface (Kernel.I) (Kernel.O) in
       V.create
         ~clock_names:[ "clock"; "ap_clk" ]
-        ~cache_dir:"/tmp/kernel/"
+        ~cache:(Hashed {cache_dir="/tmp/kernel/"})
         ~verbose:true
         create
     else

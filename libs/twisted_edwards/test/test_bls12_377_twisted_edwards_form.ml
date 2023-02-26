@@ -1,4 +1,5 @@
 open Core
+open Twisted_edwards_model_lib
 open Bls12_377_util
 module C = Conversions
 

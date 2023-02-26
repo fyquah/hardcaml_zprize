@@ -1,4 +1,4 @@
-module Scalar_config : sig
+module Config : sig
   module type S = sig
     val window_size_bits : int
   end
@@ -6,7 +6,7 @@ module Scalar_config : sig
   module Zprize : S
 end
 
-module Make (Scalar_config : Scalar_config.S) : sig
+module Make (Scalar_config : Config.S) : sig
   type 'a t =
     { scalar : 'a
     ; negative : 'a
