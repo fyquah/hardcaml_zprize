@@ -1,5 +1,9 @@
 # Hardcaml ZPrize
 
+```
+The zprize-2022-submission branch is pretty much the code we provided for the competition, plus some work on the documentation.
+```
+
 In 2022, we, the team who develops Hardcaml ([Andy Ray](https://github.com/andrewray), [Ben Devlin](https://github.com/bsdevlin), [Fu Yong Quah](https://github.com/fyquah), and [Rahul Yesantharao](https://github.com/rahulyesantharao)) participated in the [ZPrize competition](https://www.zprize.io/). We competed in the Multi-Scalar Multiplication (MSM) and Number Theoretic Transform (NTT) tracks.
 
 See [https://zprize.hardcaml.com](https://zprize.hardcaml.com) for a detailed write up on
