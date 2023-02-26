@@ -29,6 +29,14 @@ jobs:
 
       - run: sudo apt-get install z3 -y
 
+      - run: opam pin add hardcaml git+https://github.com/janestreet/hardcaml.git#master
+
+      - run: opam pin add hardcaml_verify git+https://github.com/janestreet/hardcaml_verify.git#master
+
+      - run: opam pin add hardcaml_verilator git+https://github.com/janestreet/hardcaml_verilator.git#master
+
+      - run: opam pin add hardcaml_waveterm git+https://github.com/janestreet/hardcaml_waveterm.git#master
+
       - run: opam install . --deps-only --with-doc --with-test
 
       - run: cd libs/rust/ark_bls12_377_g1/ && cargo build && cd ../../..
