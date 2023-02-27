@@ -2,9 +2,8 @@ open Base
 open Hardcaml
 open Signal
 
-module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = struct
+module Make (Config : Config.S) (Scalar : Scalar_element.S) = struct
   open Config
-  module Scalar = Scalar_element.Make (Scalar_config)
 
   let log_num_windows = Int.ceil_log2 num_windows
   let stall_fifo_depth = 1 lsl log_stall_fifo_depth
@@ -114,7 +113,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = stru
   let create ~build_mode scope (i : _ I.t) =
     let stalled_windows =
       List.init num_windows ~f:(fun window_index ->
-        hierarchy_window scope i ~window_index)
+          hierarchy_window scope i ~window_index)
     in
     let current_stalled_window = O_window.Of_signal.mux i.window stalled_windows in
     let affine_point_out =

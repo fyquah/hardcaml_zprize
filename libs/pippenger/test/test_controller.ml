@@ -7,13 +7,11 @@ module Config = struct
   let affine_point_bits = 16
   let pipeline_depth = 8
   let log_stall_fifo_depth = 2
-end
-
-module Scalar_config = struct
   let window_size_bits = 8
 end
 
-module Controller = Pippenger.Controller.Make (Config) (Scalar_config)
+module Scalar = Pippenger.Scalar_element.Make (Config)
+module Controller = Pippenger.Controller.Make (Config) (Scalar)
 module Sim = Cyclesim.With_interface (Controller.I) (Controller.O)
 module I_rules = Display_rules.With_interface (Controller.I)
 module O_rules = Display_rules.With_interface (Controller.O)

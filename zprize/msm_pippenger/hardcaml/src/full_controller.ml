@@ -29,6 +29,8 @@ struct
     let window_size_bits = max_window_size_bits
   end
 
+  module Scalar = Pippenger.Scalar_element.Make (Scalar_config)
+
   module Main_Controller =
     Controller.Make
       (struct
@@ -37,9 +39,7 @@ struct
         let pipeline_depth = Config.pipeline_depth
         let log_stall_fifo_depth = controller_log_stall_fifo_depth
       end)
-      (Scalar_config)
-
-  module Scalar = Main_Controller.Scalar
+      (Scalar)
 
   let scalar_sum_of_port_widths = Scalar.(fold ~init:0 port_widths ~f:( + ))
 
@@ -57,7 +57,7 @@ struct
         let log_stall_fifo_depth = controller_log_stall_fifo_depth
         let affine_point_bits = Config.input_point_bits
       end)
-      (Scalar_config)
+      (Scalar)
 
   module Controller1 =
     Controller.Make
@@ -67,7 +67,7 @@ struct
         let log_stall_fifo_depth = controller_log_stall_fifo_depth
         let affine_point_bits = Config.input_point_bits
       end)
-      (Scalar_config)
+      (Scalar)
 
   let fifo_capacity = (* Native BRAM depth*) 512
 

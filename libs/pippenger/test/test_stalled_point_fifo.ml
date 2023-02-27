@@ -3,7 +3,8 @@ open Hardcaml
 open Hardcaml_waveterm
 module Config = Pippenger.Config.Zprize
 module Scalar_config = Pippenger.Scalar_element.Config.Zprize
-module Fifo = Pippenger.Stalled_point_fifos.Make (Config) (Scalar_config)
+module Scalar = Pippenger.Scalar_element.Make (Scalar_config)
+module Fifo = Pippenger.Stalled_point_fifos.Make (Config) (Scalar)
 module Sim = Cyclesim.With_interface (Fifo.I) (Fifo.O)
 
 let ( <-. ) a b = a := Bits.of_int ~width:(Bits.width !a) b

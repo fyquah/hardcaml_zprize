@@ -1,6 +1,10 @@
 open! Core
 open Hardcaml
 
+module Scalar = Pippenger.Scalar_element.Make (struct
+  let window_size_bits = 13
+end)
+
 module Controller =
   Pippenger.Controller.Make
     (struct
@@ -10,9 +14,7 @@ module Controller =
       let pipeline_depth = (datapath_depth + 1) / 2
       let log_stall_fifo_depth = 2
     end)
-    (struct
-      let window_size_bits = 13
-    end)
+    (Scalar)
 
 module Circuit = Circuit.With_interface (Controller.I) (Controller.O)
 

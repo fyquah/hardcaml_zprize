@@ -1,12 +1,11 @@
 open! Base
 open! Hardcaml
 
-module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = struct
+module Make (Config : Config.S) (Scalar : Scalar_element.S) = struct
   open Signal
   open Config
-  module Stalled_point_fifos = Stalled_point_fifos.Make (Config) (Scalar_config)
-  module Track_scalars = Track_scalars.Make (Config) (Scalar_config)
-  module Scalar = Scalar_element.Make (Scalar_config)
+  module Stalled_point_fifos = Stalled_point_fifos.Make (Config) (Scalar)
+  module Track_scalars = Track_scalars.Make (Config) (Scalar)
 
   let log_num_windows = Int.ceil_log2 num_windows
 
@@ -85,14 +84,14 @@ module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = stru
 
     let names =
       List.map all ~f:(function
-        | Start -> "-"
-        | Choose_mode -> "M"
-        | Bubble_mode -> "B?"
-        | Wait_bubble -> "W?"
-        | Execute_scalar -> "E+"
-        | Wait_scalar -> "W+"
-        | Execute_stalled -> "E-"
-        | Wait_stalled -> "W-")
+          | Start -> "-"
+          | Choose_mode -> "M"
+          | Bubble_mode -> "B?"
+          | Wait_bubble -> "W?"
+          | Execute_scalar -> "E+"
+          | Wait_scalar -> "W+"
+          | Execute_stalled -> "E-"
+          | Wait_stalled -> "W-")
     ;;
   end
 
@@ -129,7 +128,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = stru
       let scalar =
         latched_shift_array spec ~load:latch.value ~shift:shift_pipeline.value i.scalar
       in
-      scalar, reg spec (scalar.scalar ==:. 0)
+      scalar, reg spec (Scalar.is_zero scalar)
     in
     let stalled_scalar, stalled_scalar_is_zero =
       let scalar =
@@ -139,7 +138,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = stru
           ~shift:shift_pipeline.value
           stalled.scalars_out
       in
-      scalar, reg spec (scalar.scalar ==:. 0)
+      scalar, reg spec (Scalar.is_zero scalar)
     in
     let bubble = Var.wire ~default:gnd in
     let push_stalled_point = Var.wire ~default:gnd in

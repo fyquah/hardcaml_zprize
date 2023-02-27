@@ -43,8 +43,8 @@ module Model (Config : Config) (Scalar_config : Scalar_config.S) = struct
     [@@deriving sexp_of, hardcaml ~rtlprefix:"o$"]
   end
 
-  module Controller = Pippenger.Controller.Make (Config) (Scalar_config)
-  module Scalar = Controller.Scalar
+  module Scalar = Pippenger.Scalar_element.Make (Scalar_config)
+  module Controller = Pippenger.Controller.Make (Config) (Scalar)
 
   module Pipe = struct
     module I = struct
@@ -103,30 +103,30 @@ module Model (Config : Config) (Scalar_config : Scalar_config.S) = struct
     in
     let bucket0, bucket1 =
       List.init num_windows ~f:(fun window ->
-        let q =
-          Ram.create
-            ~collision_mode:Write_before_read
-            ~size:(1 lsl window_size_bits)
-            ~read_ports:
-              [| { read_clock = i.clock
-                 ; read_address = ctrl.bucket.scalar
-                 ; read_enable = vdd
-                 }
-               ; { read_clock = i.clock
-                 ; read_address = i.bucket_address
-                 ; read_enable = i.bucket_read_enable
-                 }
-              |]
-            ~write_ports:
-              [| { write_clock = i.clock
-                 ; write_address = dp.bucket
-                 ; write_enable = dp.write_enable &: (dp.window ==:. window)
-                 ; write_data = dp.result
-                 }
-              |]
-            ()
-        in
-        q.(0), q.(1))
+          let q =
+            Ram.create
+              ~collision_mode:Write_before_read
+              ~size:(1 lsl window_size_bits)
+              ~read_ports:
+                [| { read_clock = i.clock
+                   ; read_address = ctrl.bucket.scalar
+                   ; read_enable = vdd
+                   }
+                 ; { read_clock = i.clock
+                   ; read_address = i.bucket_address
+                   ; read_enable = i.bucket_read_enable
+                   }
+                |]
+              ~write_ports:
+                [| { write_clock = i.clock
+                   ; write_address = dp.bucket
+                   ; write_enable = dp.write_enable &: (dp.window ==:. window)
+                   ; write_data = dp.result
+                   }
+                |]
+              ()
+          in
+          q.(0), q.(1))
       |> List.unzip
     in
     (* This is a basic model of the affine point adder. *)
@@ -165,38 +165,38 @@ module Test (Config : Config) (Scalar_config : Scalar_config.S) = struct
 
   let random_inputs num_scalars =
     Array.init num_scalars ~f:(fun _ ->
-      { Msm_input.scalar =
-          Array.init Model.num_windows ~f:(fun _ ->
-            Bits.random ~width:Model.window_size_bits)
-      ; affine_point = Bits.random ~width:Model.affine_point_bits
-      })
+        { Msm_input.scalar =
+            Array.init Model.num_windows ~f:(fun _ ->
+                Bits.random ~width:Model.window_size_bits)
+        ; affine_point = Bits.random ~width:Model.affine_point_bits
+        })
   ;;
 
   let debug_inputs num_scalars =
     Array.init num_scalars ~f:(fun idx ->
-      { Msm_input.scalar =
-          Array.init Model.num_windows ~f:(fun _ ->
-            Bits.random ~width:Model.window_size_bits)
-      ; affine_point = Bits.of_int ~width:Model.affine_point_bits (idx + 1)
-      })
+        { Msm_input.scalar =
+            Array.init Model.num_windows ~f:(fun _ ->
+                Bits.random ~width:Model.window_size_bits)
+        ; affine_point = Bits.of_int ~width:Model.affine_point_bits (idx + 1)
+        })
   ;;
 
   let of_scalars scalars =
     Array.mapi scalars ~f:(fun idx scalar ->
-      { Msm_input.scalar =
-          Array.init Model.num_windows ~f:(fun w ->
-            Bits.of_int
-              ~width:Model.window_size_bits
-              (scalar lsr (w * Model.window_size_bits)))
-      ; affine_point = Bits.of_int ~width:Model.affine_point_bits (idx + 1)
-      })
+        { Msm_input.scalar =
+            Array.init Model.num_windows ~f:(fun w ->
+                Bits.of_int
+                  ~width:Model.window_size_bits
+                  (scalar lsr (w * Model.window_size_bits)))
+        ; affine_point = Bits.of_int ~width:Model.affine_point_bits (idx + 1)
+        })
   ;;
 
   let sort_window_into_buckets (i : Bits.t Msm_input.t array) ~window =
     let a = Array.create ~len:(1 lsl Model.window_size_bits) [] in
     Array.iter i ~f:(fun { scalar; affine_point } ->
-      let index = Bits.to_int scalar.(window) in
-      a.(index) <- affine_point :: a.(index));
+        let index = Bits.to_int scalar.(window) in
+        a.(index) <- affine_point :: a.(index));
     a
   ;;
 
@@ -252,11 +252,11 @@ module Test (Config : Config) (Scalar_config : Scalar_config.S) = struct
   ;;
 
   let test
-    ?(waves = false)
-    ?(verbose = false)
-    ?(auto_label_hierarchical_ports = true)
-    ?(can_stall = false)
-    coefs
+      ?(waves = false)
+      ?(verbose = false)
+      ?(auto_label_hierarchical_ports = true)
+      ?(can_stall = false)
+      coefs
     =
     if verbose
     then (
@@ -280,7 +280,7 @@ module Test (Config : Config) (Scalar_config : Scalar_config.S) = struct
     let cycle_num = ref 0 in
     let results =
       Array.init Model.num_windows ~f:(fun _ ->
-        Array.init (1 lsl Model.window_size_bits) ~f:(Fn.const 0))
+          Array.init (1 lsl Model.window_size_bits) ~f:(Fn.const 0))
     in
     let cycle =
       let b = ref 0 in
@@ -343,8 +343,8 @@ module Test (Config : Config) (Scalar_config : Scalar_config.S) = struct
     if verbose then print_s [%message "HW-RESULTS" ~_:(results : Int.Hex.t array array)];
     let final_sum =
       Array.foldi results ~init:0 ~f:(fun index acc window ->
-        let r = Array.foldi window ~init:0 ~f:(fun index acc e -> acc + (e * index)) in
-        acc + (r lsl (index * Model.window_size_bits)))
+          let r = Array.foldi window ~init:0 ~f:(fun index acc e -> acc + (e * index)) in
+          acc + (r lsl (index * Model.window_size_bits)))
       land ((1 lsl Model.affine_point_bits) - 1)
     in
     let expected_sum =

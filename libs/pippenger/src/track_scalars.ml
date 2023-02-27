@@ -1,10 +1,9 @@
 open! Base
 open! Hardcaml
 
-module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = struct
+module Make (Config : Config.S) (Scalar : Scalar_element.S) = struct
   open Config
   open Signal
-  module Scalar = Scalar_element.Make (Scalar_config)
 
   module I = struct
     type 'a t =
@@ -32,14 +31,12 @@ module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = stru
         let d =
           Scalar.(
             map ~f:(reg spec ~enable:shift) d
-            |> Of_signal.apply_names ~naming_op:(--) ~prefix:("scl$" ^ Int.to_string n))
+            |> Of_signal.apply_names ~naming_op:( -- ) ~prefix:("scl$" ^ Int.to_string n))
         in
         build_pipe (n + 1) d (d :: pipe))
     in
     build_pipe 0 scalar [] |> List.rev |> Array.of_list
   ;;
-
-  let scalar_equal (a : _ Scalar.t) (b : _ Scalar.t) = a.scalar ==: b.scalar
 
   let rec get_matches pos pipe =
     if pos >= Array.length pipe - 1
@@ -61,7 +58,7 @@ module Make (Config : Config.S) (Scalar_config : Scalar_element.Config.S) = stru
     let is_in_pipeline =
       reduce
         ~f:( |: )
-        (List.map (get_matches (num_windows - 1) pipe) ~f:(scalar_equal i.scalar))
+        (List.map (get_matches (num_windows - 1) pipe) ~f:(Scalar.equal i.scalar))
     in
     { O.is_in_pipeline; scalar_out = Array.last pipe }
   ;;

@@ -10,7 +10,8 @@ module Config = struct
   let log_stall_fifo_depth = 2
 end
 
-module Tracker = Pippenger.Track_scalars.Make (Config) (Config)
+module Scalar = Pippenger.Scalar_element.Make (Config)
+module Tracker = Pippenger.Track_scalars.Make (Config) (Scalar)
 module Sim = Cyclesim.With_interface (Tracker.I) (Tracker.O)
 
 let create_sim () =
