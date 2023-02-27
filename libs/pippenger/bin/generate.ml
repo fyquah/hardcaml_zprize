@@ -6,7 +6,7 @@ module Scalar = Pippenger.Scalar_element.Make (struct
 end)
 
 module Controller =
-  Pippenger.Controller.Make
+  Pippenger.Controller_half_rate.Make
     (struct
       let num_windows = 10
       let affine_point_bits = 377 * 3

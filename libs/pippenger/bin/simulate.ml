@@ -13,7 +13,7 @@ let command_test_pippenger name data =
           let rand_state = Random.State.make [| seed |] in
           Random.set_state rand_state;
           let waves =
-            Pippenger_test.Test_pippenger.(test ~waves ~can_stall ~verbose data)
+            Pippenger_test.Test_pippenger_half_rate.(test ~waves ~can_stall ~verbose data)
           in
           Option.iter waves ~f:Hardcaml_waveterm_interactive.run] )
 ;;
@@ -56,7 +56,9 @@ let command_random =
           let window_size_bits = window_size_bits
         end
         in
-        let module Test = Pippenger_test.Test_pippenger.Test (Config) (Scalar_config) in
+        let module Test =
+          Pippenger_test.Test_pippenger_half_rate.Test (Config) (Scalar_config)
+        in
         let data =
           if debug then Test.debug_inputs num_inputs else Test.random_inputs num_inputs
         in
@@ -68,7 +70,7 @@ let () =
   Command_unix.run
     (Command.group
        ~summary:"NTT controller simulation test case"
-       Pippenger_test.Test_pippenger.
+       Pippenger_test.Test_pippenger_half_rate.
          [ command_test_pippenger "1-stall" test_1_stall
          ; command_test_pippenger "no-stalls" test_no_stalls
          ; command_test_pippenger "with-stalls" test_with_stalls

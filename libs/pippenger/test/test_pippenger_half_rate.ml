@@ -44,7 +44,7 @@ module Model (Config : Config) (Scalar_config : Scalar_config.S) = struct
   end
 
   module Scalar = Pippenger.Scalar_element.Make (Scalar_config)
-  module Controller = Pippenger.Controller.Make (Config) (Scalar)
+  module Controller = Pippenger.Controller_half_rate.Make (Config) (Scalar)
 
   module Pipe = struct
     module I = struct

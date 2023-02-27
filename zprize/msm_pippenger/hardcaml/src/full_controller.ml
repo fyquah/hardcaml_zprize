@@ -5,7 +5,7 @@ open Signal
 
 include struct
   open Pippenger
-  module Controller = Controller
+  module Controller = Controller_half_rate
   module Scalar = Scalar
 end
 

@@ -11,7 +11,7 @@ module Config = struct
 end
 
 module Scalar = Pippenger.Scalar_element.Make (Config)
-module Controller = Pippenger.Controller.Make (Config) (Scalar)
+module Controller = Pippenger.Controller_half_rate.Make (Config) (Scalar)
 module Sim = Cyclesim.With_interface (Controller.I) (Controller.O)
 module I_rules = Display_rules.With_interface (Controller.I)
 module O_rules = Display_rules.With_interface (Controller.O)

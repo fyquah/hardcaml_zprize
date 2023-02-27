@@ -14,7 +14,7 @@ end
 
 include struct
   open Pippenger
-  module Controller = Controller
+  module Controller = Controller_half_rate
 end
 
 include struct
@@ -43,7 +43,7 @@ module Make (Config : Config.S) = struct
     mux
       v
       (List.init num_windows ~f:(fun i ->
-         of_int (num_buckets i) ~width:max_window_size_bits))
+           of_int (num_buckets i) ~width:max_window_size_bits))
   ;;
 
   let num_windows = num_windows
@@ -128,9 +128,16 @@ module Make (Config : Config.S) = struct
   ;;
 
   let create
-    ~build_mode
-    scope
-    { I.clock; clear; scalar; scalar_valid; last_scalar; input_point; result_point_ready }
+      ~build_mode
+      scope
+      { I.clock
+      ; clear
+      ; scalar
+      ; scalar_valid
+      ; last_scalar
+      ; input_point
+      ; result_point_ready
+      }
     =
     let ( -- ) = Scope.naming scope in
     let open Always in
@@ -151,7 +158,7 @@ module Make (Config : Config.S) = struct
         ; start = ctrl_start.value
         ; scalar =
             Array.map2_exn scalar scalar_negatives ~f:(fun scalar negative ->
-              { Full_controller.Scalar.scalar; negative })
+                { Full_controller.Scalar.scalar; negative })
         ; scalar_valid = (scalar_valid &: sm.is Working) -- "scalar_valid"
         ; last_scalar
         ; affine_point = Mixed_add.Xyt.Of_signal.pack input_point
@@ -194,7 +201,7 @@ module Make (Config : Config.S) = struct
             in
             let num_windows_from_partition_settings =
               List.fold window_ram_partition_settings ~init:0 ~f:(fun acc p ->
-                acc + p.num_windows)
+                  acc + p.num_windows)
             in
             if num_windows_from_partition_settings <> num_windows
             then
@@ -206,20 +213,20 @@ module Make (Config : Config.S) = struct
                     (window_ram_partition_settings : Config_intf.partition_setting list)];
             let window_offset = ref 0 in
             List.map window_ram_partition_settings ~f:(fun partition_setting ->
-              let o =
-                { Window_ram.Partition.window_size_bits =
-                    List.init partition_setting.num_windows ~f:(fun i ->
-                      Int.ceil_log2 (num_buckets (i + !window_offset)))
-                ; slr =
-                    Some
-                      (match partition_setting.slr with
-                       | SLR0 -> 0
-                       | SLR1 -> 1
-                       | SLR2 -> 2)
-                }
-              in
-              window_offset := !window_offset + partition_setting.num_windows;
-              o)
+                let o =
+                  { Window_ram.Partition.window_size_bits =
+                      List.init partition_setting.num_windows ~f:(fun i ->
+                          Int.ceil_log2 (num_buckets (i + !window_offset)))
+                  ; slr =
+                      Some
+                        (match partition_setting.slr with
+                        | SLR0 -> 0
+                        | SLR1 -> 1
+                        | SLR2 -> 2)
+                  }
+                in
+                window_offset := !window_offset + partition_setting.num_windows;
+                o)
           ;;
 
           let data_bits = Signal.width adder_p3
@@ -256,21 +263,21 @@ module Make (Config : Config.S) = struct
              in
              { write_enables =
                  List.init num_windows ~f:(fun window ->
-                   let ctrl_window_en = ctrl.window ==:. window in
-                   pipeline
-                     ~n:
-                       (ram_read_latency
-                       + ram_output_latency
-                       + adder_latency
-                       + ram_write_latency)
-                     spec
-                     ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_a_we"))
+                     let ctrl_window_en = ctrl.window ==:. window in
+                     pipeline
+                       ~n:
+                         (ram_read_latency
+                         + ram_output_latency
+                         + adder_latency
+                         + ram_write_latency)
+                       spec
+                       ((ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_a_we"))
              ; read_enables =
                  List.init num_windows ~f:(fun window ->
-                   (sm.is Read_result
-                   &: (window_address.value ==:. window)
-                   &: fifo_q_has_space)
-                   -- "port_a_re")
+                     (sm.is Read_result
+                     &: (window_address.value ==:. window)
+                     &: fifo_q_has_space)
+                     -- "port_a_re")
              ; data = adder_p3 -- "port_a_d"
              ; address =
                  uresize
@@ -287,14 +294,14 @@ module Make (Config : Config.S) = struct
              in
              { write_enables =
                  List.init num_windows ~f:(fun window ->
-                   (sm.is Read_result
-                   &: (window_address.value ==:. window)
-                   &: fifo_q_has_space)
-                   -- "port_b_we")
+                     (sm.is Read_result
+                     &: (window_address.value ==:. window)
+                     &: fifo_q_has_space)
+                     -- "port_b_we")
              ; read_enables =
                  List.init num_windows ~f:(fun window ->
-                   let ctrl_window_en = ctrl.window ==:. window in
-                   (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
+                     let ctrl_window_en = ctrl.window ==:. window in
+                     (ctrl.execute &: ~:(ctrl.bubble) &: ctrl_window_en) -- "port_b_re")
              ; data = Mixed_add.Xyzt.Of_signal.pack identity_point_for_ram
              ; address =
                  uresize
