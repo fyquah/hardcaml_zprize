@@ -1,0 +1,5 @@
+(library
+ (name ark_bls12_381_g1_test)
+ (libraries ark_bls12_381_g1)
+ (inline_tests)
+ (preprocess (pps ppx_jane)))

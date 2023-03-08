@@ -1,0 +1,5 @@
+(library
+ (name ark_bls12_381_g1)
+ (public_name zprize.ark_bls12_381_g1)
+ (libraries base core ctypes ctypes.foreign hardcaml zarith)
+ (preprocess (pps ppx_jane)))
