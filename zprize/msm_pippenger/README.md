@@ -188,8 +188,7 @@ more points.
 ## Building an FPGA image for AWS
 
 You need to clone the [aws-fpga repo](https://github.com/aws/aws-fpga/), as well
-as run on an AWS box with the [FPGA Developer
-AMI](https://aws.amazon.com/marketplace/pp/prodview-gimv3gqbpe57k) installed.
+as run on an AWS box with the [FPGA Developer AMI (Amazon Linux 2)](https://aws.amazon.com/marketplace/pp/prodview-iehshpgi7hcjg) installed.
 
 ```
 source ~/aws-fpga/vitis_setup.sh
