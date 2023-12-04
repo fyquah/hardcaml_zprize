@@ -53,8 +53,8 @@ opam exec -- dune runtest
 
 Now please continue to the relevant to build the top level designs from source.
 
-- [MSM](msm_pippenger/README.md)
-- [NTT](ntt/)
+- [MSM](zprize/msm_pippenger/README.md)
+- [NTT](zprize/ntt/)
 
 # Contributing
 
