@@ -51,8 +51,10 @@ opam exec -- dune build
 opam exec -- dune runtest
 ```
 
-Now please continue to the relevant section listed [above](#zprize-submissions)
-to build the top level designs from source.
+Now please continue to the relevant to build the top level designs from source.
+
+- [MSM](msm_pippenger/README.md)
+- [NTT](ntt/)
 
 # Contributing
 

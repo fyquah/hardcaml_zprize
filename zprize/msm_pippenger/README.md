@@ -143,7 +143,7 @@ still being able to successfully route in Vivado.
 Instructions are given below for building from source. A prerequisite is that
 OCaml has been setup (outlined in the main [README.md](../../README.md)).
 
-It is important you use the AMI version 1.10.5 and Vivado version 2020.2 to
+It is important you use the [FPGA Developer AMI (Amazon Linux 2)](https://aws.amazon.com/marketplace/pp/prodview-iehshpgi7hcjg) version 1.10.5 and Vivado version 2020.2 to
 acheive the same results. The rtl_checksum expected of the Verilog when
 generated from the Hardcaml source is 1929f78e1e4bafd9cf88d507a3afa055.
 
